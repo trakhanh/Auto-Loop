@@ -1,0 +1,11 @@
+* text=auto
+*.bat text eol=crlf
+*.iss text eol=crlf
+*.isl text eol=crlf
+*.mp4 binary
+*.mp3 binary
+*.m4a binary
+*.wav binary
+*.png binary
+*.jpg binary
+*.ico binary

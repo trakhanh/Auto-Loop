@@ -1,0 +1,26 @@
+# môi trường / bộ nhớ đệm Python
+.venv/
+__pycache__/
+*.pyc
+.pytest_cache/
+
+# sản phẩm đóng gói (bộ cài đưa lên GitHub Releases)
+build/
+dist/
+packaging/version_info.txt
+
+# dữ liệu kiểm thử và clip thật của người dùng
+.test-data/
+VideoTest/
+Mau-Test/Xuat/*
+!Mau-Test/Xuat/.gitkeep
+
+# FFmpeg đặt cạnh app.py khi chạy từ mã nguồn (bộ cài tự kèm)
+bin/
+
+# file của hệ điều hành / trình soạn thảo
+Thumbs.db
+desktop.ini
+.vscode/
+.idea/
+*.lsproj.tmp

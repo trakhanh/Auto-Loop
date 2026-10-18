@@ -1,0 +1,1 @@
+Thư mục bắt đầu bằng _ không được tính là video.

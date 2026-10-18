@@ -1,0 +1,210 @@
+{
+  "version": 1,
+  "name": "Mẫu - Loop 70 lần",
+  "output_kind": "video_music",
+  "video": {
+    "order": "list",
+    "seed": 1,
+    "length_mode": "manual",
+    "target_duration": "03:00:00",
+    "fill": "repeat_sequence",
+    "reshuffle_each_round": true,
+    "exact_end": true,
+    "fade_out": 3.0,
+    "fit": "blur",
+    "image_duration": 8.0,
+    "source_audio": "off",
+    "source_volume": 100,
+    "music_volume": 100,
+    "intro": {
+      "path": "Intro-Outro/Intro.mp4",
+      "crossfade": 1.0
+    },
+    "outro": {
+      "path": "Intro-Outro/Outro.mp4",
+      "crossfade": 1.0
+    },
+    "bookend_audio": true,
+    "clips": [
+      {
+        "path": "Video/01 Mưa đêm thành phố.mp4",
+        "enabled": true,
+        "plays": {
+          "mode": "fixed",
+          "count": 70
+        },
+        "stretch": false,
+        "loop_crossfade": 1.0,
+        "next_crossfade": 1.5,
+        "trim": {
+          "start": 0.0,
+          "end": 0.0
+        }
+      },
+      {
+        "path": "Video/02 Hoàng hôn.mp4",
+        "enabled": true,
+        "plays": {
+          "mode": "fixed",
+          "count": 1
+        },
+        "stretch": false,
+        "loop_crossfade": 1.0,
+        "next_crossfade": 1.5,
+        "trim": {
+          "start": 0.0,
+          "end": 0.0
+        }
+      },
+      {
+        "path": "Video/03 Bầu trời sao.mp4",
+        "enabled": true,
+        "plays": {
+          "mode": "fixed",
+          "count": 1
+        },
+        "stretch": false,
+        "loop_crossfade": 1.0,
+        "next_crossfade": 1.5,
+        "trim": {
+          "start": 0.0,
+          "end": 0.0
+        }
+      },
+      {
+        "path": "Video/04 Rừng xanh.mp4",
+        "enabled": true,
+        "plays": {
+          "mode": "fixed",
+          "count": 70
+        },
+        "stretch": false,
+        "loop_crossfade": 1.0,
+        "next_crossfade": 1.5,
+        "trim": {
+          "start": 0.0,
+          "end": 0.0
+        }
+      },
+      {
+        "path": "Video/05 Biển đêm.mp4",
+        "enabled": true,
+        "plays": {
+          "mode": "fixed",
+          "count": 1
+        },
+        "stretch": false,
+        "loop_crossfade": 1.0,
+        "next_crossfade": 1.5,
+        "trim": {
+          "start": 0.0,
+          "end": 0.0
+        }
+      },
+      {
+        "path": "Video/06 Clip dọc 9x16.mp4",
+        "enabled": true,
+        "plays": {
+          "mode": "fixed",
+          "count": 70
+        },
+        "stretch": false,
+        "loop_crossfade": 1.0,
+        "next_crossfade": 1.5,
+        "trim": {
+          "start": 0.0,
+          "end": 0.0
+        }
+      }
+    ]
+  },
+  "music": {
+    "order": "shuffle_no_repeat",
+    "seed": 1,
+    "crossfade": 3.0,
+    "gap": 0.0,
+    "fade_in": 2.0,
+    "fade_out": 5.0,
+    "loudness": {
+      "enabled": true,
+      "lufs": -14.0
+    },
+    "tracks": [
+      {
+        "path": "Nhac/01 - Mưa Trên Phố Cũ.mp3",
+        "enabled": true,
+        "plays": 1
+      },
+      {
+        "path": "Nhac/02 - Cà Phê Sáng.mp3",
+        "enabled": true,
+        "plays": 1
+      },
+      {
+        "path": "Nhac/03 - Đêm Không Ngủ.mp3",
+        "enabled": true,
+        "plays": 1
+      },
+      {
+        "path": "Nhac/04 - Gió Mùa Thu.mp3",
+        "enabled": true,
+        "plays": 1
+      },
+      {
+        "path": "Nhac/05 - Thư Viện Yên Tĩnh.mp3",
+        "enabled": true,
+        "plays": 1
+      },
+      {
+        "path": "Nhac/06 - Chuyến Tàu Muộn.mp3",
+        "enabled": true,
+        "plays": 1
+      },
+      {
+        "path": "Nhac/07 - Mây Trôi.mp3",
+        "enabled": true,
+        "plays": 1
+      },
+      {
+        "path": "Nhac/08 - Phòng Trọ Nhỏ.mp3",
+        "enabled": true,
+        "plays": 1
+      },
+      {
+        "path": "Nhac/09 - Ánh Đèn Vàng.mp3",
+        "enabled": true,
+        "plays": 1
+      },
+      {
+        "path": "Nhac/10 - Hẹn Mai Gặp Lại.mp3",
+        "enabled": true,
+        "plays": 1
+      }
+    ],
+    "audio_export": {
+      "mode": "target",
+      "target": "01:00:00",
+      "rounds": 2,
+      "format": "mp3_320"
+    },
+    "ambient": [
+      {
+        "path": "Tieng-nen/Mưa rơi.mp3",
+        "enabled": true,
+        "volume": 35
+      }
+    ]
+  },
+  "export": {
+    "preset": "youtube_1080p_h264",
+    "resolution": "1080p",
+    "fps": "source",
+    "encoder": "auto",
+    "quality": "high",
+    "audio": "fast",
+    "output_dir": "E:\\LoopStation\\Mau-Test\\Xuat",
+    "filename": "",
+    "tracklist": true,
+    "save_project_copy": true
+  }
+}

@@ -1,0 +1,27 @@
+THƯ MỤC MẪU: XUẤT HÀNG LOẠT THEO THƯ MỤC
+=========================================
+
+Mỗi thư mục con trong thư mục này = MỘT video:
+
+  Video 01 - Mua dem\      loop_mua-dem.mp4  (clip nền: tên có chữ "loop")
+                            2_hoang-hon.mp4    (cảnh chèn: xếp theo số đầu tên 2_, 3_ …)
+                            3_bau-troi-sao.mp4
+                            → không có nhạc riêng: dùng playlist của dự án đang mở
+
+  Video 02 - Rung xanh\    loop_rung-xanh.mp4, 2_bien-dem.mp4, 3_mua-dem.mp4
+                            Nhac\ (3 bài)    → video này dùng nhạc riêng trong thư mục Nhac
+
+  Video 03 - Clip doc\     loop_clip-doc.mp4 (clip dọc 9:16), 2_hoang-hon.mp4
+
+  _ghi-chu\               thư mục bắt đầu bằng "_" được bỏ qua (để đồ dùng chung, ghi chú…)
+
+CÁCH THỬ
+  1. Mở dự án mẫu "Du-an-mau - Loop 70 lan" (làm KHUÔN: cấu hình xuất, intro/outro, tiếng nền,
+     playlist chung… đều lấy từ dự án đang mở).
+  2. Thanh bên trái → "Xuất hàng loạt…" (hoặc trang Xuất → "Hàng loạt từ thư mục…").
+  3. Bấm "Thư mục mẫu" (hoặc chọn thư mục này), chọn mẫu xếp clip, ví dụ "Nền ×70 xen từng cảnh".
+  4. Xem bảng: mỗi dòng là một video, có clip nền, số clip, nhạc, thời lượng.
+  5. Bấm "Thêm 3 video vào hàng đợi" → app xuất lần lượt, mỗi video một thư mục riêng.
+
+Với công việc thật: mỗi lần tải clip Google Flow về, để vào một thư mục con theo kiểu trên
+(clip nền đặt tên có chữ loop, cảnh chèn đánh số 2_, 3_ …), rồi chạy hàng loạt một lần.
