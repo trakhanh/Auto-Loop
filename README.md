@@ -9,7 +9,7 @@
 
 <p align="center">
   <a href="https://github.com/trakhanh/Auto-Loop/releases/latest/download/KTLoopStation-Setup.exe">
-    <img src="docs/download-button.svg" alt="Tải về KT Loop Station cho Windows" width="440">
+    <img src="docs/download-button.svg" alt="Tải về KT Loop Station cho Windows" width="480">
   </a>
   <br>
   <sub>Bấm nút để tải bộ cài · <a href="https://github.com/trakhanh/Auto-Loop/releases">Xem các phiên bản cũ</a></sub>
