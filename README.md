@@ -1,5 +1,5 @@
 <img src="loopstation/ui/assets/logo-512.png" width="96" align="left" style="margin-right:12px">
-# KT Loop Station
+KT Loop Station 
 
 *By Khánh Trà*
 
