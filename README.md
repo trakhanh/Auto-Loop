@@ -1,8 +1,8 @@
 <img src="loopstation/ui/assets/logo-512.png" width="96" align="left" style="margin-right:12px">
-
 # KT Loop Station
 
 *By Khánh Trà*
+
 <br clear="left">
 
 Ứng dụng Windows ghép và loop các clip ngắn (ví dụ clip tạo bằng Google Flow) cùng playlist nhạc thành **video YouTube dài hàng giờ**: clip nền lặp 70 lần xen kẽ các cảnh, nhạc tự lặp theo độ dài video, thêm tiếng mưa / sóng / lửa… Xuất nhanh bằng card đồ hoạ NVIDIA / Intel / AMD, giao diện tiếng Việt.
