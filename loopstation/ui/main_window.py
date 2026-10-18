@@ -122,6 +122,7 @@ class MainWindow(QMainWindow):
         self.pages = (self.video_tab, self.music_tab, self.export_tab, self.settings_page)
         self.help_page = HelpPage()
         self.help_page.openProjectRequested.connect(self.open_project_path)
+        self.help_page.actionRequested.connect(self._help_action)
         hp = QScrollArea()
         hp.setWidget(self.help_page)
         hp.setWidgetResizable(True)
@@ -1404,6 +1405,29 @@ class MainWindow(QMainWindow):
             pass
 
     # ---------- Bảng trộn âm: nghe thử 20 giây ----------
+    def _help_action(self, act: str) -> None:
+        """Nút “Mở …” trong trang Hướng dẫn → đi tới đúng chỗ."""
+        pages = {"home": HOME_PAGE, "video": 0, "music": 1, "export": 2, "settings": 3}
+        if act in pages:
+            if act == "video" and self.mode == "music_only":
+                self.set_mode("video_music")
+            self.go_to(pages[act])
+        elif act == "mixer":
+            self._open_mixer()
+        elif act == "batch":
+            self.batch_from_folders()
+        elif act == "interleave":
+            if self.mode == "music_only":
+                self.set_mode("video_music")
+            self.go_to(0)
+            QTimer.singleShot(200, self.video_tab._open_interleave)
+        elif act == "ambient_lib":
+            self.go_to(1)
+            QTimer.singleShot(200, self.music_tab._open_ambient_library)
+        elif act == "mode_music":
+            self.set_mode("music_only")
+            self.go_to(1)
+
     def _open_mixer(self) -> None:
         self.go_to(1)
         QTimer.singleShot(250, lambda: self._scroll_to(self.music_tab.mixer))

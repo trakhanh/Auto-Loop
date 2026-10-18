@@ -11,7 +11,7 @@ from ..core import ffmpeg_tools as ft
 
 APP_NAME = "KT Loop Station"
 AUTHOR = "By Khánh Trà"
-APP_VERSION = "1.4.6"
+APP_VERSION = "1.4.7"
 # nơi lưu cài đặt (registry); KTLS_SETTINGS_ORG dùng cho test để không đụng cài đặt thật
 SETTINGS_ORG = os.environ.get("KTLS_SETTINGS_ORG", "KTLoopStation")
 
@@ -94,6 +94,11 @@ QToolTip {{ background: {C['surface2']}; color: {C['text']}; border: 1px solid {
 /* ---------- khung chính ---------- */
 QWidget#shell {{ background: {C['bg']}; border-top: 1px solid #26304a; }}
 QWidget#sidebar {{ background: {C['surface']}; border-right: 1px solid {C['border']}; }}
+QListWidget#helpToc {{ background: {C['surface']}; border: 1px solid {C['border']}; border-radius: 10px; padding: 6px;
+    outline: none; }}
+QListWidget#helpToc::item {{ padding: 6px 8px; border-radius: 7px; color: {C['text']}; }}
+QListWidget#helpToc::item:hover {{ background: {C['surface2']}; }}
+QListWidget#helpToc::item:selected {{ background: {C['accent']}; color: white; }}
 QWidget#sidebar QLabel, QWidget#sidebar QWidget {{ background: transparent; }}
 QWidget#sidebar QWidget#sidebarCard {{ background: {C['field']}; }}
 QWidget#sidebarCard {{ background: {C['field']}; border: 1px solid {C['border']}; border-radius: 10px; }}

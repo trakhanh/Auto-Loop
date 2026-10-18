@@ -253,8 +253,14 @@ class SettingsPage(QWidget):
                                    f"{g.vram_mb / 1024:.0f} GB VRAM" if g.vram_mb >= 1024 else "", g.extra) if x]
             lab = QLabel(text + ("\n" + " · ".join(details) if details else ""))
             f.addRow("Card đồ hoạ" if i == 0 else "", lab)
-        f.addRow("CUDA", pill(bool(info.cuda_version), f"CUDA {info.cuda_version}" if info.cuda_version
-                              else "Không có (máy không có card NVIDIA)"))
+        has_nvidia = any("nvidia" in g.name.lower() for g in info.gpus)
+        if info.cuda_version:
+            cuda_txt = f"CUDA {info.cuda_version}"
+        elif has_nvidia:  # có card nhưng không đọc được số phiên bản: KHÔNG được ghi là "không có card NVIDIA"
+            cuda_txt = "Có card NVIDIA (chưa đọc được số phiên bản CUDA)"
+        else:
+            cuda_txt = "Không có (máy không có card NVIDIA)"
+        f.addRow("CUDA", pill(bool(info.cuda_version) or has_nvidia, cuda_txt))
         out = self.out_dir.text().strip() or os.path.expanduser("~/Videos")
         try:
             du = shutil.disk_usage(out if os.path.isdir(out) else os.path.expanduser("~"))

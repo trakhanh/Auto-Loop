@@ -118,10 +118,29 @@ def gather_system() -> SystemInfo:
                 g.driver = p[1]
                 g.vram_mb = int(float(p[2])) if p[2].replace(".", "").isdigit() else g.vram_mb
                 g.extra = f"{p[3]}°C · đang dùng {p[4]}%"
-        m = re.search(r"CUDA Version:\s*([\d.]+)", _run([smi]))
+        # driver mới có thể đổi cách in ("CUDA Version: 13.2", "CUDA Version : 13.2", "CUDA Driver Version…")
+        pat = r"CUDA\s+(?:Driver\s+)?Version\s*:\s*([\d.]+)"
+        m = re.search(pat, _run([smi])) or re.search(pat, _run([smi, "-q"]))
         if m:
             info.cuda_version = m.group(1)
+    if not info.cuda_version:
+        info.cuda_version = _cuda_driver_version()  # hỏi thẳng driver, không phụ thuộc nvidia-smi
     return info
+
+
+def _cuda_driver_version() -> str:
+    """Phiên bản CUDA mà driver NVIDIA hỗ trợ (cuDriverGetVersion trong nvcuda.dll), ví dụ 13020 → "13.2"."""
+    if os.name != "nt":
+        return ""
+    try:
+        import ctypes
+        dll = ctypes.WinDLL("nvcuda.dll")
+        v = ctypes.c_int(0)
+        if dll.cuDriverGetVersion(ctypes.byref(v)) == 0 and v.value > 0:
+            return f"{v.value // 1000}.{v.value % 1000 // 10}"
+    except (OSError, AttributeError):
+        pass
+    return ""
 
 
 # ---------------- FFmpeg + tăng tốc ----------------

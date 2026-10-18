@@ -45,7 +45,7 @@ class VolSlider(QWidget):
         self.spin = QSpinBox()
         self.spin.setRange(0, 200)
         self.spin.setSuffix(" %")
-        self.spin.setFixedWidth(78)
+        self.spin.setFixedWidth(92)  # đủ chỗ cho “200 %”
         self.slider.valueChanged.connect(self.spin.setValue)
         self.spin.valueChanged.connect(self.slider.setValue)
         self.spin.setValue(int(value))
