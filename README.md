@@ -7,9 +7,24 @@
 
 Ứng dụng Windows ghép và loop các clip ngắn (ví dụ clip tạo bằng Google Flow) cùng playlist nhạc thành **video YouTube dài hàng giờ**: clip nền lặp 70 lần xen kẽ các cảnh, nhạc tự lặp theo độ dài video, thêm tiếng mưa / sóng / lửa… Xuất nhanh bằng card đồ hoạ NVIDIA / Intel / AMD, giao diện tiếng Việt.
 
-## Tải về và cài đặt
+<p align="center">
+  <a href="https://github.com/trakhanh/Auto-Loop/releases/latest/download/KTLoopStation-Setup.exe">
+    <img src="docs/download-button.svg" alt="Tải về KT Loop Station cho Windows" width="440">
+  </a>
+  <br>
+  <sub>Bấm nút để tải bộ cài · <a href="https://github.com/trakhanh/Auto-Loop/releases">Xem các phiên bản cũ</a></sub>
+</p>
 
-**[⬇ Tải bộ cài mới nhất (Releases)](https://github.com/trakhanh/Auto-Loop/releases/latest)**: tải file `KTLoopStation-Setup-<phiên bản>.exe` rồi bấm đúp để cài.
+## Cài đặt trong 3 bước
+
+1. **Bấm nút "Tải về cho Windows"** ở trên. Trình duyệt tải về file `KTLoopStation-Setup.exe`.
+2. **Mở file vừa tải** (bấm vào file ở góc trình duyệt, hoặc mở thư mục *Downloads*).
+   Nếu Windows hiện khung xanh *"Windows protected your PC"*: bấm **More info** (Thông tin thêm) → **Run anyway** (Vẫn chạy).
+3. Bấm **Next → Install → Finish**. Mở app bằng biểu tượng **KT Loop Station** trên màn hình hoặc trong menu Start.
+
+> Không cần mật khẩu quản trị, không cần cài thêm gì. Đã có sẵn dự án mẫu để thử ngay ở màn hình **Bắt đầu**.
+
+### Thông tin thêm
 
 - Windows 10 / 11 64-bit. **Không cần quyền quản trị** (cài vào tài khoản đang dùng).
 - **Đã kèm sẵn FFmpeg** và một bộ **dự án mẫu** để thử ngay. Không cần cài thêm gì.
@@ -100,27 +115,12 @@ Các script kiểm thử khác (đều dùng thư mục dữ liệu riêng, khô
 | `python tests/make_samples.py` | Tạo lại clip / nhạc giả trong `samples/` |
 | `python tests/make_screenshots.py` | Chụp lại ảnh cho README |
 
-### Đóng gói bộ cài
-
-Cần [Inno Setup 6](https://jrsoftware.org/isinfo.php) và PyInstaller (`pip install pyinstaller`). FFmpeg lấy từ biến môi trường `FFMPEG_DIR`, không có thì tìm trên `PATH`.
-
-```bash
-python packaging/build.py
-```
-
-Kết quả: `dist\KTLoopStation-Setup-<phiên bản>.exe`. Phiên bản lấy từ `APP_VERSION` trong `loopstation/ui/theme.py`. Kiểm tra bản đóng gói:
-
-```bash
-KTLoopStation.exe --selftest report.json
-```
-
 ### Cấu trúc
 
 ```
 app.py                  khởi động (màn hình chờ, chỉ mở 1 cửa sổ, ghi lỗi bất ngờ)
 loopstation/core/       xử lý: lập kế hoạch phát, dựng khối video / âm thanh, xuất, hàng đợi, hàng loạt…
 loopstation/ui/         giao diện PySide6 (các trang, Bảng trộn âm, hộp thoại)
-packaging/              PyInstaller spec, build.py, Inno Setup (.iss, tiếng Việt)
 tests/                  kiểm thử + script kiểm tra / tạo mẫu
 Mau-Test/, samples/     media mẫu do script tự tạo (đi kèm bộ cài)
 SPEC.md                 đặc tả chi tiết
