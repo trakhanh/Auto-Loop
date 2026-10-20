@@ -98,13 +98,45 @@ wait(0.5)
 check("VM: đổi độ dài → bảng tính lại 30 phút", d.tree.topLevelItem(0).text(C_DUR).startswith(("30:00", "00:30:00")),
       d.tree.topLevelItem(0).text(C_DUR))
 d.grab().save(os.path.join(scratch, "batch_video_music.png"))
-# bấm đổi sang Chỉ video → hộp thoại đóng với khuôn mới, giữ độ dài
+# bấm đổi kiểu ngay trong hộp thoại: không đóng / mở lại, giữ cài đặt, khung hướng dẫn giữ nguyên chiều cao
+from PySide6.QtCore import Qt  # noqa: E402
+card_h = d.card_text.parentWidget().height()
+size0 = d.size()
+d.tree.topLevelItem(1).setCheckState(0, Qt.CheckState.Unchecked)
 d.kind_buttons["video_only"].click()
-wait(0.2)
-check("VM→VO: đóng hộp thoại để mở lại kiểu mới", d.switch_to is not None and d.result() == 2)
-check("VM→VO: khuôn mới là Chỉ video, giữ 30 phút", d.switch_to.output_kind == "video_only"
-      and d.switch_to.video.target_duration == 1800, str(d.switch_to.video.target_duration))
-check("VM→VO: dự án gốc không đổi", tpl.output_kind == "video_music" and tpl.video.target_duration == 7200)
+wait(0.05)
+check("VM→VO: hộp thoại vẫn mở, đổi kiểu tại chỗ", d.isVisible() and d.kind == "video_only" and d.result() == 0)
+check("VM→VO: đang hiện dần (hiệu ứng)", d.body.graphicsEffect() is not None)
+wait(0.5)
+check("VM→VO: hiện dần xong thì bỏ hiệu ứng", d.body.graphicsEffect() is None)
+labels = form_labels(d)
+check("VM→VO: ẩn ô Nhạc, khung nói không nhạc", "Nhạc:" not in labels and "không nhạc" in d.card_text.text(), str(labels))
+check("VM→VO: giữ độ dài 30 phút, bỏ lựa chọn Theo độ dài nhạc",
+      d.len_target.seconds() == 1800 and d.len_mode.findData("music") < 0 and d.len_mode.currentData() == "target")
+check("VM→VO: bảng tính lại theo kiểu mới", len(d.jobs) == 3 and all(p is not None and p.output_kind == "video_only"
+                                                                    for p in d._projects))
+check("VM→VO: dòng đã bỏ tick vẫn bỏ tick", d.tree.topLevelItem(1).checkState(0) == Qt.CheckState.Unchecked)
+check("VM→VO: cỡ hộp thoại và khung hướng dẫn không nhảy", d.size() == size0
+      and d.card_text.parentWidget().height() == card_h, f"{card_h} → {d.card_text.parentWidget().height()}")
+check("VM→VO: báo đang khác kiểu dự án", "Video có nhạc" in d.kind_hint.text())
+d.grab().save(os.path.join(scratch, "switch_video_only.png"))
+d.kind_buttons["music_only"].click()
+wait(0.5)
+labels = form_labels(d)
+check("VM→MO: chỉ còn hàng của Chỉ nhạc", "Độ dài mỗi file:" in labels and "Mẫu xếp clip:" not in labels
+      and "Tiếng gốc clip:" not in labels, str(labels))
+check("VM→MO: cột clip ẩn, tên cột theo file nhạc", d.tree.isColumnHidden(1)
+      and "file nhạc" in d.tree.headerItem().text(0))
+check("VM→MO: quét lại theo nhạc (2 thư mục thiếu nhạc)", len(d.jobs) == 3 and sum(1 for j in d.jobs if j.error) == 2)
+check("VM→MO: khung hướng dẫn không nhảy", d.card_text.parentWidget().height() == card_h,
+      f"{card_h} → {d.card_text.parentWidget().height()}")
+d.grab().save(os.path.join(scratch, "switch_music_only.png"))
+d.kind_buttons["video_music"].click()
+wait(0.5)
+check("MO→VM: quay lại đủ hàng + 3 video", "Nhạc:" in form_labels(d) and len(d.jobs) == 3
+      and all(p is not None for p in d._projects) and not d.tree.isColumnHidden(1))
+check("dự án gốc không đổi", tpl.output_kind == "video_music" and tpl.video.target_duration == 7200)
+d.done(0)
 
 # ---- Chỉ video ----
 d = open_dlg("video_only", vid_parent)
@@ -114,10 +146,7 @@ check("VO: khung hướng dẫn nói không nhạc", "không nhạc" in d.card_t
 check("VO: không có lựa chọn Theo độ dài nhạc", d.len_mode.findData("music") < 0)
 check("VO: quét 3 video", len(d.jobs) == 3 and all(p is not None for p in d._projects))
 d.grab().save(os.path.join(scratch, "batch_video_only.png"))
-d.kind_buttons["music_only"].click()
-wait(0.2)
-check("VO→MO: khuôn Chỉ nhạc, độ dài file = độ dài video", d.switch_to.output_kind == "music_only"
-      and d.switch_to.music.export_target == 7200)
+d.done(0)
 
 # ---- Chỉ nhạc ----
 d = open_dlg("music_only", mus_parent)
@@ -156,13 +185,13 @@ def fake_exec(self):
     seen.append(self.kind)
     self.show()
     wait(1.0)
-    if len(seen) == 1:
-        self.folder.setText(mus_parent)
-        self._rescan()
-        self.kind_buttons["music_only"].click()
-    else:
-        self.run_now.setChecked(False)
-        self._accept()
+    self.folder.setText(mus_parent)
+    self._rescan()
+    self.kind_buttons["music_only"].click()
+    wait(0.5)
+    seen.append(self.kind)
+    self.run_now.setChecked(False)
+    self._accept()
     return self.result()
 
 
@@ -173,7 +202,7 @@ if tpl_out:
     win.batch_from_folders()
     bdm.BatchDialog.exec = orig_exec
     added = win.queue[before:]
-    check("cửa sổ chính: mở lại hộp thoại theo kiểu mới", seen == ["video_music", "music_only"], str(seen))
+    check("cửa sổ chính: đổi kiểu trong cùng hộp thoại", seen == ["video_music", "music_only"], str(seen))
     check("cửa sổ chính: thêm 2 file nhạc vào hàng đợi", len(added) == 2 and all(i.kind == "audio" for i in added),
           str([(i.kind, os.path.basename(i.output)) for i in added]))
     check("cửa sổ chính: dự án đang mở vẫn là Video có nhạc", win.collect_project().output_kind == "video_music")

@@ -1294,15 +1294,8 @@ class MainWindow(QMainWindow):
                                 "xuất vào đó (mỗi video một thư mục riêng nếu đang bật).")
             self.go_to(2)
             return
-        geo = None
-        while True:  # bấm đổi kiểu trong hộp thoại → mở lại theo kiểu mới (giữ chỗ và cỡ cửa sổ)
-            dlg = BatchDialog(template, self.settings, self)
-            if geo is not None:
-                dlg.restoreGeometry(geo)
-            dlg.exec()
-            if dlg.switch_to is None:
-                break
-            template, geo = dlg.switch_to, dlg.saveGeometry()
+        dlg = BatchDialog(template, self.settings, self)  # đổi kiểu (Video có nhạc / Chỉ video / Chỉ nhạc) ngay trong hộp thoại
+        dlg.exec()
         if dlg.result() != QDialog.DialogCode.Accepted or not dlg.result_projects:
             return
         taken = {i.output.lower() for i in self.queue if not i.finished}

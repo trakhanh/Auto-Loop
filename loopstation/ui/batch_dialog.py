@@ -192,13 +192,11 @@ class BatchDialog(QDialog):
         super().__init__(parent)
         self.setWindowTitle("Xuất hàng loạt theo thư mục")
         self.setMinimumSize(1000, 640)
-        self.template = template
+        # bản riêng của hộp thoại: đổi kiểu ngay tại chỗ, không đụng dự án đang mở
+        self.template = copy.deepcopy(template)
         self.settings = settings
-        self.music_only = template.output_kind == "music_only"
         self.kind = template.output_kind
-        self._unit = "file nhạc" if self.music_only else "video"
-        # bấm đổi kiểu: hộp thoại đóng lại (done(2)) và cửa sổ chính mở lại với khuôn này (giữ cài đặt đã chọn)
-        self.switch_to: Project | None = None
+        self._project_kind = template.output_kind
         self.result_projects: list[Project] = []
         self.jobs: list[batch.FolderJob] = []
         # thư mục → (bảng clip đã chỉnh tay, trạng thái hộp thoại để mở lại đúng như lúc bấm OK)
@@ -208,6 +206,7 @@ class BatchDialog(QDialog):
         self._row_info: list[tuple[float, list[float]]] = []  # (thời lượng, mốc đổi bài) để chọn chỗ nghe thử
         self._play_btns: dict[int, QPushButton] = {}
         self._playing_row: int | None = None
+        self._fade = None
 
         # ---- chọn kiểu ngay trong hộp thoại (mặc định theo dự án đang mở) ----
         kind_row = QHBoxLayout()
@@ -235,43 +234,53 @@ class BatchDialog(QDialog):
         self.kind_bar = self._wrap(seg)
         kind_row.addWidget(self.kind_bar)
         kind_row.addSpacing(12)
-        kind_hint = w.muted("Kiểu của dự án đang mở được chọn sẵn — bấm để đổi kiểu cho cả loạt.")
-        kind_row.addWidget(kind_hint, 1)
+        self.kind_hint = w.muted("")
+        self.kind_hint.setWordWrap(True)
+        kind_row.addWidget(self.kind_hint, 1)
 
         # ---- khung "mỗi thư mục con cần có gì" + sơ đồ thư mục mẫu ----
-        fmt = encoders.AUDIO_FORMATS.get(template.music.export_format)
-        left, right = kind_card_html(self.kind, fmt.ext if fmt else ".mp3")
         card = QFrame()
         card.setObjectName("batchCard")
         cl = QHBoxLayout(card)
         cl.setContentsMargins(14, 10, 14, 10)
         cl.setSpacing(18)
-        self.card_text = QLabel(left)
+        self.card_text = QLabel()
         self.card_text.setWordWrap(True)
         self.card_text.setTextFormat(Qt.TextFormat.RichText)
-        self.card_tree = QLabel(right)
+        self.card_tree = QLabel()
         self.card_tree.setTextFormat(Qt.TextFormat.RichText)
         self.card_tree.setObjectName("batchTree")
         cl.addWidget(self.card_text, 1)
         cl.addWidget(self.card_tree, 0, Qt.AlignmentFlag.AlignTop)
+        # khung giữ một chiều cao cho cả 3 kiểu → bấm đổi kiểu không làm cả hộp thoại nhảy lên xuống
+        fmt = encoders.AUDIO_FORMATS.get(self.template.music.export_format)
+        self._audio_ext = fmt.ext if fmt else ".mp3"
+        tree_h = text_h = 0
+        for k in KIND_TEXT:
+            left, right = kind_card_html(k, self._audio_ext)
+            self.card_tree.setText(right)
+            self.card_text.setText(left)
+            tree_h = max(tree_h, self.card_tree.sizeHint().height())
+            text_h = max(text_h, self.card_text.heightForWidth(560))
+        self.card_tree.setMinimumHeight(tree_h)
+        card.setMinimumHeight(max(tree_h, text_h) + 20)
 
         self.folder = QLineEdit(settings.value("batch/folder", ""))
         self.folder.setPlaceholderText("Ví dụ: D:\\Video-can-lam\\Tuan-1")
         browse = QPushButton("Chọn…")
         browse.clicked.connect(self._browse)
-        sample = QPushButton("Thư mục mẫu")
-        sample.setObjectName("ghost")
-        sample.setIcon(icons.icon("folder", 14))
-        sample.setIconSize(QSize(14, 14))
-        sample.setToolTip("Dùng thư mục mẫu Mau-Test\\Hang-loat (3 video) để thử")
+        self.sample = QPushButton("Thư mục mẫu")
+        self.sample.setObjectName("ghost")
+        self.sample.setIcon(icons.icon("folder", 14))
+        self.sample.setIconSize(QSize(14, 14))
+        self.sample.setToolTip("Dùng thư mục mẫu Mau-Test\\Hang-loat (3 video) để thử")
         self._sample_dir = Path(ft.app_dir()) / "Mau-Test" / "Hang-loat"
-        sample.setVisible(self._sample_dir.is_dir() and not self.music_only)  # thư mục mẫu là thư mục video
-        sample.clicked.connect(lambda: self.folder.setText(str(self._sample_dir)))
+        self.sample.clicked.connect(lambda: self.folder.setText(str(self._sample_dir)))
         frow = QHBoxLayout()
         frow.setSpacing(6)
         frow.addWidget(self.folder, 1)
         frow.addWidget(browse)
-        frow.addWidget(sample)
+        frow.addWidget(self.sample)
 
         self.preset = QComboBox()
         for p in all_presets(settings):
@@ -302,32 +311,22 @@ class BatchDialog(QDialog):
         xrow.addSpacing(10)
         xrow.addWidget(no_xf)
         xrow.addStretch(1)
+        self.xf_box = self._wrap(xrow)
         self.music = QComboBox()
         for k, t in MUSIC:
             self.music.addItem(t, k)
         w_idx = self.music.findData(settings.value("batch/music", "auto"))
         self.music.setCurrentIndex(max(0, w_idx))
 
-        # độ dài mỗi video / file nhạc (mặc định theo dự án đang mở)
+        # độ dài mỗi video / file nhạc (mặc định theo dự án đang mở; danh sách lựa chọn đổi theo kiểu)
         self.len_mode = QComboBox()
-        if self.music_only:
-            for k, txt in MUSIC_LEN:
-                self.len_mode.addItem(txt, k)
-            cur_len, cur_target = template.music.export_mode, template.music.export_target
-        else:
-            for k, txt in VIDEO_LEN:
-                if k == "music" and self.kind == "video_only":
-                    continue
-                self.len_mode.addItem(txt, k)
-            cur_len, cur_target = template.video.length_mode, template.video.target_duration
-        self.len_mode.setCurrentIndex(max(0, self.len_mode.findData(cur_len)))
-        self.len_target = w.DurationEdit(cur_target or 3600)
+        t = self.template
+        self.len_target = w.DurationEdit((t.music.export_target if self.music_only else t.video.target_duration) or 3600)
         self.len_rounds = QSpinBox()
         self.len_rounds.setRange(1, 999)
         self.len_rounds.setSuffix(" lượt")
-        self.len_rounds.setValue(template.music.export_rounds)
+        self.len_rounds.setValue(t.music.export_rounds)
         self.len_rounds.setToolTip("Playlist phát hết bao nhiêu lượt (mỗi lượt đổi thứ tự nếu dự án để ngẫu nhiên)")
-        self.len_mode.setToolTip("Áp cho mọi " + ("file nhạc" if self.music_only else "video") + " trong loạt")
         len_row = QHBoxLayout()
         len_row.setSpacing(10)
         len_row.addWidget(self.len_mode)
@@ -335,25 +334,12 @@ class BatchDialog(QDialog):
         len_row.addWidget(self.len_rounds)
         len_row.addStretch(1)
         self.len_mode.currentIndexChanged.connect(self._update_len_widgets)
-        self._update_len_widgets()
 
-        # tiếng gốc của clip cho cả loạt (mặc định theo dự án khuôn)
+        # tiếng gốc của clip cho cả loạt (mặc định theo dự án khuôn; danh sách đổi theo kiểu)
         self.source = QComboBox()
-        if template.output_kind == "video_only":
-            items = [("mix", "Giữ tiếng gốc của clip"), ("off", "Tắt tiếng gốc của clip")]
-        else:
-            items = [("mix", "Giữ tiếng gốc, trộn với nhạc"), ("only", "Chỉ tiếng gốc của clip — không dùng nhạc"),
-                     ("off", "Tắt tiếng gốc của clip")]
-        for k, t in items:
-            self.source.addItem(t, k)
-        cur = template.video.source_audio
-        if template.output_kind == "video_only" and cur == "only":
-            cur = "mix"
-        self.source.setCurrentIndex(max(0, self.source.findData(cur)))
         self.source.setToolTip("Áp cho mọi video trong loạt. Clip không có tiếng thì phần đó im lặng.")
 
         # âm lượng chung cho cả loạt (mặc định = Bảng trộn âm của dự án đang mở)
-        t = template
         self.vol_music = VolSlider("Nhạc", t.video.music_volume)
         self.vol_source = VolSlider("Tiếng gốc", t.video.source_volume)
         self.vol_amb = [VolSlider(ambient_lib.display_name(a.path), a.volume) for a in t.music.ambient]
@@ -362,9 +348,7 @@ class BatchDialog(QDialog):
         vol_box = QWidget()
         vfl = w.FlowLayout(vol_box, spacing=12)
         vfl.addWidget(self.vol_music)
-        self.vol_music.setVisible(self.kind != "video_only")  # Chỉ video: không có nhạc
-        if not self.music_only:
-            vfl.addWidget(self.vol_source)
+        vfl.addWidget(self.vol_source)
         for s in self.vol_amb:
             vfl.addWidget(s)
         vol_reset = QPushButton("Theo dự án đang mở")
@@ -376,11 +360,7 @@ class BatchDialog(QDialog):
             s.valueChanged.connect(lambda *_: self._volumes_changed())
         # nghe thử từng dòng
         self.listen_at = QComboBox()
-        for k, txt in (LISTEN_AT_MUSIC if self.music_only else LISTEN_AT):
-            self.listen_at.addItem(txt, k)
-        self.listen_at.setToolTip("Bấm Nghe ở một dòng để nghe 20 giây của đúng video đó, từ mốc này")
-        self.listen_status = w.muted(f"Bấm <b>Nghe</b> ở một dòng để nghe thử 20 giây của {self._unit} đó — kéo thanh âm "
-                                     "lượng là nghe đổi ngay.")
+        self.listen_status = w.muted("")
         self.listen_status.setWordWrap(True)
         lrow = QHBoxLayout()
         lrow.setSpacing(8)
@@ -395,24 +375,23 @@ class BatchDialog(QDialog):
         self._listen_tick.setInterval(250)
         self._listen_tick.timeout.connect(self._update_listen_status)
 
-        form = QFormLayout()
+        # mọi hàng đều dựng sẵn; đổi kiểu chỉ ẩn / hiện hàng (không đóng mở lại hộp thoại)
+        self.form = form = QFormLayout()
         form.setLabelAlignment(Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter)
         form.setVerticalSpacing(8)
         form.addRow("Thư mục cha:", self._wrap(frow))
-        form.addRow("Độ dài mỗi file:" if self.music_only else "Độ dài mỗi video:", self._wrap(len_row))
-        if not self.music_only:
-            form.addRow("Mẫu xếp clip:", self.preset)
-            form.addRow("Crossfade:", self._wrap(xrow))
-            form.addRow("Tiếng gốc clip:", self.source)
-            if self.kind == "video_music":  # Chỉ video: không có nhạc → ẩn hẳn ô Nhạc (không để mờ gây khó hiểu)
-                form.addRow("Nhạc:", self.music)
+        self.len_label = QLabel()
+        self.len_box = self._wrap(len_row)
+        form.addRow(self.len_label, self.len_box)
+        form.addRow("Mẫu xếp clip:", self.preset)
+        form.addRow("Crossfade:", self.xf_box)
+        form.addRow("Tiếng gốc clip:", self.source)
+        form.addRow("Nhạc:", self.music)
         form.addRow("Âm lượng:", vol_box)
         form.addRow("Nghe thử:", self._wrap(lrow))
 
         self.tree = QTreeWidget()
-        self.tree.setHeaderLabels([f"Thư mục (= tên {self._unit})", "Clip nền", "Clip", "Âm thanh" if self.kind == "video_only" else "Nhạc", "Thời lượng", "Thứ tự cảnh",
-                                   "Nghe thử", "Ghi chú"])
-        self.tree.headerItem().setToolTip(C_PLAY, f"Nghe 20 giây của {self._unit} đó với âm lượng đang chọn")
+        self.tree.setHeaderLabels(["", "Clip nền", "Clip", "", "Thời lượng", "Thứ tự cảnh", "Nghe thử", "Ghi chú"])
         self.tree.headerItem().setToolTip(C_EDIT, "Bấm Chỉnh… để đổi thứ tự cảnh / số lần phát riêng cho video đó")
         self.tree.setRootIsDecorated(False)
         self.tree.setAlternatingRowColors(True)
@@ -421,8 +400,6 @@ class BatchDialog(QDialog):
         hdr.setSectionResizeMode(C_NAME, QHeaderView.ResizeMode.Stretch)
         for c in (C_BASE, C_CLIPS, C_MUSIC, C_DUR, C_EDIT, C_PLAY):
             hdr.setSectionResizeMode(c, QHeaderView.ResizeMode.ResizeToContents)
-        for c in (C_BASE, C_CLIPS, C_EDIT):
-            self.tree.setColumnHidden(c, self.music_only)
         self.tree.setContextMenuPolicy(Qt.ContextMenuPolicy.CustomContextMenu)
         self.tree.customContextMenuRequested.connect(self._row_menu)
         self.tree.itemDoubleClicked.connect(lambda it, _c: self._edit(self.tree.indexOfTopLevelItem(it)))
@@ -444,13 +421,20 @@ class BatchDialog(QDialog):
         bottom.addStretch(1)
         bottom.addWidget(bb)
 
+        # phần đổi theo kiểu (khung hướng dẫn, các hàng, bảng) — mờ dần vào khi đổi kiểu
+        self.body = QWidget()
+        bl = QVBoxLayout(self.body)
+        bl.setContentsMargins(0, 0, 0, 0)
+        bl.setSpacing(10)
+        bl.addWidget(card)
+        bl.addLayout(form)
+        bl.addWidget(self.tree, 1)
+        bl.addWidget(self.summary)
+
         lay = QVBoxLayout(self)
         lay.setSpacing(10)
         lay.addLayout(kind_row)
-        lay.addWidget(card)
-        lay.addLayout(form)
-        lay.addWidget(self.tree, 1)
-        lay.addWidget(self.summary)
+        lay.addWidget(self.body, 1)
         lay.addLayout(bottom)
 
         # quét khi gõ xong (Enter / rời ô) hoặc ngừng gõ 0,8 giây — không quét từng ký tự (gõ "E:" là quét cả ổ)
@@ -462,13 +446,85 @@ class BatchDialog(QDialog):
         self.folder.editingFinished.connect(self._rescan)
         self.folder.textChanged.connect(lambda *_: self._scan_timer.start())
         self.source.currentIndexChanged.connect(self._update_music_enabled)
-        self._update_music_enabled()
+        self._apply_kind(initial=True)
         for sig in (self.preset.currentIndexChanged, self.music.currentIndexChanged, self.loop_xf.valueChanged,
                     self.next_xf.valueChanged, self.source.currentIndexChanged, self.len_mode.currentIndexChanged,
                     self.len_target.valueChanged, self.len_rounds.valueChanged):
             sig.connect(lambda *_: self._rebuild())
         if os.path.isdir(self.folder.text().strip()):
             self._rescan()
+
+    @property
+    def music_only(self) -> bool:
+        return self.kind == "music_only"
+
+    @property
+    def _unit(self) -> str:
+        return "file nhạc" if self.music_only else "video"
+
+    @staticmethod
+    def _refill(combo: QComboBox, items, want) -> None:
+        """Đổi danh sách lựa chọn của ô mà không phát tín hiệu; giữ lựa chọn cũ nếu còn, không thì chọn mục đầu."""
+        combo.blockSignals(True)
+        combo.clear()
+        for k, txt in items:
+            combo.addItem(txt, k)
+        combo.setCurrentIndex(max(0, combo.findData(want)))
+        combo.blockSignals(False)
+
+    def _apply_kind(self, initial: bool = False) -> None:
+        """Hiện đúng những gì kiểu đang chọn cần: khung hướng dẫn, các hàng, lựa chọn trong ô, cột của bảng."""
+        k, mo, t = self.kind, self.music_only, self.template
+        self.kind_buttons[k].setChecked(True)
+        if k == self._project_kind:
+            self.kind_hint.setText("Kiểu của dự án đang mở được chọn sẵn — bấm để đổi kiểu cho cả loạt.")
+        else:
+            self.kind_hint.setText(f"Chỉ đổi cho loạt này — dự án đang mở vẫn là <b>{KIND_TEXT[self._project_kind]}</b>.")
+        left, right = kind_card_html(k, self._audio_ext)
+        self.card_text.setText(left)
+        self.card_tree.setText(right)
+        self.sample.setVisible(self._sample_dir.is_dir() and not mo)  # thư mục mẫu là thư mục video
+
+        # độ dài: giữ con số đang gõ khi đổi kiểu; kiểu mới không có cách tính cũ thì về "Đúng thời lượng"
+        if mo:
+            items = MUSIC_LEN
+            want = t.music.export_mode if initial else self.len_mode.currentData()
+        else:
+            items = [(v, txt) for v, txt in VIDEO_LEN if not (v == "music" and k == "video_only")]
+            want = t.video.length_mode if initial else self.len_mode.currentData()
+        if want not in [v for v, _ in items]:
+            want = "target"
+        self._refill(self.len_mode, items, want)
+        self.len_label.setText("Độ dài mỗi file:" if mo else "Độ dài mỗi video:")
+        self.len_mode.setToolTip(f"Áp cho mọi {self._unit} trong loạt")
+        self._update_len_widgets()
+
+        if k == "video_only":
+            src_items = [("mix", "Giữ tiếng gốc của clip"), ("off", "Tắt tiếng gốc của clip")]
+        else:
+            src_items = [("mix", "Giữ tiếng gốc, trộn với nhạc"), ("only", "Chỉ tiếng gốc của clip — không dùng nhạc"),
+                         ("off", "Tắt tiếng gốc của clip")]
+        cur = t.video.source_audio if initial or self.source.count() == 0 else self.source.currentData()
+        self._refill(self.source, src_items, "mix" if (k == "video_only" and cur == "only") else cur)
+
+        for wd in (self.preset, self.xf_box, self.source):
+            self.form.setRowVisible(wd, not mo)
+        # Chỉ video: không có nhạc → ẩn hẳn ô Nhạc (không để mờ gây khó hiểu)
+        self.form.setRowVisible(self.music, k == "video_music")
+        self.vol_music.setVisible(k != "video_only")
+        self.vol_source.setVisible(not mo)
+
+        self._refill(self.listen_at, LISTEN_AT_MUSIC if mo else LISTEN_AT, self.listen_at.currentData() or "start")
+        self.listen_at.setToolTip(f"Bấm Nghe ở một dòng để nghe 20 giây của đúng {self._unit} đó, từ mốc này")
+        self.listen_status.setText(f"Bấm <b>Nghe</b> ở một dòng để nghe thử 20 giây của {self._unit} đó — kéo thanh "
+                                   "âm lượng là nghe đổi ngay.")
+        head = self.tree.headerItem()
+        head.setText(C_NAME, f"Thư mục (= tên {self._unit})")
+        head.setText(C_MUSIC, "Âm thanh" if k == "video_only" else "Nhạc")
+        head.setToolTip(C_PLAY, f"Nghe 20 giây của {self._unit} đó với âm lượng đang chọn")
+        for c in (C_BASE, C_CLIPS, C_EDIT):
+            self.tree.setColumnHidden(c, mo)
+        self._update_music_enabled()
 
     def _update_music_enabled(self, *_) -> None:
         """Chỉ tiếng gốc / kiểu Chỉ video: playlist không dùng → khoá ô chọn nhạc (và thanh âm lượng nhạc)."""
@@ -499,25 +555,43 @@ class BatchDialog(QDialog):
             p.video.target_duration = self.len_target.seconds()
 
     def _switch_kind(self, kind: str) -> None:
-        """Đổi kiểu cho cả loạt: giữ thư mục / cài đặt đã chọn, mở lại hộp thoại theo kiểu mới."""
+        """Đổi kiểu cho cả loạt ngay tại chỗ: giữ thư mục cha, độ dài, âm lượng, dòng đã bỏ tick, chỉnh tay."""
         if kind == self.kind:
             return
-        self._save_settings()
-        t = copy.deepcopy(self.template)
-        t.output_kind = kind
-        self._apply_len(t)
-        if self.music_only:  # từ Chỉ nhạc sang video: độ dài nhạc → thời lượng video (cùng con số)
-            t.video.length_mode = "target" if self.len_mode.currentData() == "target" else t.video.length_mode
-            t.video.target_duration = self.len_target.seconds()
-        elif kind == "music_only":
-            t.music.export_mode = "target"
-            t.music.export_target = self.len_target.seconds()
-        t.video.music_volume = self.vol_music.value()
-        t.video.source_volume = self.vol_source.value()
-        for a, s in zip(t.music.ambient, self.vol_amb):
-            a.volume = s.value()
-        self.switch_to = t
-        self.done(2)
+        self._stop_listen()
+        self.kind = kind
+        self.template.output_kind = kind
+        self.setUpdatesEnabled(False)  # đổi một lượt rồi mới vẽ lại — không thấy từng ô nhảy
+        try:
+            self._apply_kind()
+            self._scanned = None  # Chỉ nhạc quét file nhạc, kiểu video quét clip → quét lại thư mục
+            self._rescan()
+        finally:
+            self.setUpdatesEnabled(True)
+        self._fade_in()
+
+    def _fade_in(self) -> None:
+        """Phần thân hộp thoại hiện dần (~0,2 giây) sau khi đổi kiểu."""
+        from PySide6.QtCore import QAbstractAnimation, QEasingCurve, QPropertyAnimation
+        from PySide6.QtWidgets import QGraphicsOpacityEffect
+        if self._fade is not None:
+            self._fade.stop()
+        eff = QGraphicsOpacityEffect(self.body)
+        eff.setOpacity(0.2)
+        self.body.setGraphicsEffect(eff)
+        anim = QPropertyAnimation(eff, b"opacity", self)
+        anim.setDuration(220)
+        anim.setStartValue(0.2)
+        anim.setEndValue(1.0)
+        anim.setEasingCurve(QEasingCurve.Type.OutCubic)
+
+        def end():
+            self._fade = None
+            self.body.setGraphicsEffect(None)  # bỏ hiệu ứng khi xong: bảng cuộn / vẽ nhanh như thường
+
+        anim.finished.connect(end)
+        self._fade = anim
+        anim.start(QAbstractAnimation.DeletionPolicy.DeleteWhenStopped)
 
     @staticmethod
     def _wrap(layout) -> QWidget:

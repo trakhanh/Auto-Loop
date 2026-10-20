@@ -11,7 +11,7 @@ from ..core import ffmpeg_tools as ft
 
 APP_NAME = "KT Loop Station"
 AUTHOR = "By Khánh Trà"
-APP_VERSION = "1.4.11"
+APP_VERSION = "1.4.12"
 # nơi lưu cài đặt (registry); KTLS_SETTINGS_ORG dùng cho test để không đụng cài đặt thật
 SETTINGS_ORG = os.environ.get("KTLS_SETTINGS_ORG", "KTLoopStation")
 
