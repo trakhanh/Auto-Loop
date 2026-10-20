@@ -48,15 +48,19 @@ def set_combo(cb: QComboBox, key: str) -> None:
     cb.setCurrentIndex(max(0, cb.findData(key)))
 
 
-def hms_edit() -> QLineEdit:
-    """Ô thời lượng gõ tự do (2h, 90p, 1h30, 1:30:00…) — xem widgets.DurationEdit."""
+def hms_edit() -> QWidget:
+    """Ô thời lượng 3 ô giờ / phút / giây — xem widgets.DurationEdit."""
     return w.DurationEdit()
 
 
-def quick_buttons(target: QLineEdit, presets) -> QHBoxLayout:
+def quick_buttons(target: QWidget, presets) -> QVBoxLayout:
+    """Ô thời lượng (giờ / phút / giây) + hàng nút đặt nhanh bên dưới."""
+    box = QVBoxLayout()
+    box.setSpacing(5)
+    box.addWidget(target)
     row = QHBoxLayout()
     row.setSpacing(4)
-    row.addWidget(target, 1)
+    box.addLayout(row)
     for label, sec in presets:
         b = QPushButton(label)
         b.setObjectName("pill")
@@ -64,7 +68,8 @@ def quick_buttons(target: QLineEdit, presets) -> QHBoxLayout:
         b.setToolTip(f"Đặt nhanh {format_hms(sec)}")
         b.clicked.connect(lambda _=False, s=sec: target.setText(format_hms(s)))
         row.addWidget(b)
-    return row
+    row.addStretch(1)
+    return box
 
 
 def flow_row(hbox: QHBoxLayout) -> QWidget:

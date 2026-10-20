@@ -119,6 +119,8 @@ OUTPUT_KINDS = ("video_music", "video_only", "music_only")
 @dataclass
 class Project:
     name: str = "Dự án mới"
+    # (không lưu) lưu ý khi mở dự án, ví dụ thời lượng vô lý đã được tự đưa về mức tối đa
+    notes: list = field(default_factory=list, compare=False, repr=False)
     output_kind: str = "video_music"  # video_music | video_only | music_only
     video: VideoSettings = field(default_factory=VideoSettings)
     music: MusicSettings = field(default_factory=MusicSettings)
@@ -245,6 +247,10 @@ class Project:
         v.seed = int(vd.get("seed", v.seed))
         v.length_mode = vd.get("length_mode", v.length_mode)
         v.target_duration = parse_hms(str(vd.get("target_duration", format_hms(v.target_duration))))
+        if v.target_duration > MAX_DURATION:  # dự án cũ lỡ gõ số quá lớn (ví dụ 16666 giờ) → mở app bị treo
+            proj.notes.append(f"Thời lượng đích {format_hms(v.target_duration)} quá dài — đã đưa về tối đa "
+                              f"{MAX_DURATION // 3600} giờ.")
+            v.target_duration = float(MAX_DURATION)
         v.fill = vd.get("fill", v.fill)
         v.reshuffle_each_round = bool(vd.get("reshuffle_each_round", v.reshuffle_each_round))
         v.exact_end = bool(vd.get("exact_end", v.exact_end))
@@ -307,7 +313,11 @@ class Project:
         ae = md.get("audio_export", {})
         m.export_mode = ae.get("mode", m.export_mode)
         m.export_target = parse_hms(str(ae.get("target", format_hms(m.export_target))))
-        m.export_rounds = int(ae.get("rounds", m.export_rounds))
+        if m.export_target > MAX_DURATION:
+            proj.notes.append(f"Độ dài file nhạc {format_hms(m.export_target)} quá dài — đã đưa về tối đa "
+                              f"{MAX_DURATION // 3600} giờ.")
+            m.export_target = float(MAX_DURATION)
+        m.export_rounds = max(1, min(999, int(ae.get("rounds", m.export_rounds))))
         m.export_format = ae.get("format", m.export_format)
         for ad in md.get("ambient", []):
             m.ambient.append(AmbientLayer(path=p(ad["path"]), enabled=bool(ad.get("enabled", True)),
@@ -339,6 +349,10 @@ class Project:
         base = str(Path(path).resolve().parent)
         data = json.loads(Path(path).read_text(encoding="utf-8"))
         return cls.from_dict(data, base)
+
+
+MAX_DURATION = 48 * 3600  # video / file nhạc dài tối đa 48 giờ (YouTube nhận tối đa 12 giờ); dài hơn làm app treo
+MAX_PLAYS = 99_999  # số lần phát tối đa của một clip
 
 
 def atomic_write(path: Path, text: str) -> None:

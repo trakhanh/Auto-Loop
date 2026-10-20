@@ -219,14 +219,15 @@ topic("dodai", "Làm video", "clock", "Độ dài video", hero(
     "Độ dài video", "Trang Video → thẻ Độ dài. Mặc định video dài đúng theo bảng clip.",
     (("Mở trang Video", "app:video"),)) + cards([
     ("Thủ công", "Phát đúng một lượt theo bảng: dài bao nhiêu là do số lần phát.", "Dễ hiểu nhất, dùng cho đa số video"),
-    ("Thời lượng mục tiêu", "Gõ <code>3h</code>, <code>3 tiếng</code>, <code>90p</code> hoặc <code>3:00:00</code> → app tự lặp cho đủ.",
+    ("Thời lượng mục tiêu", "Gõ số vào 3 ô <b>giờ · phút · giây</b> (ví dụ <code>10</code> ở ô giờ) hoặc bấm 30p / 1h / 10h → app tự lặp cho đủ.",
      "Lặp cả chuỗi, hoặc chỉ giãn các clip tick “Tự giãn”"),
     ("Theo độ dài nhạc", "Video dài đúng bằng một lượt playlist.", "Không dùng được ở kiểu Chỉ video")]) + """
-<h2>Gõ thời lượng thế nào?</h2>""" + examples([
-    ("2h · 3 tiếng", "2 giờ · 3 giờ"), ("90p · 90", "90 phút (số không có đơn vị = phút)"),
-    ("1h30 · 1h 30m · 1.5h", "1 giờ 30 phút"), ("1:30:00", "giờ:phút:giây"), ("10:00", "phút:giây = 10 phút")]) + box(
-    "tip", "Bấm vào ô là chữ được bôi đen sẵn — gõ là thay luôn. Bấm <b>Enter</b> hoặc bấm ra ngoài để áp dụng; "
-           "gõ sai thì ô viền cam và tự quay về giá trị cũ.") + """
+<h2>Nhập thời lượng thế nào?</h2>""" + flow_blocks([("10", "#334155"), ("giờ", "#1e293b"), ("30", "#334155"),
+                                                     ("phút", "#1e293b"), ("0", "#334155"), ("giây", "#1e293b")]) + examples([
+    ("10 ở ô giờ", "10 giờ"), ("Tab", "sang ô phút / giây"), ("↑ ↓", "tăng / giảm 1 trong ô đang chọn"),
+    ("90 ở ô phút", "tự đổi thành 1 giờ 30 phút")], ("Làm", "Kết quả")) + box(
+    "tip", "Bấm vào ô là số được bôi đen sẵn — gõ là thay luôn. Bấm <b>Enter</b> hoặc bấm ra ngoài để áp dụng "
+           "(đang gõ dở app không tính lại). Hoặc bấm nhanh các nút <b>30p · 1h · 2h · 3h · 10h</b>.") + """
 <ul>
 <li><b>Lặp lại cả chuỗi</b>: V1→V6 rồi lại V1→V6… (tick <i>Mỗi vòng xáo lại</i> để mỗi vòng một thứ tự).</li>
 <li><b>Tăng số lần phát của clip tick “Tự giãn”</b>: phát một chuỗi, chỉ các clip được tick dài ra cho đủ giờ.</li>
@@ -349,8 +350,16 @@ topic("hangdoi", "Xuất file", "queue", "Hàng đợi (xuất qua đêm)", hero
 </ul>""")
 
 topic("hangloat", "Xuất file", "folder", "Xuất hàng loạt theo thư mục", hero(
-    "Xuất hàng loạt", "Làm nhiều video cùng kiểu một lần: mỗi thư mục con là một video, mọi cài đặt lấy theo dự án đang mở.",
+    "Xuất hàng loạt", "Làm nhiều video / file nhạc một lần: mỗi thư mục con là một file. Dùng được cho cả 3 kiểu, "
+    "mọi cài đặt khác lấy theo dự án đang mở.",
     (("Mở Xuất hàng loạt", "app:batch"),)) + """
+<h2>Chọn kiểu ở đầu hộp thoại (Xuất ra)</h2>""" + examples([
+    ("Video có nhạc", "mỗi thư mục con → 1 video .mp4: clip trong thư mục + nhạc trong thư mục (không có thì dùng playlist của dự án)"),
+    ("Chỉ video", "mỗi thư mục con → 1 video .mp4 không nhạc, giữ tiếng gốc clip (file nhạc trong thư mục bị bỏ qua)"),
+    ("Chỉ nhạc", "mỗi thư mục con → 1 file nhạc: các bài trong thư mục là playlist, lặp cho đủ độ dài")],
+    ("Kiểu", "Mỗi thư mục con thành")) + box(
+    "tip", "Kiểu của dự án đang mở được chọn sẵn. Bấm kiểu khác là hộp thoại đổi ngay — thư mục cha, độ dài và âm lượng "
+           "đã chọn được giữ nguyên. Khung phía trên luôn ghi rõ mỗi thư mục con cần có gì kèm sơ đồ mẫu.") + """
 <h2>1. Chuẩn bị thư mục</h2>
 <table cellpadding="10" cellspacing="0" bgcolor="#11151f"><tr><td><pre style="font-family:Consolas;">
 Video-can-lam\\                ← thư mục cha (chọn thư mục này)
@@ -361,18 +370,28 @@ Video-can-lam\\                ← thư mục cha (chọn thư mục này)
 │    Nhac\\  bai1.mp3  bai2.mp3   ← nhạc riêng (nếu có)
 └─ _chung\\                     ← bắt đầu bằng _ = bỏ qua
 </pre></td></tr></table>
+<p>Kiểu <b>Chỉ nhạc</b>: mỗi thư mục con chỉ cần các bài nhạc.</p>
+<table cellpadding="10" cellspacing="0" bgcolor="#11151f"><tr><td><pre style="font-family:Consolas;">
+Nhac-can-lam\\                 ← thư mục cha
+├─ Piano đêm\\                  → "Piano đêm.mp3"
+│    bai1.mp3   bai2.mp3
+└─ Lofi học bài\\               → "Lofi học bài.mp3"
+     01.mp3   02.mp3   03.mp3
+</pre></td></tr></table>
 <h2>2. Mở dự án làm “khuôn”, rồi mở Xuất hàng loạt</h2>
 <p>Khuôn = dự án đang mở: cấu hình xuất, thư mục lưu, Intro / Outro, tiếng nền, playlist chung… áp cho cả loạt.</p>""" + img("batch") + legend([
-    ("Thư mục cha", "chọn thư mục chứa các thư mục video (nút <i>Thư mục mẫu</i> để thử)."),
-    ("Mẫu xếp clip", "cách xen kẽ clip nền cho mọi video (như hộp thoại Xen kẽ)."),
+    ("Xuất ra", "chọn kiểu: Video có nhạc / Chỉ video / Chỉ nhạc."),
+    ("Thư mục cha", "chọn thư mục chứa các thư mục con (nút <i>Thư mục mẫu</i> để thử)."),
+    ("Độ dài mỗi video / file", "đúng thời lượng (gõ vào ô giờ · phút · giây), theo độ dài nhạc, hoặc số lượt playlist "
+                                "(Chỉ nhạc) — áp cho cả loạt."),
+    ("Mẫu xếp clip", "cách xen kẽ clip nền cho mọi video (như hộp thoại Xen kẽ). Kiểu Chỉ nhạc không có ô này."),
     ("Âm lượng", "Nhạc / Tiếng gốc / từng lớp tiếng nền cho cả loạt (mặc định theo Bảng trộn âm)."),
     ("Nghe từ", "mốc nghe thử: đầu / giữa video / chỗ đổi bài."),
     ("Danh sách video", "mỗi dòng một video. Chuột phải → <b>Chỉnh âm lượng video này…</b> để một video to / nhỏ khác."),
     ("Chỉnh…", "đổi thứ tự cảnh riêng cho video đó (dòng hiện <i>Đã chỉnh tay</i>)."),
     ("Nghe", "nghe 20 giây của đúng video đó; kéo thanh Âm lượng là nghe đổi ngay."),
     ("Thêm vào hàng đợi", "đưa cả loạt vào hàng đợi (tick <i>Chạy hàng đợi ngay</i> để chạy luôn).")]) + box(
-    "tip", "Kiểu <b>Chỉ nhạc</b>: mỗi thư mục con là một playlist → một file nhạc. Thư mục lưu nằm trong thư mục cha thì app tự "
-           "lưu vào <code>_Xuat</code> để lần quét sau không lẫn với clip."))
+    "tip", "Thư mục lưu nằm trong thư mục cha thì app tự lưu vào <code>_Xuat</code> để lần quét sau không lẫn với clip."))
 
 topic("filekem", "Xuất file", "file_plus", "File kèm: tracklist, mốc cho editor", hero(
     "File kèm theo video", "Bật ở trang Xuất → Nơi lưu & Tệp xuất kèm. Mặc định mỗi video một thư mục riêng chứa tất cả.") + examples([

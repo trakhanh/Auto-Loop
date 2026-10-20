@@ -11,7 +11,7 @@ from ..core import ffmpeg_tools as ft
 
 APP_NAME = "KT Loop Station"
 AUTHOR = "By Khánh Trà"
-APP_VERSION = "1.4.8"
+APP_VERSION = "1.4.10"
 # nơi lưu cài đặt (registry); KTLS_SETTINGS_ORG dùng cho test để không đụng cài đặt thật
 SETTINGS_ORG = os.environ.get("KTLS_SETTINGS_ORG", "KTLoopStation")
 
@@ -243,6 +243,9 @@ QComboBox QAbstractItemView {{ background: {C['surface2']}; border: 1px solid {C
     selection-background-color: {C['accent']}; padding: 4px; border-radius: 8px; }}
 
 QSpinBox, QDoubleSpinBox {{ padding-right: 20px; }}
+QFrame#batchCard {{ background: {C['surface']}; border: 1px solid {C['border']}; border-radius: 10px; }}
+QLabel#batchTree {{ background: {C['field']}; border: 1px solid {C['border']}; border-radius: 8px; padding: 8px 12px; }}
+QSpinBox#timeBox {{ padding: 4px 2px; }}  /* ô giờ / phút / giây: không mũi tên, số căn giữa */
 QSpinBox::up-button, QDoubleSpinBox::up-button {{ subcontrol-origin: border; subcontrol-position: top right;
     width: 18px; border-left: 1px solid {C['border']}; border-bottom: 1px solid {C['border']};
     border-top-right-radius: 7px; background: {C['surface2']}; }}

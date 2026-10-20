@@ -116,7 +116,6 @@ class MixerPanel(QGroupBox):
 
         # ----- nghe thử -----
         self.at = w.DurationEdit(0, allow_zero=True)
-        self.at.setMaximumWidth(96)
         self.at.setToolTip("Nghe từ mốc nào trên video / file nhạc. " + w.DurationEdit.HELP)
         prow_box = QWidget()
         prow = w.FlowLayout(prow_box, spacing=5)

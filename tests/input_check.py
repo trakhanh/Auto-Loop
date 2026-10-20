@@ -70,51 +70,59 @@ wait(0.5)
 tg = vt.target
 tg.set_seconds(3600)
 
-# 1) bấm vào ô → bôi đen sẵn → gõ 2h → Enter
-click(tg)
-check("bấm vào ô thời lượng là bôi đen sẵn", tg.selectedText() == tg.text(), repr(tg.selectedText()))
-QTest.keyClicks(tg, "2h")
+changes = []
+tg.valueChanged.connect(lambda v: changes.append(v))
+
+
+def type_into(box, text):
+    click(box.lineEdit())
+    QTest.keyClicks(box, text)
+
+
+# 1) gõ 10 vào ô giờ → Enter → 10 giờ
+type_into(tg.h, "10")
+check("bấm vào ô giờ là bôi đen sẵn → gõ đè (không thành “110”)", tg.h.text() == "10", tg.h.text())
 check("đang gõ dở: dự án chưa đổi", win.collect_project().video.target_duration == 3600)
-QTest.keyClick(tg, Qt.Key.Key_Return)
+QTest.keyClick(tg.h, Qt.Key.Key_Return)
 wait()
-check("gõ “2h” + Enter → 2 giờ", tg.seconds() == 7200 and tg.text() == "02:00:00", tg.text())
-check("dự án nhận 2 giờ", win.collect_project().video.target_duration == 7200)
+check("ô giờ “10” + Enter → 10 giờ", tg.seconds() == 36000, tg.text())
+check("dự án nhận 10 giờ", win.collect_project().video.target_duration == 36000)
 
-# 2) xoá chữ số ở giữa / cuối rồi gõ tiếp (trước đây bị chặn phím)
-click(tg)
-QTest.keyClick(tg, Qt.Key.Key_End)
-QTest.keyClick(tg, Qt.Key.Key_Backspace)
-QTest.keyClick(tg, Qt.Key.Key_Backspace)
-check("xoá được chữ số ở cuối", tg.text() == "02:00:", tg.text())
-QTest.keyClicks(tg, "30")
-QTest.keyClick(tg, Qt.Key.Key_Tab)
+# 2) Tab sang ô phút, gõ 30 → 10:30:00
+QTest.keyClick(tg.h, Qt.Key.Key_Tab)
+wait(0.05)
+check("Tab chuyển sang ô phút", app.focusWidget() in (tg.m, tg.m.lineEdit()), str(app.focusWidget()))
+QTest.keyClicks(tg.m, "30")
+QTest.keyClick(tg.m, Qt.Key.Key_Return)
 wait()
-check("gõ tiếp “30” → 2:00:30", tg.seconds() == 7230, tg.text())
-click(tg)
-QTest.keyClick(tg, Qt.Key.Key_Home)
-QTest.keyClick(tg, Qt.Key.Key_Right)
-QTest.keyClick(tg, Qt.Key.Key_Backspace)  # bỏ số 0 đầu: "2:00:30" vẫn hợp lệ
-QTest.keyClick(tg, Qt.Key.Key_Return)
-check("xoá chữ số ở giữa vẫn được", tg.seconds() == 7230, tg.text())
+check("ô phút “30” → 10 giờ 30 phút", tg.seconds() == 37800, tg.text())
 
-# 3) gõ sai → giữ giá trị cũ
-click(tg)
-QTest.keyClicks(tg, "abc")
-check("gõ sai: viền cam báo ngay", bool(tg.property("bad")))
-QTest.keyClick(tg, Qt.Key.Key_Return)
+# 3) gõ dư tự quy đổi: 90 phút → 1 giờ 30 phút
+type_into(tg.h, "0")
+QTest.keyClick(tg.h, Qt.Key.Key_Return)
+type_into(tg.m, "90")
+QTest.keyClick(tg.m, Qt.Key.Key_Return)
 wait()
-check("gõ sai + Enter → quay về giá trị cũ", tg.seconds() == 7230 and tg.text() == "02:00:30" and not tg.property("bad"))
-wait(0.1)
-for txt, sec in (("90p", 5400), ("3 tiếng", 10800), ("1h30", 5400), ("45", 2700)):
-    # Enter xong ô vẫn được chọn và đã bôi đen sẵn → gõ tiếp là thay luôn
-    check(f"sau Enter đã bôi đen sẵn (trước “{txt}”)", tg.selectedText() == tg.text(), repr(tg.selectedText()))
-    if txt.isascii():
-        QTest.keyClicks(tg, txt)
-    else:  # QTest không gõ được chữ có dấu (sập) → chèn như bộ gõ tiếng Việt, vẫn qua bộ lọc ký tự
-        tg.insert(txt)
-    QTest.keyClick(tg, Qt.Key.Key_Return)
-    wait(0.05)
-    check(f"gõ “{txt}”", tg.seconds() == sec, tg.text())
+check("gõ 0 giờ 90 phút → tự thành 1 giờ 30 phút", tg.seconds() == 5400 and (tg.h.value(), tg.m.value()) == (1, 30),
+      f"{tg.h.value()} giờ {tg.m.value()} phút")
+type_into(tg.s, "75")
+QTest.keyClick(tg.s, Qt.Key.Key_Return)
+wait()
+check("75 giây → 1 phút 15 giây", (tg.h.value(), tg.m.value(), tg.s.value()) == (1, 31, 15), tg.text())
+
+# 4) toàn 0 → giữ giá trị cũ
+before = tg.seconds()
+for box in (tg.h, tg.m, tg.s):
+    type_into(box, "0")
+    QTest.keyClick(box, Qt.Key.Key_Return)
+wait()
+check("đặt hết về 0 → giữ giá trị cũ (thời lượng phải > 0)", tg.seconds() > 0, tg.text())
+
+# 5) bấm ▲ ở ô giờ → tăng ngay 1 giờ
+tg.set_seconds(7200)
+tg.h.stepUp()
+wait()
+check("▲ ô giờ → 3 giờ", tg.seconds() == 10800, tg.text())
 
 # 4) nút đặt nhanh vẫn chạy
 btn = next(b for b in vt.target_wrap.findChildren(type(vt.next_btn)) if b.text() == "10h")
@@ -150,9 +158,10 @@ check("ô Âm lượng % trong bảng: gõ đè “60”", it.text(mt.COL_VOL) =
 
 # 7) ô "Nghe từ" của Bảng trộn âm
 at = win.music_tab.mixer.at
-click(at)
-QTest.keyClicks(at, "1h")
-check("Nghe từ: bấm nghe khi chưa Enter vẫn lấy “1h”", win.music_tab.mixer.start_seconds() == 3600)
+type_into(at.h, "1")
+type_into(at.m, "5")  # chưa Enter (đang ở ô phút)
+check("Nghe từ: gõ 1 giờ 5 phút, bấm Nghe khi chưa Enter vẫn lấy đúng", win.music_tab.mixer.start_seconds() == 3900,
+      str(win.music_tab.mixer.start_seconds()))
 
 # 8) ô Số lần phát (bảng clip) nhận 1h30 và báo khi gõ sai
 win.go_to(0)

@@ -10,7 +10,7 @@ from fractions import Fraction
 from . import planner
 from .encoders import RESOLUTIONS
 from .probe import MediaInfo, frames_at, probe, probe_many
-from .project import Project
+from .project import MAX_DURATION, Project
 
 COMMON_FPS = [Fraction(24000, 1001), Fraction(24), Fraction(25), Fraction(30000, 1001),
               Fraction(30), Fraction(50), Fraction(60000, 1001), Fraction(60)]
@@ -153,7 +153,21 @@ def build(project: Project) -> Timeline:
             return tl
         target = planner.first_round_seconds(ms, tl.track_durations)
 
-    tl.video = planner.plan_video(_resolve_durations(tl, vs), tl.frames, tl.fps, target)
+    if target is not None and target > MAX_DURATION:
+        tl.errors.append(f"Thời lượng {_hours(target)} quá dài — tối đa {MAX_DURATION // 3600} giờ.")
+        return tl
+    vs_plan = _resolve_durations(tl, vs)
+    if target is None:  # thủ công: ước độ dài trước khi tính (số lần phát quá lớn làm app treo)
+        est = 0
+        for i, c in enumerate(vs_plan.clips):
+            if c.enabled and i in tl.frames:
+                est += (c.max if c.plays_mode == "random" else c.count) * tl.frames[i]
+        est_s = est / float(tl.fps) if tl.fps else 0
+        if est_s > MAX_DURATION:
+            tl.errors.append(f"Video sẽ dài khoảng {_hours(est_s)} — quá dài (tối đa {MAX_DURATION // 3600} giờ). "
+                             "Giảm số lần phát của clip.")
+            return tl
+    tl.video = planner.plan_video(vs_plan, tl.frames, tl.fps, target)
     if tl.video.error:
         tl.errors.append(tl.video.error)
         return tl
@@ -161,6 +175,10 @@ def build(project: Project) -> Timeline:
     if tl.use_music and not tl.errors:
         tl.music_items = planner.plan_music(ms, tl.track_durations, tl.total)
     return tl
+
+
+def _hours(sec: float) -> str:
+    return f"{sec / 3600:,.0f} giờ".replace(",", ".") if sec >= 3600 else f"{sec / 60:.0f} phút"
 
 
 def _probe_audio(tl: Timeline, ms, want_music: bool) -> None:
@@ -215,6 +233,8 @@ def build_audio(project: Project, version: int = 0) -> Timeline:
         tl.audio_total = ms.export_target
         if tl.audio_total <= 0:
             tl.errors.append("Thời lượng phải lớn hơn 0.")
+        elif tl.audio_total > MAX_DURATION:
+            tl.errors.append(f"File sẽ dài {_hours(tl.audio_total)} — quá dài (tối đa {MAX_DURATION // 3600} giờ).")
         return tl
     if ms.export_mode == "rounds":
         tl.audio_total = planner.rounds_seconds(ms, tl.track_durations, max(1, ms.export_rounds))
@@ -222,6 +242,9 @@ def build_audio(project: Project, version: int = 0) -> Timeline:
         tl.audio_total = ms.export_target
     if tl.audio_total <= 0:
         tl.errors.append("Thời lượng nhạc phải lớn hơn 0.")
+        return tl
+    if tl.audio_total > MAX_DURATION:
+        tl.errors.append(f"File nhạc sẽ dài {_hours(tl.audio_total)} — quá dài (tối đa {MAX_DURATION // 3600} giờ).")
         return tl
     if not tl.errors:
         if ms.versions > 1:

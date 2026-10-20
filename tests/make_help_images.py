@@ -162,13 +162,14 @@ from loopstation.ui.batch_dialog import BatchDialog  # noqa: E402
 st = QSettings(ini, QSettings.Format.IniFormat)
 st.setValue("batch/folder", str(ROOT / "Mau-Test" / "Hang-loat"))
 bd = BatchDialog(win.collect_project(), st, win)
-bd.resize(1180, 720)
+bd.resize(1180, 820)
 bd.show()
 wait(2.5)
 row0 = bd._play_btns.get(0)
 edit0 = bd.tree.itemWidget(bd.tree.topLevelItem(0), 5)
-shoot(bd, [(bd.folder, 1), (bd.preset, 2), (bd.vol_music.parentWidget(), 3), (bd.listen_at, 4), (bd.tree, 5)]
-      + ([(edit0, 6)] if edit0 else []) + ([(row0, 7)] if row0 else []) + [(bd.ok_btn, 8)], "batch")
+shoot(bd, [(bd.kind_bar, 1), (bd.folder, 2), (bd.len_mode, 3), (bd.preset, 4),
+           (bd.vol_music.parentWidget(), 5), (bd.listen_at, 6), (bd.tree, 7)]
+      + ([(edit0, 8)] if edit0 else []) + ([(row0, 9)] if row0 else []) + [(bd.ok_btn, 10)], "batch")
 bd.done(0)
 
 # 9) Cài đặt (thông số + tăng tốc)

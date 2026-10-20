@@ -13,7 +13,7 @@ from PySide6.QtCore import Qt
 from PySide6.QtWidgets import (
     QSizePolicy,
     QFrame, QScrollArea,
-    QApplication, QButtonGroup, QFileDialog, QHBoxLayout, QLabel, QLineEdit, QMainWindow,
+    QApplication, QButtonGroup, QDialog, QFileDialog, QHBoxLayout, QLabel, QLineEdit, QMainWindow,
     QMessageBox, QPushButton, QVBoxLayout, QWidget,
 )
 
@@ -727,6 +727,8 @@ class MainWindow(QMainWindow):
         self.set_mode(proj.output_kind)
         self._update_title()
         self.recompute()
+        for note in getattr(proj, "notes", []):
+            QTimer.singleShot(600, lambda n=note: self.notify(n, "warn", 8000))
 
     def new_project(self) -> None:
         if QMessageBox.question(self, "Dự án mới", "Xoá danh sách hiện tại và bắt đầu dự án mới?") \
@@ -1292,8 +1294,16 @@ class MainWindow(QMainWindow):
                                 "xuất vào đó (mỗi video một thư mục riêng nếu đang bật).")
             self.go_to(2)
             return
-        dlg = BatchDialog(template, self.settings, self)
-        if not dlg.exec() or not dlg.result_projects:
+        geo = None
+        while True:  # bấm đổi kiểu trong hộp thoại → mở lại theo kiểu mới (giữ chỗ và cỡ cửa sổ)
+            dlg = BatchDialog(template, self.settings, self)
+            if geo is not None:
+                dlg.restoreGeometry(geo)
+            dlg.exec()
+            if dlg.switch_to is None:
+                break
+            template, geo = dlg.switch_to, dlg.saveGeometry()
+        if dlg.result() != QDialog.DialogCode.Accepted or not dlg.result_projects:
             return
         taken = {i.output.lower() for i in self.queue if not i.finished}
         added = []

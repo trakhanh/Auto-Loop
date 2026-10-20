@@ -243,17 +243,20 @@ def parse_duration(text: str, bare: float | None = None) -> float | None:
 
 
 def parse_plays(text: str):
-    """'70' → ('fixed', 70, 70) · '50-80' → ('random', 50, 80) · '10p' / '1h30' → ('duration', giây, giây)."""
+    """'70' → ('fixed', 70, 70) · '50-80' → ('random', 50, 80) · '10p' / '1h30' → ('duration', giây, giây).
+    Kẹp ở mức tối đa (99.999 lần / 48 giờ) — số quá lớn làm app treo khi tính lịch phát."""
+    from ..core.project import MAX_DURATION, MAX_PLAYS
     dur = parse_duration(text)
     if dur is not None:
+        dur = min(dur, float(MAX_DURATION))
         return ("duration", dur, dur) if dur > 0 else ("fixed", 0, 0)
     m = re.match(r"^\s*(\d+)\s*(?:-\s*(\d+)\s*)?$", text or "")
     if not m:
         return None
-    a = int(m.group(1))
+    a = min(int(m.group(1)), MAX_PLAYS)
     if m.group(2) is None:
         return "fixed", a, a
-    b = int(m.group(2))
+    b = min(int(m.group(2)), MAX_PLAYS)
     lo, hi = min(a, b), max(a, b)
     return ("fixed", lo, lo) if lo == hi else ("random", lo, hi)
 
@@ -280,73 +283,97 @@ def select_all_soon(widget) -> None:
     QTimer.singleShot(0, widget, widget.selectAll)
 
 
-class DurationEdit(QLineEdit):
-    """Ô thời lượng gõ tự do: 2h · 3 tiếng · 90p · 1h30 · 45s · 1:30:00 · 10:00 (phút:giây); số không đơn vị = phút.
-    Áp dụng khi bấm Enter / rời ô (đang gõ dở không làm app tính lại); gõ sai thì quay về giá trị cũ và báo cách gõ."""
+class DurationEdit(QWidget):
+    """Thời lượng = 3 ô số riêng [giờ] [phút] [giây] — gõ số vào đúng ô, không phải nhớ định dạng.
+    Gõ dư tự quy đổi (90 phút → 1 giờ 30 phút). Áp dụng khi Enter / rời ô / bấm ▲▼ (đang gõ dở không tính lại)."""
     valueChanged = Signal(float)
-    HELP = ("Gõ thoải mái: 2h · 3 tiếng · 90p · 1h30 · 45s · 1:30:00 (giờ:phút:giây) · 10:00 (phút:giây). "
-            "Số không có đơn vị = phút. Bấm Enter hoặc bấm ra ngoài để áp dụng.")
+    HELP = ("Gõ số vào từng ô: giờ · phút · giây (phím ↑ ↓ để tăng / giảm, Tab để sang ô sau). Gõ dư tự quy đổi, "
+            "ví dụ 90 phút → 1 giờ 30 phút. Bấm Enter hoặc bấm ra ngoài để áp dụng.")
 
-    def __init__(self, seconds: float = 0.0, parent=None, allow_zero: bool = False):
+    def __init__(self, seconds: float = 0.0, parent=None, allow_zero: bool = False, max_seconds: float | None = None):
         super().__init__(parent)
-        self._sec = max(0.0, float(seconds))
+        from PySide6.QtWidgets import QAbstractSpinBox, QHBoxLayout, QSpinBox
+        from ..core.project import MAX_DURATION
+        self._max = float(MAX_DURATION if max_seconds is None else max_seconds)
+        self._sec = min(self._max, max(0.0, float(seconds)))
         self._allow_zero = allow_zero
-        self.setPlaceholderText("ví dụ 1h, 90p, 1:30:00")
-        self.setToolTip(self.HELP)
-        self.setProperty("selectOnFocus", True)
-        super().setText(self._fmt(self._sec))
-        self.editingFinished.connect(self._commit)
-        self.textEdited.connect(self._check)
+        lay = QHBoxLayout(self)
+        lay.setContentsMargins(0, 0, 0, 0)
+        lay.setSpacing(4)
+        self.h, self.m, self.s = QSpinBox(), QSpinBox(), QSpinBox()
+        h_max = max(1, int(self._max // 3600))
+        for box, hi, unit, width in ((self.h, h_max, "giờ", 50), (self.m, 9999, "phút", 46), (self.s, 99999, "giây", 46)):
+            box.setRange(0, hi)
+            box.setKeyboardTracking(False)
+            box.setAlignment(Qt.AlignmentFlag.AlignCenter)
+            box.setFixedWidth(width)  # gọn: 3 ô + chữ đơn vị vừa cột cài đặt hẹp
+            # không mũi tên ▲▼ (chiếm chỗ làm che mất số); tăng / giảm bằng phím ↑ ↓ hoặc lăn chuột khi đã bấm vào ô
+            box.setButtonSymbols(QAbstractSpinBox.ButtonSymbols.NoButtons)
+            box.setObjectName("timeBox")
+            box.setToolTip(self.HELP)
+            box.valueChanged.connect(lambda *_: self._commit())
+            box.editingFinished.connect(self._commit)
+            lab = QLabel(unit)
+            lab.setObjectName("muted")
+            lay.addWidget(box)
+            lay.addWidget(lab)
+            if box is not self.s:
+                lay.addSpacing(2)
+        lay.addStretch(1)
+        self._show(self._sec)
 
-    @staticmethod
-    def _fmt(sec: float) -> str:
-        s = int(round(sec))
-        return f"{s // 3600:02d}:{s % 3600 // 60:02d}:{s % 60:02d}"
-
+    # ---- API dùng chung (giống ô cũ) ----
     def seconds(self) -> float:
         return self._sec
 
+    def text(self) -> str:
+        s = int(round(self._sec))
+        return f"{s // 3600:02d}:{s % 3600 // 60:02d}:{s % 60:02d}"
+
+    def setText(self, text: str) -> None:  # noqa: N802 — nút đặt nhanh gọi setText("10:00:00")
+        v = parse_duration(text, 60)
+        if v is not None:
+            self.set_seconds(v)
+
     def set_seconds(self, sec: float, emit: bool = True) -> None:
-        sec = max(0.0, float(sec))
+        sec = min(self._max, max(0.0, float(sec)))
         changed = abs(sec - self._sec) > 1e-6
         self._sec = sec
-        super().setText(self._fmt(sec))
-        self._mark(False)
+        self._show(sec)
         if changed and emit:
             self.valueChanged.emit(sec)
 
-    def setText(self, text: str) -> None:  # noqa: N802 — nút đặt nhanh / nạp dự án vẫn gọi setText
-        v = parse_duration(text, 60)
-        if v is None:
-            super().setText(text)
-            return
-        self.set_seconds(v)
+    def setToolTip(self, text: str) -> None:  # noqa: N802
+        super().setToolTip(text)
+        for box in (self.h, self.m, self.s):
+            box.setToolTip(text)
 
-    def _ok(self, v) -> bool:
-        return v is not None and (v > 0 or self._allow_zero)
-
-    def _check(self, text: str) -> None:
-        self._mark(bool(text.strip()) and not self._ok(parse_duration(text, 60)))
+    # ---- bên trong ----
+    def _show(self, sec: float) -> None:
+        t = int(round(sec))
+        for box, v in ((self.h, t // 3600), (self.m, t % 3600 // 60), (self.s, t % 60)):
+            box.blockSignals(True)
+            box.setValue(v)
+            box.blockSignals(False)
 
     def _commit(self) -> None:
-        v = parse_duration(self.text(), 60)
-        if self.hasFocus():  # Enter xong vẫn đứng trong ô: bôi đen sẵn để gõ tiếp là thay luôn (không nối vào chữ cũ)
-            select_all_soon(self)
-        if self._ok(v):
-            self.set_seconds(v)
-            return
-        if self.text().strip() != self._fmt(self._sec):
+        for box in (self.h, self.m, self.s):
+            box.blockSignals(True)
+            box.interpretText()
+            box.blockSignals(False)
+        total = self.h.value() * 3600 + self.m.value() * 60 + self.s.value()
+        if total > self._max:
             from PySide6.QtWidgets import QToolTip
-            QToolTip.showText(self.mapToGlobal(QPoint(0, self.height())), "Không hiểu “" + self.text().strip()
-                              + "” — đã giữ giá trị cũ.\n" + self.HELP, self)
-        super().setText(self._fmt(self._sec))
-        self._mark(False)
-
-    def _mark(self, bad: bool) -> None:
-        if bool(self.property("bad")) != bad:
-            self.setProperty("bad", bad)
-            self.style().unpolish(self)
-            self.style().polish(self)
+            QToolTip.showText(self.mapToGlobal(QPoint(0, self.height())),
+                              f"Tối đa {int(self._max // 3600)} giờ — đã đặt về mức tối đa.", self)
+            total = self._max
+        if total <= 0 and not self._allow_zero:
+            from PySide6.QtWidgets import QToolTip
+            QToolTip.showText(self.mapToGlobal(QPoint(0, self.height())),
+                              "Thời lượng phải lớn hơn 0 — đã giữ giá trị cũ.", self)
+            self._show(self._sec)
+            return
+        self.set_seconds(total)  # hiện lại đã quy đổi (90 phút → 1 giờ 30 phút)
 
 
 class PlaysDelegate(QStyledItemDelegate):
