@@ -98,6 +98,7 @@ class InterleaveDialog(QDialog):
                                            if os.path.normcase(clips[i].path) == key))
         self.base_plays = QLineEdit("70")
         self.base_plays.setValidator(QRegularExpressionValidator(QRegularExpression(w.PLAYS_RE)))
+        self.base_plays.setProperty("selectOnFocus", True)
         self.base_plays.setMaximumWidth(84)
         self.base_plays.setToolTip("Số lần (70), ngẫu nhiên (50-80) hoặc thời lượng (10p, 10:00, 1h)")
         brow = QHBoxLayout()

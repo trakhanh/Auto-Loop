@@ -183,7 +183,8 @@ topic("video", "Làm video", "film", "Trang Video: clip & số lần loop", hero
 <h2>Ô “Số lần phát” — gõ gì?</h2>""" + examples([
     ("70", "phát 70 lần liền (loop 70 lần)"), ("1", "phát 1 lần, không loop"), ("0", "bỏ qua clip này"),
     ("50-80", "ngẫu nhiên từ 50 đến 80 lần"), ("10p  hoặc  10:00", "loop cho đủ <b>10 phút</b> — app tự tính số lần"),
-    ("90s · 1h · 1:30:00", "loop cho đủ 90 giây / 1 giờ / 1 giờ 30 phút")]) + box(
+    ("90s · 1h · 1:30:00", "loop cho đủ 90 giây / 1 giờ / 1 giờ 30 phút"),
+    ("1h30 · 3 tiếng · 2 giờ 15 phút", "cũng được — gõ tự nhiên như nói")]) + box(
     "ex", "<b>A 10 phút → B → A 10 phút</b>: đặt A = <code>10p</code>, B = <code>1</code>; chuột phải A → <i>Nhân bản dòng</i> "
           "(Ctrl+D) rồi kéo bản sao xuống dưới B. Mỗi bản sao có số lần phát, đoạn cắt, crossfade riêng.") + """
 <h2>Những thao tác hay dùng</h2>
@@ -218,8 +219,14 @@ topic("dodai", "Làm video", "clock", "Độ dài video", hero(
     "Độ dài video", "Trang Video → thẻ Độ dài. Mặc định video dài đúng theo bảng clip.",
     (("Mở trang Video", "app:video"),)) + cards([
     ("Thủ công", "Phát đúng một lượt theo bảng: dài bao nhiêu là do số lần phát.", "Dễ hiểu nhất, dùng cho đa số video"),
-    ("Thời lượng mục tiêu", "Gõ 3:00:00 → app tự lặp cho đủ 3 giờ.", "Lặp cả chuỗi, hoặc chỉ giãn các clip tick “Tự giãn”"),
+    ("Thời lượng mục tiêu", "Gõ <code>3h</code>, <code>3 tiếng</code>, <code>90p</code> hoặc <code>3:00:00</code> → app tự lặp cho đủ.",
+     "Lặp cả chuỗi, hoặc chỉ giãn các clip tick “Tự giãn”"),
     ("Theo độ dài nhạc", "Video dài đúng bằng một lượt playlist.", "Không dùng được ở kiểu Chỉ video")]) + """
+<h2>Gõ thời lượng thế nào?</h2>""" + examples([
+    ("2h · 3 tiếng", "2 giờ · 3 giờ"), ("90p · 90", "90 phút (số không có đơn vị = phút)"),
+    ("1h30 · 1h 30m · 1.5h", "1 giờ 30 phút"), ("1:30:00", "giờ:phút:giây"), ("10:00", "phút:giây = 10 phút")]) + box(
+    "tip", "Bấm vào ô là chữ được bôi đen sẵn — gõ là thay luôn. Bấm <b>Enter</b> hoặc bấm ra ngoài để áp dụng; "
+           "gõ sai thì ô viền cam và tự quay về giá trị cũ.") + """
 <ul>
 <li><b>Lặp lại cả chuỗi</b>: V1→V6 rồi lại V1→V6… (tick <i>Mỗi vòng xáo lại</i> để mỗi vòng một thứ tự).</li>
 <li><b>Tăng số lần phát của clip tick “Tự giãn”</b>: phát một chuỗi, chỉ các clip được tick dài ra cho đủ giờ.</li>

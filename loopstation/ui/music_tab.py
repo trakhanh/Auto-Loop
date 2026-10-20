@@ -324,7 +324,7 @@ class MusicTab(QWidget):
         self.g_length.hide()
         self.len_mode.currentIndexChanged.connect(self._emit)
         self.len_rounds.valueChanged.connect(self._emit)
-        self.len_target.textChanged.connect(self._emit)
+        self.len_target.valueChanged.connect(self._emit)
 
         right = QWidget()
         rv = QVBoxLayout(right)
@@ -491,7 +491,7 @@ class MusicTab(QWidget):
         set_combo(self.len_mode, ms.export_mode)
         self.versions.setValue(max(1, ms.versions))
         set_combo(self.pin_pos, ms.pin_pos)
-        self.len_target.setText(format_hms(ms.export_target))
+        self.len_target.set_seconds(ms.export_target, emit=False)
         self.len_rounds.setValue(max(1, ms.export_rounds))
         self._loading = False
         self._update_enabled()
@@ -529,10 +529,7 @@ class MusicTab(QWidget):
         ms.loudness_enabled = self.loud_on.isChecked()
         ms.lufs = self.lufs.value()
         ms.export_mode = self.len_mode.currentData()
-        try:
-            ms.export_target = parse_hms(self.len_target.text())
-        except ValueError:
-            ms.export_target = 0
+        ms.export_target = self.len_target.seconds()
         ms.export_rounds = self.len_rounds.value()
         ms.versions = self.versions.value()
         ms.pin_pos = self.pin_pos.currentData()

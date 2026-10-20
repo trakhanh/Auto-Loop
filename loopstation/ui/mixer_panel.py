@@ -115,10 +115,9 @@ class MixerPanel(QGroupBox):
                                   "(hoặc chuột phải bài → Đặt âm lượng)."))
 
         # ----- nghe thử -----
-        self.at = QLineEdit("00:00")
-        self.at.setValidator(QRegularExpressionValidator(QRegularExpression(r"^\d{1,3}(:\d{1,2}){0,2}$")))
-        self.at.setMaximumWidth(84)
-        self.at.setToolTip("Nghe từ mốc nào trên video / file nhạc (phút:giây hoặc giờ:phút:giây)")
+        self.at = w.DurationEdit(0, allow_zero=True)
+        self.at.setMaximumWidth(96)
+        self.at.setToolTip("Nghe từ mốc nào trên video / file nhạc. " + w.DurationEdit.HELP)
         prow_box = QWidget()
         prow = w.FlowLayout(prow_box, spacing=5)
         prow.addWidget(QLabel("Nghe từ"))
@@ -242,13 +241,11 @@ class MixerPanel(QGroupBox):
     def _quick_pos(self, key: str) -> None:
         t = {"start": 0.0, "mid": self._total / 2, "end": max(0.0, self._total - 20),
              "change": max(0.0, (self._changes[0] if self._changes else 0) - 8)}[key]
-        self.at.setText(format_hms(t))
+        self.at.set_seconds(t)
 
     def start_seconds(self) -> float:
-        try:
-            return max(0.0, parse_hms(self.at.text() or "0"))
-        except ValueError:
-            return 0.0
+        self.at._commit()  # đang gõ dở rồi bấm Nghe luôn: lấy giá trị vừa gõ
+        return self.at.seconds()
 
     # ---------- nghe thử ----------
     def is_playing(self) -> bool:

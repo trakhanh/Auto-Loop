@@ -156,6 +156,7 @@ class SpinDelegate(QStyledItemDelegate):
             editor.setValue(int(index.data()))
         except (TypeError, ValueError):
             editor.setValue(self.lo)
+        select_all_soon(editor)
 
     def setModelData(self, editor, model, index):  # noqa: N802
         editor.interpretText()
@@ -194,35 +195,55 @@ class XfadeDelegate(QStyledItemDelegate):
 
     def setEditorData(self, editor, index):  # noqa: N802
         editor.setValue(parse_xf(str(index.data())))
+        select_all_soon(editor)
 
     def setModelData(self, editor, model, index):  # noqa: N802
         editor.interpretText()
         model.setData(index, xf_text(editor.value()))
 
 
-# 70 · 50-80 · hoặc thời lượng: 10p / 10m / 90s / 1.5h / 10:00 / 1:30:00
-PLAYS_RE = (r"(?i)^\s*(\d{1,6}\s*(-\s*\d{1,6})?|\d+([.,]\d+)?\s*(p|m|ph|phút|phut|s|giây|giay|h|giờ|gio|')"
-            r"|\d{1,3}:\d{1,2}(:\d{1,2})?)\s*$")
+# Ô gõ số lần phát / thời lượng: chỉ chặn ký tự lạ (chữ, số, khoảng trắng, : . , - ' "). Hiểu đúng hay không
+# do lúc bấm Enter / rời ô quyết định — không chặn phím giữa chừng (trước đây xoá một chữ số ở giữa cũng bị chặn).
+PLAYS_RE = r"^[\w\s:.,'\"\-]{0,40}$"
 
-_UNITS = {"p": 60, "m": 60, "ph": 60, "phút": 60, "phut": 60, "'": 60, "s": 1, "giây": 1, "giay": 1,
-          "h": 3600, "giờ": 3600, "gio": 3600}
+_UNITS = {"p": 60, "m": 60, "ph": 60, "phút": 60, "phut": 60, "min": 60, "'": 60,
+          "s": 1, "giây": 1, "giay": 1, "sec": 1, "\"": 1,
+          "h": 3600, "giờ": 3600, "gio": 3600, "tiếng": 3600, "tieng": 3600, "hr": 3600}
+_NEXT_UNIT = {3600: 60, 60: 1}  # "1h30" → 30 là phút, "5p30" → 30 là giây
 
 
-def parse_duration(text: str) -> float | None:
-    """'10p' → 600 · '90s' → 90 · '1.5h' → 5400 · '10:00' → 600 · '1:30:00' → 5400."""
-    t = (text or "").strip().lower().replace(",", ".")
-    m = re.match(r"^(\d+(?:\.\d+)?)\s*(p|m|ph|phút|phut|s|giây|giay|h|giờ|gio|')$", t)
-    if m:
-        return float(m.group(1)) * _UNITS[m.group(2)]
-    m = re.match(r"^(\d{1,3}):(\d{1,2})(?::(\d{1,2}))?$", t)
+def parse_duration(text: str, bare: float | None = None) -> float | None:
+    """Thời lượng gõ tự do → giây. '10p' 600 · '90s' 90 · '1.5h' 5400 · '3 tiếng' 10800 · '1h30' 5400 ·
+    '1h 30m' 5400 · '10:00' 600 (phút:giây) · '1:30:00' 5400. `bare`: số không đơn vị nhân với bao nhiêu giây
+    (None = không phải thời lượng, ví dụ ô Số lần phát hiểu '70' là 70 lần)."""
+    t = unicodedata.normalize("NFC", (text or "")).strip().lower().replace(",", ".")
+    if not t:
+        return None
+    m = re.fullmatch(r"(\d{1,3}):(\d{1,2})(?::(\d{1,2}(?:\.\d+)?))?", t)
     if m:
         a, b, c = int(m.group(1)), int(m.group(2)), m.group(3)
-        return a * 3600 + b * 60 + int(c) if c is not None else a * 60 + b
-    return None
+        return a * 3600 + b * 60 + float(c) if c is not None else a * 60 + b
+    if re.fullmatch(r"\d+(?:\.\d+)?", t):
+        return float(t) * bare if bare else None
+    if not re.fullmatch(r"(?:\s*\d+(?:\.\d+)?\s*[a-zà-ỹđ'\"]*)+\s*", t):
+        return None
+    total, prev = 0.0, None
+    for num, unit in re.findall(r"(\d+(?:\.\d+)?)\s*([a-zà-ỹđ'\"]*)", t):
+        if unit:
+            if unit not in _UNITS:
+                return None
+            k = _UNITS[unit]
+        elif prev in _NEXT_UNIT:
+            k = _NEXT_UNIT[prev]
+        else:
+            return None
+        total += float(num) * k
+        prev = k
+    return total
 
 
 def parse_plays(text: str):
-    """'70' → ('fixed', 70, 70) · '50-80' → ('random', 50, 80) · '10p' → ('duration', 600.0, 600.0)."""
+    """'70' → ('fixed', 70, 70) · '50-80' → ('random', 50, 80) · '10p' / '1h30' → ('duration', giây, giây)."""
     dur = parse_duration(text)
     if dur is not None:
         return ("duration", dur, dur) if dur > 0 else ("fixed", 0, 0)
@@ -250,6 +271,84 @@ def plays_text(mode: str, count, lo, hi) -> str:
     return str(count) if mode == "fixed" else f"{lo}-{hi}"
 
 
+PLAYS_HELP = ("Không hiểu số lần phát vừa gõ. Gõ ví dụ: 70 (70 lần) · 50-80 (ngẫu nhiên) · "
+              "10p / 1h30 / 3 tiếng / 10:00 (cho đủ thời lượng).")
+
+
+def select_all_soon(widget) -> None:
+    """Bôi đen hết chữ ngay sau khi ô nhận focus (gõ là thay luôn, khỏi xoá từng chữ)."""
+    QTimer.singleShot(0, widget, widget.selectAll)
+
+
+class DurationEdit(QLineEdit):
+    """Ô thời lượng gõ tự do: 2h · 3 tiếng · 90p · 1h30 · 45s · 1:30:00 · 10:00 (phút:giây); số không đơn vị = phút.
+    Áp dụng khi bấm Enter / rời ô (đang gõ dở không làm app tính lại); gõ sai thì quay về giá trị cũ và báo cách gõ."""
+    valueChanged = Signal(float)
+    HELP = ("Gõ thoải mái: 2h · 3 tiếng · 90p · 1h30 · 45s · 1:30:00 (giờ:phút:giây) · 10:00 (phút:giây). "
+            "Số không có đơn vị = phút. Bấm Enter hoặc bấm ra ngoài để áp dụng.")
+
+    def __init__(self, seconds: float = 0.0, parent=None, allow_zero: bool = False):
+        super().__init__(parent)
+        self._sec = max(0.0, float(seconds))
+        self._allow_zero = allow_zero
+        self.setPlaceholderText("ví dụ 1h, 90p, 1:30:00")
+        self.setToolTip(self.HELP)
+        self.setProperty("selectOnFocus", True)
+        super().setText(self._fmt(self._sec))
+        self.editingFinished.connect(self._commit)
+        self.textEdited.connect(self._check)
+
+    @staticmethod
+    def _fmt(sec: float) -> str:
+        s = int(round(sec))
+        return f"{s // 3600:02d}:{s % 3600 // 60:02d}:{s % 60:02d}"
+
+    def seconds(self) -> float:
+        return self._sec
+
+    def set_seconds(self, sec: float, emit: bool = True) -> None:
+        sec = max(0.0, float(sec))
+        changed = abs(sec - self._sec) > 1e-6
+        self._sec = sec
+        super().setText(self._fmt(sec))
+        self._mark(False)
+        if changed and emit:
+            self.valueChanged.emit(sec)
+
+    def setText(self, text: str) -> None:  # noqa: N802 — nút đặt nhanh / nạp dự án vẫn gọi setText
+        v = parse_duration(text, 60)
+        if v is None:
+            super().setText(text)
+            return
+        self.set_seconds(v)
+
+    def _ok(self, v) -> bool:
+        return v is not None and (v > 0 or self._allow_zero)
+
+    def _check(self, text: str) -> None:
+        self._mark(bool(text.strip()) and not self._ok(parse_duration(text, 60)))
+
+    def _commit(self) -> None:
+        v = parse_duration(self.text(), 60)
+        if self.hasFocus():  # Enter xong vẫn đứng trong ô: bôi đen sẵn để gõ tiếp là thay luôn (không nối vào chữ cũ)
+            select_all_soon(self)
+        if self._ok(v):
+            self.set_seconds(v)
+            return
+        if self.text().strip() != self._fmt(self._sec):
+            from PySide6.QtWidgets import QToolTip
+            QToolTip.showText(self.mapToGlobal(QPoint(0, self.height())), "Không hiểu “" + self.text().strip()
+                              + "” — đã giữ giá trị cũ.\n" + self.HELP, self)
+        super().setText(self._fmt(self._sec))
+        self._mark(False)
+
+    def _mark(self, bad: bool) -> None:
+        if bool(self.property("bad")) != bad:
+            self.setProperty("bad", bad)
+            self.style().unpolish(self)
+            self.style().polish(self)
+
+
 class PlaysDelegate(QStyledItemDelegate):
     """Ô 'Số lần phát': nhập 70 (cố định) hoặc 50-80 (ngẫu nhiên)."""
 
@@ -260,13 +359,16 @@ class PlaysDelegate(QStyledItemDelegate):
 
     def setEditorData(self, editor, index):  # noqa: N802
         editor.setText(str(index.data() or ""))
-        editor.selectAll()
+        select_all_soon(editor)
 
     def setModelData(self, editor, model, index):  # noqa: N802
         parsed = parse_plays(editor.text())
         if parsed:
             mode, lo, hi = parsed
             model.setData(index, plays_text(mode, lo, lo, hi))
+        elif editor.text().strip():  # gõ sai: báo cách gõ thay vì im lặng giữ số cũ
+            from PySide6.QtWidgets import QToolTip
+            QToolTip.showText(editor.mapToGlobal(QPoint(0, editor.height())), PLAYS_HELP)
 
 
 def paint_placeholder(tree: QTreeWidget, text: str, hovered: bool = False, clickable: bool = False) -> None:
@@ -930,8 +1032,17 @@ class WheelGuard(QObject):
 
     def eventFilter(self, obj, event):  # noqa: N802
         t = event.type()
+        if t == QEvent.Type.FocusIn and (isinstance(obj, QAbstractSpinBox)
+                                          or (isinstance(obj, QLineEdit) and obj.property("selectOnFocus"))):
+            if event.reason() in (Qt.FocusReason.MouseFocusReason, Qt.FocusReason.TabFocusReason,
+                                  Qt.FocusReason.BacktabFocusReason, Qt.FocusReason.ShortcutFocusReason):
+                select_all_soon(obj)  # gõ là thay cả số (không phải xoá từng chữ); bấm lần nữa để đặt con trỏ
+            return False
         if t == QEvent.Type.Polish and isinstance(obj, self.TYPES):
             obj.setFocusPolicy(Qt.FocusPolicy.StrongFocus)  # mặc định WheelFocus: lăn qua là chiếm focus
+            if isinstance(obj, QAbstractSpinBox):
+                # gõ "120" không làm app tính lại 3 lần (1 → 12 → 120): áp khi Enter / rời ô / bấm mũi tên
+                obj.setKeyboardTracking(False)
         elif t == QEvent.Type.Wheel and isinstance(obj, self.TYPES) and not obj.hasFocus():
             area = obj.parentWidget()
             while area is not None and not isinstance(area, QAbstractScrollArea):

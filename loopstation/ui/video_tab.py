@@ -49,10 +49,8 @@ def set_combo(cb: QComboBox, key: str) -> None:
 
 
 def hms_edit() -> QLineEdit:
-    ed = QLineEdit()
-    ed.setValidator(QRegularExpressionValidator(QRegularExpression(r"^\d{1,3}:\d{2}:\d{2}$")))
-    ed.setPlaceholderText("HH:MM:SS")
-    return ed
+    """Ô thời lượng gõ tự do (2h, 90p, 1h30, 1:30:00…) — xem widgets.DurationEdit."""
+    return w.DurationEdit()
 
 
 def quick_buttons(target: QLineEdit, presets) -> QHBoxLayout:
@@ -227,6 +225,7 @@ class VideoTab(QWidget):
         self.bulk = QLineEdit("70")
         self.bulk.setMaximumWidth(74)
         self.bulk.setValidator(QRegularExpressionValidator(QRegularExpression(w.PLAYS_RE)))
+        self.bulk.setProperty("selectOnFocus", True)
         self.bulk.setToolTip("Nhập số lần (70), khoảng ngẫu nhiên (50-80), hoặc thời lượng muốn loop (10p, 10:00, 1h)")
         self.bulk.returnPressed.connect(self._apply_bulk)
         b_apply = QPushButton("Áp dụng")
@@ -651,7 +650,7 @@ class VideoTab(QWidget):
             wdg.valueChanged.connect(self._emit)
         self.fade_out.valueChanged.connect(self._emit)
         self.image_dur.valueChanged.connect(self._on_image_dur)
-        self.target.textChanged.connect(self._emit)
+        self.target.valueChanged.connect(self._emit)
         for wdg in (self.reshuffle, self.exact_end, self.bookend_audio):
             wdg.toggled.connect(self._emit)
         self.intro.changed.connect(self._emit)
@@ -685,7 +684,7 @@ class VideoTab(QWidget):
         set_combo(self.order, vs.order)
         self.seed.setValue(vs.seed)
         set_combo(self.length_mode, vs.length_mode)
-        self.target.setText(format_hms(vs.target_duration))
+        self.target.set_seconds(vs.target_duration, emit=False)
         set_combo(self.fill, vs.fill)
         self.reshuffle.setChecked(vs.reshuffle_each_round)
         self.exact_end.setChecked(vs.exact_end)
@@ -714,10 +713,7 @@ class VideoTab(QWidget):
         vs.order = self.order.currentData()
         vs.seed = self.seed.value()
         vs.length_mode = self.length_mode.currentData()
-        try:
-            vs.target_duration = parse_hms(self.target.text())
-        except ValueError:
-            vs.target_duration = 0
+        vs.target_duration = self.target.seconds()
         vs.fill = self.fill.currentData()
         vs.reshuffle_each_round = self.reshuffle.isChecked()
         vs.exact_end = self.exact_end.isChecked()
