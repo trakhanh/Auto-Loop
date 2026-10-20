@@ -21,7 +21,7 @@
   <img src="docs/download-button.svg" alt="Tải về KT Loop Station cho Windows" width="480">
 </a>
 
-<sub>Bấm nút để tải bộ cài · <a href="https://github.com/trakhanh/Auto-Loop/releases">Xem các phiên bản cũ</a></sub>
+<sub>Bấm nút để tải bộ cài · <a href="https://github.com/trakhanh/Auto-Loop/releases/latest/download/So-tay-KT-Loop-Station.html">Tải sổ tay hướng dẫn</a> · <a href="https://github.com/trakhanh/Auto-Loop/releases">Xem các phiên bản cũ</a></sub>
 
 <br><br>
 
@@ -139,6 +139,9 @@ Tracklist (dán làm Chapters), mốc thời gian đoạn LOOP / THƯỜNG (<cod
 | **3** | **Xuất** | Chọn thư mục lưu → **Bắt đầu xuất**, hoặc **Thêm vào hàng đợi** để xuất nhiều video liền nhau. |
 
 Chọn kiểu sản phẩm ở thanh trên cùng: **Video có nhạc** (`.mp4`) · **Chỉ video** (`.mp4`, giữ tiếng gốc / thêm tiếng nền) · **Chỉ nhạc** (`.mp3 .m4a .flac .wav`). Hướng dẫn có ảnh minh hoạ từng bước nằm ngay trong app: **Hướng dẫn** ở thanh bên hoặc phím **F1**.
+
+> [!TIP]
+> Cần tài liệu đầy đủ để gửi hoặc in cho nhân viên? Tải **[Sổ tay KT Loop Station](https://github.com/trakhanh/Auto-Loop/releases/latest/download/So-tay-KT-Loop-Station.html)** — một file, mở bằng trình duyệt (Chrome / Edge), có ảnh chụp đánh số: cài đặt, làm video loop có nhạc, chỉ video, chỉ nhạc, xuất hàng loạt, xử lý sự cố. Muốn in hoặc lưu PDF: mở file rồi bấm `Ctrl+P`.
 
 <br>
 

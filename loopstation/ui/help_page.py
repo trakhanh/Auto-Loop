@@ -19,7 +19,7 @@ from PySide6.QtWidgets import (
 
 from ..core import ffmpeg_tools as ft
 from . import branding, icons
-from .widgets import FlowLayout
+from .widgets import FlowLayout, sample_label
 from .theme import APP_NAME, APP_VERSION, AUTHOR, C
 
 HELP_DIR = Path(__file__).resolve().parent / "assets"
@@ -149,8 +149,8 @@ bước mấy và <b>việc cần làm tiếp</b> (bấm vào số bước để
     "tip", "Muốn thử ngay mà chưa có clip? Bấm <b>Mẫu: Loop 70 lần</b> hoặc <b>Mẫu: 3 tiếng</b> ở màn hình Bắt "
            "đầu — có sẵn clip, nhạc, tiếng nền để bấm Xuất thử.") + """
 <h2>App tự lưu</h2>
-<p>Đóng app lúc nào cũng được: dự án đang làm và hàng đợi được tự lưu, mở lại là còn nguyên. Muốn giữ một bản riêng
-thì bấm <b>Lưu</b> (Ctrl+S) thành file <code>.lsproj</code>.</p>""")
+<p>Đóng app lúc nào cũng được: dự án đang làm và hàng đợi được tự lưu, mở lại là còn nguyên (màn hình Bắt đầu có nút
+<b>Tiếp tục dự án đang làm</b>). Muốn giữ một bản riêng thì bấm <b>Lưu</b> (Ctrl+S) thành file <code>.lsproj</code>.</p>""")
 
 topic("kieu", "Bắt đầu", "video_music", "Chọn kiểu sản phẩm", hero(
     "Chọn kiểu sản phẩm", "3 nút ở thanh trên cùng, cạnh tên dự án. Đổi lúc nào cũng được — các trang tự đổi theo.") + cards([
@@ -172,11 +172,13 @@ topic("kieu", "Bắt đầu", "video_music", "Chọn kiểu sản phẩm", hero(
 topic("video", "Làm video", "film", "Trang Video: clip & số lần loop", hero(
     "Trang Video", "Thêm clip / ảnh, đặt số lần phát, xếp thứ tự. Đây là nơi quyết định video dài bao lâu.",
     (("Mở trang Video", "app:video"),)) + img("video", "Trang Video với dự án mẫu “Loop 70 lần”.") + legend([
-    ("Thêm clip", "Thêm file / Thư mục, hoặc <b>kéo thả</b> video, ảnh, cả thư mục vào bảng. Ô tìm tên file (Ctrl+F) — gõ không dấu cũng được."),
+    ("Thêm clip", "<b>Thêm file</b> / <b>Thư mục</b>, hoặc <b>kéo thả</b> video, ảnh, cả thư mục vào bảng (tick <i>Thư mục con</i> để quét cả thư mục bên trong). "
+                  "<b>A–Z</b> xếp theo tên (clip2 trước clip10), <b>Trộn</b> xáo ngẫu nhiên, <b>Chọn ▾</b> bật / tắt / đảo ngược tất cả. Ô tìm tên file (Ctrl+F) — gõ không dấu cũng được."),
     ("Bảng clip", "mỗi dòng một clip, kéo lên / xuống để đổi thứ tự. <b>Bấm đúp ô</b> để sửa: Số lần phát, Đoạn lấy, Nối loop, Sang clip."),
     ("Xen kẽ clip nền", "tự xếp kiểu <i>nền ×70 → cảnh 2 → nền ×70 → cảnh 3 …</i> theo tên file (xem chủ đề Xen kẽ)."),
-    ("Đặt nhanh", "bôi đen nhiều dòng rồi đặt số lần phát một lượt (×1, ×10, ×70, 10p, 1h). Hàng <i>Cắt đoạn &amp; chuyển cảnh ▾</i> có thêm cắt nhiều clip, nhân bản dòng."),
-    ("3 thẻ cài đặt", "<b>Độ dài</b> (tổng thời lượng, thứ tự, Intro/Outro) · <b>Khung &amp; Tiếng</b> (clip khác tỉ lệ, ảnh tĩnh, tiếng gốc) · <b>Màu &amp; Logo</b>."),
+    ("Đặt nhanh", "bôi đen nhiều dòng rồi đặt số lần phát một lượt (×1, ×10, ×70, 10p, 1h) → <b>Áp dụng</b>; <b>Bật tự giãn</b> / <b>Bỏ giãn</b>. "
+                  "Hàng <i>Cắt đoạn &amp; chuyển cảnh ▾</i>: <b>Áp dụng cắt</b> / <b>Lấy toàn bộ</b>, <b>Áp dụng nối</b> / <b>Bỏ nối</b>, <b>Nhân bản</b>, <b>Xem thử nối</b>."),
+    ("3 thẻ cài đặt", "<b>Độ dài</b> (tổng thời lượng, thứ tự, Intro/Outro) · <b>Khung &amp; Tiếng</b> (clip khác tỉ lệ, ảnh tĩnh, mờ dần cuối, tiếng gốc) · <b>Màu &amp; Logo</b>."),
     ("Dòng thời gian", "nhìn tổng thể: làn CLIP và làn NHẠC. Lăn chuột để phóng to, kéo để di chuyển, nhấp đúp để xem toàn bộ."),
     ("Thanh hướng dẫn", "đang ở bước mấy + việc nên làm tiếp."),
     ("Tiếp theo", "sang bước Nhạc (hoặc Xuất nếu không dùng nhạc).")]) + """
@@ -190,11 +192,18 @@ topic("video", "Làm video", "film", "Trang Video: clip & số lần loop", hero
 <h2>Những thao tác hay dùng</h2>
 <ul>
 <li><b>Ô tick</b> đầu dòng: bật / tắt clip (phím <span class="k">Space</span> cho các dòng đang chọn).</li>
-<li><b>Bấm đúp tên file</b> để xem clip. Chuột phải để mở menu (nhân bản, cắt đoạn, xem thử chỗ nối…).</li>
-<li><b>Xem thử chỗ nối</b>: xuất nhanh clip đang chọn phát 2 lần rồi sang clip kế, để xem crossfade có mượt không.</li>
+<li><b>Bấm đúp tên file</b> để xem clip. <b>Chuột phải</b> một dòng: Mở / Xem thử file, Hiện trong Explorer, Chọn đoạn lấy…,
+Nhân bản dòng, Xen kẽ clip nền…, Bật / Tắt, Đưa lên / xuống, Xoá.</li>
+<li><b>Xem thử nối</b> (hàng <i>Cắt đoạn &amp; chuyển cảnh ▾</i>): xuất nhanh clip đang chọn phát 2 lần rồi sang clip kế, để xem crossfade có mượt không.</li>
 <li>Clip khác độ phân giải / fps: không sao, app tự chuẩn hoá (thông tin hiện màu cam).</li>
 <li>Làm sai? <span class="k">Ctrl+Z</span> để quay lại.</li>
-</ul>""")
+</ul>
+<h2>Thẻ Khung &amp; Tiếng</h2>""" + examples([
+    ("Clip khác tỉ lệ", "<b>Viền đen</b> (giữ nguyên tỉ lệ) · <b>Nền mờ</b> (đẹp cho clip dọc) · <b>Cắt</b> cho đầy khung · <b>Kéo giãn</b>"),
+    ("Ảnh tĩnh", "mỗi ảnh hiện bao nhiêu giây một lần phát (mặc định 8 giây)"),
+    ("Mờ dần cuối video", "hình và tiếng nhỏ dần ở cuối (mặc định 3 giây)"),
+    ("Tiếng gốc clip", "<b>Giữ, trộn với nhạc</b> (mặc định) · <b>Chỉ tiếng gốc, không dùng nhạc</b> · <b>Tắt</b>")], ("Mục", "Chọn được")) + box(
+    "tip", "Độ to của nhạc / tiếng gốc chỉnh ở <a href='topic:tron'>Bảng trộn âm</a> (nút <i>Chỉnh âm lượng ở Bảng trộn âm…</i>)."))
 
 topic("xenke", "Làm video", "repeat", "Xen kẽ clip nền", hero(
     "Xen kẽ clip nền", "Có 1 clip nền (loop) và vài cảnh khác? App tự xếp nền nằm giữa mọi cảnh, theo tên file.",
@@ -212,7 +221,7 @@ topic("xenke", "Làm video", "repeat", "Xen kẽ clip nền", hero(
     ("Nền phát mỗi lần", "<code>70</code> = 70 lần, <code>10p</code> = 10 phút."),
     ("Lặp lại cả mẫu", "ví dụ 2 cảnh, lặp 4 lượt → nền, cảnh A, nền, cảnh B, nền, cảnh A… Tick <i>Mỗi lượt xáo lại</i> để mỗi lượt khác thứ tự."),
     ("Cảnh chèn", "kéo thả để đổi cảnh nào trước, bỏ tick để không dùng. <b>Xuất hiện</b> = chèn mấy lần mỗi lượt, <b>Phát</b> = mỗi lần phát mấy lần liền."),
-    ("Xem trước", "đúng bảng sẽ tạo + tổng thời lượng."),
+    ("Xem trước", "đúng bảng sẽ tạo + tổng thời lượng. Ô <i>Mở đầu bằng nền</i> / <i>Kết thúc bằng nền</i> chọn video bắt đầu / kết thúc bằng clip nền hay bằng cảnh."),
     ("Áp dụng vào bảng", "thay bảng clip bằng bảng mới (Ctrl+Z để quay lại).")]))
 
 topic("dodai", "Làm video", "clock", "Độ dài video", hero(
@@ -229,25 +238,32 @@ topic("dodai", "Làm video", "clock", "Độ dài video", hero(
     "tip", "Bấm vào ô là số được bôi đen sẵn — gõ là thay luôn. Bấm <b>Enter</b> hoặc bấm ra ngoài để áp dụng "
            "(đang gõ dở app không tính lại). Hoặc bấm nhanh các nút <b>30p · 1h · 2h · 3h · 10h</b>.") + """
 <ul>
-<li><b>Lặp lại cả chuỗi</b>: V1→V6 rồi lại V1→V6… (tick <i>Mỗi vòng xáo lại</i> để mỗi vòng một thứ tự).</li>
+<li><b>Lặp lại cả chuỗi</b>: V1→V6 rồi lại V1→V6… Ô <i>Mỗi vòng lặp lại sẽ xáo thứ tự mới</i> bật sẵn — bỏ tick nếu muốn vòng nào cũng y hệt.</li>
 <li><b>Tăng số lần phát của clip tick “Tự giãn”</b>: phát một chuỗi, chỉ các clip được tick dài ra cho đủ giờ.</li>
-<li><b>Kết thúc đúng thời lượng</b>: cắt phần dư cho tròn (ví dụ đúng 3:00:00) và mờ dần ở cuối.</li>
+<li><b>Cắt chính xác đúng thời lượng đích (kèm mờ dần)</b> — bật sẵn: cắt phần dư cho tròn (ví dụ đúng 3:00:00).</li>
 <li><b>Thứ tự clip</b>: theo bảng hoặc ngẫu nhiên. <b>Số mầm</b> giữ kết quả ngẫu nhiên giống hệt bản xem trước; <i>Đổi mầm</i> để ra thứ tự khác.</li>
-</ul>""" + box("tip", "Thanh trên cùng luôn hiện <b>Tổng</b> thời lượng. Chip vàng là có lưu ý — rê chuột lên để đọc."))
+<li><b>Xem chi tiết kịch bản phát từng vòng</b>: liệt kê từng vòng phát clip nào, bao nhiêu lần.</li>
+</ul>""" + box("tip", "Thanh trên cùng luôn hiện <b>Tổng</b> thời lượng. Chip vàng là có lưu ý — rê chuột lên để đọc.") + box(
+    "warn", "Video / file nhạc dài tối đa <b>48 giờ</b>, mỗi clip phát tối đa <b>99.999 lần</b>. Gõ quá mức thì app tự đưa về mức tối đa."))
 
 topic("catdoan", "Làm video", "scissors", "Cắt đoạn, crossfade, Intro / Outro", hero(
     "Cắt đoạn, crossfade, Intro / Outro", "Làm chỗ nối mượt, bỏ phần thừa đầu / cuối clip, thêm đoạn mở đầu / kết thúc cố định.",
     (("Mở trang Video", "app:video"),)) + """
 <h2>Đoạn lấy — chỉ dùng phần giữa clip</h2>""" + flow_blocks([("bỏ 2s đầu", "#334155"), ("dùng 2s → 8s", "#7c3aed"), ("bỏ 2s cuối", "#334155")]) + """
 <p>Bấm đúp ô <b>Đoạn lấy</b>: hộp thoại có trình phát tự lặp đúng đoạn đã chọn. Kéo 2 tay nắm, hoặc phát tới chỗ muốn cắt
-rồi bấm <i>Đặt điểm đầu / cuối tại đây</i> (phím <span class="k">I</span> / <span class="k">O</span>). Đoạn cắt áp cho
-<b>mọi lần</b> loop. Cắt nhiều clip cùng lúc: bôi đen các dòng → <i>Cắt đoạn &amp; chuyển cảnh ▾</i>.</p>
+rồi bấm <i>Đặt điểm đầu tại đây</i> / <i>Đặt điểm cuối tại đây</i> (phím <span class="k">I</span> / <span class="k">O</span>,
+<span class="k">Space</span> phát / dừng). Đoạn cắt áp cho <b>mọi lần</b> loop. Bấm <b>Lưu đoạn cắt</b> để áp dụng.</p>
+<ul>
+<li>Nút nhanh: <b>Toàn bộ</b> · <b>Bỏ 0.5s / 1s / 2s mỗi đầu</b> · <b>Giữ đoạn giữa</b> (lấy đúng chính giữa clip, dài bằng số giây bên cạnh).</li>
+<li><b>Lặp đoạn đã chọn</b>: trình phát lặp lại đoạn để nghe / nhìn chỗ nối. <b>Mở cửa sổ xem lớn</b> để xem toàn màn hình.</li>
+<li>Đang chọn nhiều dòng: tick <b>Áp dụng cho cả N clip đang chọn</b>. Hoặc bôi đen các dòng → <i>Cắt đoạn &amp; chuyển cảnh ▾</i> → Áp dụng cắt.</li>
+</ul>
 <h2>Crossfade (hoà hình)</h2>""" + examples([
     ("Nối loop", "hoà hình giữa các lần loop của <b>chính clip đó</b> (che chỗ nối bị giật)"),
     ("Sang clip", "hoà hình khi chuyển sang clip kế tiếp"), ("Cắt", "nối thẳng, không hoà (để 0 giây)")], ("Cột", "Tác dụng")) + """
 <h2>Intro / Outro</h2>
-<p>Thẻ Độ dài → <b>Intro / Outro cố định</b>: luôn ở đầu / cuối video, không bị xáo, có crossfade riêng. Tick
-<i>Giữ nguyên tiếng gốc của Intro / Outro</i> nếu intro có nhạc hiệu.</p>""")
+<p>Thẻ Độ dài → <b>Intro / Outro cố định</b>: luôn ở đầu / cuối video, không bị xáo, có crossfade riêng. Ô
+<i>Giữ nguyên tiếng gốc của Intro / Outro</i> bật sẵn (giữ nhạc hiệu của intro) — bỏ tick nếu muốn intro im lặng.</p>""")
 
 topic("mau", "Làm video", "eye", "Màu & Logo", hero(
     "Màu & Logo", "Trang Video → thẻ Màu & Logo. Có khung xem trước một khung hình đã áp, cập nhật ngay khi chỉnh.",
@@ -266,14 +282,16 @@ topic("nhac", "Âm thanh", "music", "Trang Nhạc: playlist", hero(
     "Trang Nhạc", "Thêm bài nhạc — nhạc tự lặp cho đủ độ dài video, bài cuối nhỏ dần đúng lúc video kết thúc.",
     (("Mở trang Nhạc", "app:music"),)) + img("music") + legend([
     ("Playlist", "kéo thả bài hoặc cả thư mục nhạc. Bỏ tick bài không dùng. <b>Số lần/lượt</b> = bài đó phát mấy lần mỗi lượt playlist. Bấm đúp tên bài để nghe."),
-    ("Âm lượng %", "to / nhỏ <b>riêng từng bài</b> (bấm đúp để sửa, hoặc chuột phải → Đặt âm lượng cho nhiều bài)."),
+    ("Âm lượng %", "to / nhỏ <b>riêng từng bài</b>: bấm đúp để sửa, hoặc bôi đen nhiều bài → chuột phải → <i>Đặt âm lượng bài đang chọn…</i>. "
+                   "Cột <b>Độ to gốc</b> cho biết bài nào vốn to / nhỏ hơn."),
     ("Lịch phát dự kiến", "bài nào phát lúc mấy giờ — chính là YouTube Chapters."),
     ("Bảng trộn âm", "độ to của nhạc, tiếng gốc clip, từng lớp tiếng nền + <b>Nghe thử 20 giây</b> (xem chủ đề Bảng trộn âm).")]) + """
 <h2>Cột phải còn có</h2>
 <ul>
 <li><b>Thứ tự phát</b>: theo bảng · ngẫu nhiên · <b>ngẫu nhiên không lặp bài liền nhau</b>.</li>
 <li><b>Ghim bài</b> (chuột phải → Ghim): bài ghim luôn có trong file, kể cả khi file ngắn hơn cả playlist.</li>
-<li><b>Nâng cao ▾</b>: crossfade giữa bài (mặc định 3 giây), to dần đầu / nhỏ dần cuối, <b>chuẩn hoá -14 LUFS</b> (chuẩn YouTube) để các bài to đều nhau.</li>
+<li><b>Nâng cao ▾</b>: crossfade giữa bài (mặc định 3 giây), <b>khoảng lặng giữa bài</b>, to dần đầu (2 giây) / nhỏ dần cuối (5 giây),
+<b>chuẩn hoá độ to</b> mặc định -14 LUFS (chuẩn YouTube; đổi được từ -30 đến -5) để các bài to đều nhau.</li>
 </ul>""" + box("tip", "Playlist dài hơn video thì chỉ phát những bài kịp phát. Video dài hơn playlist thì playlist tự lặp lại.") + box(
     "warn", "Ở kiểu <b>Chỉ video</b> (hoặc chọn <i>Chỉ tiếng gốc của clip</i>), playlist bị làm mờ vì không dùng — tiếng nền vẫn dùng được."))
 
@@ -283,7 +301,8 @@ topic("tron", "Âm thanh", "sliders", "Bảng trộn âm & nghe thử", hero(
 <td width="46%" align="center">""" + img("mixer") + """</td><td>""" + legend([
     ("Nhạc", "âm lượng cả playlist."), ("Tiếng gốc clip", "tiếng có sẵn trong clip (kể cả Intro / Outro nếu giữ tiếng)."),
     ("Từng lớp tiếng nền", "mưa, sóng, lửa… mỗi lớp một thanh."),
-    ("Nghe từ", "Đầu / Giữa / Chỗ đổi bài / Cuối, hoặc tự gõ mốc (ví dụ 1:30:00)."),
+    ("Nghe từ", "<b>Đầu</b> · <b>Giữa</b> · <b>Chỗ đổi bài</b> (nghe crossfade giữa 2 bài đầu) · <b>Cuối</b> (nghe đoạn nhỏ dần), "
+                "hoặc gõ mốc vào 3 ô <b>giờ · phút · giây</b>. File ngắn dưới 25 giây thì Giữa / Cuối bị mờ."),
     ("Nghe thử 20 giây", "trộn đúng như khi xuất rồi phát ngay trong app. <b>Đang nghe mà kéo thanh là nghe đổi ngay.</b>")]) + """</td></tr></table>
 <h2>Kéo thanh bao nhiêu?</h2>""" + examples([
     ("100%", "giữ nguyên (mặc định). Bấm đúp tên thanh để về 100%"), ("50%", "nhỏ đi rõ rệt (khoảng một nửa độ to nghe được)"),
@@ -310,9 +329,10 @@ topic("chinhac", "Âm thanh", "queue", "Chỉ nhạc, nhiều bản, ASMR", hero
 <td width="46%" align="center">""" + img("music_only") + """</td><td>""" + legend([
     ("Tính theo", "<b>thời lượng</b> (30p, 1h, 3h, 10h…) hoặc <b>số lượt playlist</b>."),
     ("Dài bao lâu", "ví dụ 10 bài dài 30 phút → chọn 1h là ra file 1 tiếng."),
-    ("Số bản xuất", "ví dụ 4 → 4 file, mỗi file một thứ tự phát khác nhau, mở đầu bằng bài khác nhau.")]) + """</td></tr></table>""" + steps([
+    ("Số bản xuất", "ví dụ 4 → 4 file, mỗi file một thứ tự phát khác nhau, mở đầu bằng bài khác nhau (nút nhanh 1 · 2 · 4 · 6). "
+                    "Nhiều bản thì nút xuất đổi thành <b>Xuất N bản nhạc</b> và các bản tự vào hàng đợi.")]) + """</td></tr></table>""" + steps([
     ("Chỉ nhạc", "Bấm Chỉ nhạc ở thanh trên cùng."), ("Thêm bài", "Kéo thả nhạc, chỉnh độ dài, số bản."),
-    ("Xuất", "Chọn định dạng (MP3 320, M4A, FLAC, WAV) → Xuất.")]) + """
+    ("Xuất", "Chọn định dạng (MP3 320, MP3 192 nhẹ, M4A, FLAC, WAV) → Xuất.")]) + """
 <ul>
 <li>Mỗi file kèm <code>_tracklist.txt</code> (mốc từng bài). Nhiều bản: <code>…_ban-1.mp3 … _ban-4.mp3</code> chung một thư mục.</li>
 <li>Ô <b>Xem bản</b> cạnh Lịch phát để xem trước thứ tự của từng bản.</li>
@@ -323,10 +343,11 @@ topic("chinhac", "Âm thanh", "queue", "Chỉ nhạc, nhiều bản, ASMR", hero
 topic("xuat", "Xuất file", "export", "Trang Xuất & dung lượng", hero(
     "Trang Xuất", "Chọn chất lượng, xem trước dung lượng file, chọn nơi lưu rồi xuất (hoặc thêm vào hàng đợi).",
     (("Mở trang Xuất", "app:export"),)) + img("export") + legend([
-    ("Định dạng &amp; chất lượng", "độ phân giải (1080p, 4K, dọc 9:16 cho Shorts…), chất lượng hình, giới hạn dung lượng. <i>Tuỳ chọn nâng cao ▾</i>: chuẩn nén H.264 / H.265, fps, bộ mã hoá, âm thanh."),
+    ("Định dạng &amp; chất lượng", "độ phân giải (theo clip đầu tiên, 720p, 1080p, 2K, 4K, dọc 9:16 cho Shorts / TikTok, vuông 1:1), chất lượng hình, giới hạn dung lượng (GB hoặc Mbps). "
+                                    "<i>Tuỳ chọn nâng cao ▾</i>: chuẩn nén H.264 / H.265, khung hình / giây, bộ mã hoá, âm thanh AAC 192 (nhanh) / 320."),
     ("Dự đoán dung lượng", "tự cập nhật khi đổi cấu hình — app mã hoá thử vài giây để tính, sai số thường dưới 10%."),
     ("Nơi lưu &amp; file kèm", "thư mục lưu, tên file (để trống = tên dự án + ngày giờ), mỗi video một thư mục riêng, file mốc thời gian, tracklist, bản sao dự án."),
-    ("Bắt đầu xuất", "xuất ngay dự án đang mở."),
+    ("Bắt đầu xuất", "xuất ngay dự án đang mở. Đang xuất có nút <b>Huỷ xuất</b>; xong thì <b>Hiện file vừa xuất</b>. File cùng tên đã có thì app hỏi ghi đè."),
     ("Thêm vào hàng đợi", "xếp dự án này vào hàng đợi để xuất nhiều video liền nhau (xem chủ đề Hàng đợi)."),
     ("Hàng đợi", "danh sách việc chờ xuất; chuột phải mục lỗi → Chạy lại.")]) + """
 <h2>Video loop nặng? Làm nhẹ theo thứ tự hiệu quả</h2>""" + steps([
@@ -345,8 +366,10 @@ topic("hangdoi", "Xuất file", "queue", "Hàng đợi (xuất qua đêm)", hero
     ("Chạy hàng đợi", "Bấm Chạy hàng đợi. Muốn thì vào Cài đặt tick Tắt máy khi xong.")]) + """
 <ul>
 <li>Máy <b>không tự ngủ</b> khi đang xuất (màn hình vẫn tắt bình thường).</li>
-<li>Tên file trùng tự thêm <code>_2</code>, <code>_3</code>. Đóng app giữa chừng: mục đang dở được chạy lại lần mở sau.</li>
-<li>Chuột phải mục <b>Lỗi / Đã huỷ</b> → <i>Chạy lại</i>. Nút ↑ ↓ để đổi thứ tự, <i>Dọn mục đã xong</i> để gọn danh sách.</li>
+<li>Tên file trùng tự thêm <code>_2</code>, <code>_3</code>. Đóng app giữa chừng: mục đang dở quay về <b>Chờ</b> — mở lại app và bấm
+<b>Chạy hàng đợi</b> để chạy tiếp.</li>
+<li>Chuột phải mục <b>Lỗi / Đã huỷ</b> → <i>Chạy lại</i>. Nút ↑ ↓ để đổi thứ tự, <i>Xoá mục chọn</i>, <i>Dọn mục đã xong</i> để gọn danh sách.</li>
+<li>Nút <b>Hàng loạt từ thư mục…</b> cạnh hàng đợi: thêm cả loạt video một lúc (xem chủ đề <a href='topic:hangloat'>Xuất hàng loạt</a>).</li>
 </ul>""")
 
 topic("hangloat", "Xuất file", "folder", "Xuất hàng loạt theo thư mục", hero(
@@ -391,6 +414,13 @@ Nhac-can-lam\\                 ← thư mục cha
     ("Chỉnh…", "đổi thứ tự cảnh riêng cho video đó (dòng hiện <i>Đã chỉnh tay</i>)."),
     ("Nghe", "nghe 20 giây của đúng video đó; kéo thanh Âm lượng là nghe đổi ngay."),
     ("Thêm vào hàng đợi", "đưa cả loạt vào hàng đợi (tick <i>Chạy hàng đợi ngay</i> để chạy luôn).")]) + box(
+    "warn", "Chọn <b>thư mục lưu</b> ở trang Xuất trước khi mở Xuất hàng loạt — cả loạt xuất vào đó.") + """
+<ul>
+<li><b>Mẫu xếp clip</b> có thêm lựa chọn <i>Không xen kẽ — phát lần lượt theo tên file</i>. <b>Không dùng crossfade</b> đặt cả hai ô nối về Cắt.</li>
+<li><b>Nhạc</b>: nhạc trong từng thư mục (thiếu thì dùng playlist dự án) · luôn dùng playlist dự án · chỉ nhạc trong thư mục.</li>
+<li>Chuột phải một dòng: <i>Chỉnh âm lượng video này…</i>, <i>Bỏ chỉnh tay</i>, <i>Bỏ âm lượng riêng</i>. Bỏ tick dòng nào thì video đó không được thêm.</li>
+<li>Nút <b>Theo dự án đang mở</b> ở hàng Âm lượng: đặt lại âm lượng như Bảng trộn âm của dự án.</li>
+</ul>""" + box(
     "tip", "Thư mục lưu nằm trong thư mục cha thì app tự lưu vào <code>_Xuat</code> để lần quét sau không lẫn với clip."))
 
 topic("filekem", "Xuất file", "file_plus", "File kèm: tracklist, mốc cho editor", hero(
@@ -398,9 +428,9 @@ topic("filekem", "Xuất file", "file_plus", "File kèm: tracklist, mốc cho ed
     ("Tên-video.mp4", "video"),
     ("_tracklist.txt", "mốc thời gian từng bài nhạc — <b>dán vào mô tả YouTube</b> là có Chapters"),
     ("_moc-thoi-gian.txt / .csv", "từng đoạn <b>LOOP</b> (nền lặp) và <b>THƯỜNG</b> (cảnh chèn — chỗ nên thêm sound effect), chính xác từng khung hình; .csv mở bằng Excel"),
-    (".srt", "kéo vào Premiere / CapCut / DaVinci thành track chữ hiện tên từng đoạn trên timeline"),
-    ("_markers-davinci.edl", "DaVinci Resolve: chuột phải timeline → Timelines → Import → Timeline Markers from EDL (THƯỜNG đỏ, LOOP xanh)"),
-    ("_project.lsproj", "mở lại để xuất lại y hệt")], ("File", "Dùng để")))
+    ("_moc-thoi-gian.srt", "kéo vào Premiere / CapCut / DaVinci thành track chữ hiện tên từng đoạn trên timeline"),
+    ("_markers-davinci.edl", "DaVinci Resolve: Timeline → Import → Timeline Markers from EDL (timeline bắt đầu 01:00:00:00). THƯỜNG đỏ, LOOP xanh dương, INTRO / OUTRO xanh lá"),
+    ("_project.lsproj", "mở lại để xuất lại y hệt (chỉ kèm theo video, file nhạc không có)")], ("File", "Dùng để")))
 
 topic("caidat", "Khác", "settings", "Cài đặt & card đồ hoạ", hero(
     "Cài đặt & card đồ hoạ", "Kiểm tra máy có dùng được card đồ hoạ để xuất nhanh không, và các tuỳ chọn hệ thống.",
@@ -408,30 +438,64 @@ topic("caidat", "Khác", "settings", "Cài đặt & card đồ hoạ", hero(
     ("Thông số máy", "hệ điều hành, CPU, RAM, card đồ hoạ (driver, VRAM, nhiệt độ), CUDA, ổ đĩa."),
     ("FFmpeg &amp; tăng tốc", "✓ xanh = dùng được: NVIDIA <b>NVENC</b>, Intel <b>Quick Sync</b>, AMD <b>AMF</b>, giải mã <b>CUDA</b>. Chỉ cần <b>một</b> dòng xanh là xuất nhanh.")]) + """
 <ul>
-<li><b>Đo tốc độ</b>: mã hoá thử 10 giây bằng từng bộ mã hoá (×10 = nhanh gấp 10 lần thời gian thực).</li>
-<li>Thư mục xuất mặc định, mở thư mục / âm báo khi xong, <b>tắt máy khi xong hàng đợi</b>, cỡ chữ, xoá bộ nhớ đệm.</li>
+<li><b>Kiểm tra lại phần cứng</b>: đọc lại thông số sau khi cắm / cập nhật driver card đồ hoạ.</li>
+<li><b>Đo tốc độ mã hoá</b> (khoảng 30 giây): mã hoá thử bằng từng bộ mã hoá (×10 = nhanh gấp 10 lần thời gian thực).</li>
+<li>Thư mục xuất mặc định, <b>mở thư mục</b> / <b>âm báo</b> khi xuất xong, cỡ chữ.</li>
+<li><b>Tắt máy khi chạy xong hàng đợi</b> (có 2 phút để huỷ) — chỉ có tác dụng tới khi tắt app, lần mở sau phải tick lại.</li>
+<li><b>Đường dẫn FFmpeg</b>: để <i>Tự động</i> (dùng bản kèm theo app); chỉ đổi khi được hướng dẫn.</li>
+<li><b>Xoá bộ nhớ đệm</b>, <b>Mở thư mục dữ liệu</b> (dự án tự lưu, hàng đợi, nhật ký, file lỗi).</li>
 </ul>""" + box("tip", "Tốc độ xuất chủ yếu đến từ bộ mã hoá trên card (NVENC / Quick Sync / AMF) — app luôn tự dùng. "
                      "“Giải mã bằng GPU (CUDA)” thường <b>không</b> nhanh hơn với clip ngắn, chỉ nên bật khi CPU yếu.") + box(
     "tip", "Bộ nhớ đệm giúp lần xuất sau nhanh hơn; app tự dọn khi quá 30 GB. Xoá tay ở đây nếu ổ C sắp đầy."))
 
+topic("dulieu", "Khác", "folder", "Cài app, cập nhật & dữ liệu", hero(
+    "Cài app, cập nhật & dữ liệu", "Cài lên máy mới, lên bản mới, và biết app lưu dữ liệu ở đâu.") + steps([
+    ("Tải bộ cài", "File <code>KTLoopStation-Setup.exe</code> (~190 MB) từ trang tải của app."),
+    ("Mở file", "Hiện khung xanh <i>Windows protected your PC</i>: bấm <b>More info</b> → <b>Run anyway</b>."),
+    ("Next → Install → Finish", "Mở app bằng biểu tượng <b>KT Loop Station</b> trên màn hình nền hoặc menu Start.")]) + """
+<ul>
+<li>Cần <b>Windows 10 / 11 64-bit</b>. Không cần quyền quản trị, không cần cài thêm gì (đã kèm FFmpeg).</li>
+<li><b>Lên bản mới</b>: cài đè bản mới lên bản cũ. Dự án, hàng đợi, cài đặt được giữ nguyên. Số phiên bản ghi ở đầu trang Hướng dẫn này.</li>
+<li><b>Gỡ app</b>: Windows Settings → Apps → KT Loop Station → Uninstall. Dữ liệu và video đã xuất <b>không</b> bị xoá.</li>
+</ul>
+<h2>App lưu gì, ở đâu?</h2>""" + examples([
+    ("autosave.lsproj", "dự án đang làm (tự lưu liên tục)"), ("queue.json", "hàng đợi xuất"),
+    ("logs\\", "nhật ký từng lần xuất (nút <i>Thư mục nhật ký</i> ở đầu trang này)"),
+    ("loi-ung-dung.log", "lỗi bất ngờ của app — gửi file này khi cần hỗ trợ"),
+    ("cache\\", "bộ nhớ đệm giúp xuất lần sau nhanh hơn; tự dọn khi quá 30 GB")], ("File / thư mục", "Là gì")) + box(
+    "tip", "Tất cả nằm trong <code>%LOCALAPPDATA%\\KTLoopStation</code> — mở nhanh bằng Cài đặt → <b>Mở thư mục dữ liệu</b>.") + box(
+    "warn", "Đừng xoá <code>autosave.lsproj</code> / <code>queue.json</code> khi app đang mở. Muốn giữ dự án lâu dài thì bấm <b>Lưu</b> "
+            "(Ctrl+S) thành file <code>.lsproj</code> ở thư mục của bạn."))
+
 topic("hoi", "Khác", "help", "Câu hỏi thường gặp", hero(
-    "Câu hỏi thường gặp", "Bấm Ctrl+F trong ô tìm bên trái để tìm nhanh theo từ khoá.") + "".join(
+    "Câu hỏi thường gặp", "Bấm Ctrl+F (hoặc ô tìm bên trái) để tìm nhanh theo từ khoá — gõ không dấu cũng được.") + "".join(
     f'<h3>{q}</h3><p>{a}</p>' for q, a in [
         ("Nhạc có tự lặp theo video không?", "Có (kiểu Video có nhạc). Nhạc nối tiếp và lặp tới hết video, bài cuối nhỏ dần đúng lúc video kết thúc."),
         ("Chỉ muốn loop video, hoặc chỉ loop nhạc?", "Chọn <b>Chỉ video</b> hoặc <b>Chỉ nhạc</b> ở thanh trên cùng (xem chủ đề Chọn kiểu sản phẩm)."),
         ("Vì sao xuất nhanh vậy?", "Mỗi clip chỉ mã hoá <b>một lần</b>, các lần loop chỉ là sao chép. Video 1 giờ thường khoảng nửa phút, 10 giờ khoảng 10 phút (tuỳ máy). Lần sau còn nhanh hơn nhờ bộ nhớ đệm."),
         ("Video loop nặng quá?", "Xem chủ đề <a href='topic:xuat'>Trang Xuất &amp; dung lượng</a>: hạ độ phân giải, H.265, Tiết kiệm dung lượng, Giới hạn dung lượng."),
         ("Ổ đĩa có đủ chỗ không?", "Trang Xuất hiện dung lượng dự đoán và báo đỏ nếu không đủ; trước khi ghép app kiểm tra lại. Video 10 tiếng 1080p thường cần 10–40 GB."),
-        ("Mở app hiện “đang mở rồi”?", "App chỉ cho mở một cửa sổ để hàng đợi không bị ghi đè — xem trên thanh tác vụ."),
-        ("Báo lỗi khi xuất?", "Xem <b>Nhật ký</b> ở trang Xuất (đầy đủ trong <i>Thư mục nhật ký</i> ở đầu trang này). Nếu card đồ hoạ lỗi: trang Xuất → Tuỳ chọn nâng cao ▾ → Bộ mã hoá: CPU rồi xuất lại. Lỗi bất ngờ của app được ghi vào <code>loi-ung-dung.log</code>."),
+        ("Mở app hiện “đang mở rồi”?", "App chỉ cho mở một cửa sổ để hàng đợi không bị ghi đè — xem trên thanh tác vụ. Không thấy cửa sổ nào: "
+                                       "mở <b>Task Manager</b> (Ctrl+Shift+Esc), tắt <b>KT Loop Station</b> rồi mở lại."),
+        ("App đứng ở màn hình khởi động, không mở lên?", "Thường do dự án tự lưu có thời lượng quá lớn (ví dụ lỡ gõ 1.000.000 phút ở bản 1.4.8). "
+                                                       "Từ bản 1.4.10 app tự đưa về tối đa 48 giờ và báo khi mở. Cài bản mới nhất rồi mở lại."),
+        ("Video dài tối đa bao nhiêu?", "48 giờ cho mỗi video / file nhạc, mỗi clip phát tối đa 99.999 lần. YouTube nhận video tối đa 12 giờ."),
+        ("Cài đặt báo CUDA ✗?", "CUDA chỉ dùng để <b>giải mã</b> trên card NVIDIA, không bắt buộc. Chỉ cần một dòng <b>NVENC / Quick Sync / AMF</b> "
+                                "xanh là xuất nhanh; không có dòng nào xanh thì app dùng CPU (chậm hơn nhưng vẫn xuất được)."),
+        ("Báo lỗi khi xuất?", "Xem <b>Nhật ký</b> ở trang Xuất (đầy đủ trong <i>Thư mục nhật ký</i> ở đầu trang này). Card đồ hoạ lỗi thì app tự "
+                              "chuyển sang CPU; vẫn lỗi thì trang Xuất → Tuỳ chọn nâng cao ▾ → Bộ mã hoá: CPU rồi xuất lại. Lỗi bất ngờ của app "
+                              "được ghi vào <code>loi-ung-dung.log</code> (Cài đặt → <i>Mở thư mục dữ liệu</i>) — gửi file này cho người hỗ trợ."),
+        ("Cập nhật bản mới thế nào?", "Tải bộ cài mới, cài đè lên bản cũ. Dự án, hàng đợi, cài đặt được giữ nguyên."),
         ("File đích đang mở trong VLC?", "App không xoá video vừa xuất: lưu thành tên <code>…_moi.mp4</code> và ghi rõ trong nhật ký."),
     ]))
 
 topic("phim", "Khác", "zap", "Phím tắt", hero("Phím tắt", "Thao tác nhanh bằng bàn phím.") + examples([
     ("F1", "Mở trang Hướng dẫn"), ("Ctrl+N / Ctrl+O", "Dự án mới / Mở dự án"), ("Ctrl+S / Ctrl+Shift+S", "Lưu / Lưu thành…"),
-    ("Ctrl+F", "Tìm tên file trong bảng"), ("Ctrl+Z", "Hoàn tác"), ("Ctrl+D", "Nhân bản dòng clip"),
-    ("Space", "Bật / tắt các dòng đang chọn"), ("Delete", "Xoá các dòng đang chọn"), ("Ctrl+A", "Chọn tất cả dòng"),
-    ("I / O", "Đặt điểm đầu / cuối (hộp thoại Đoạn lấy)"), ("Bấm đúp", "Tên file: xem / nghe · Ô số: sửa"),
+    ("Ctrl+F", "Tìm tên file trong bảng (trang Video / Nhạc) · tìm trong trang Hướng dẫn"), ("Esc", "Xoá ô tìm"),
+    ("Ctrl+Z", "Hoàn tác (trang Video)"), ("Ctrl+D", "Nhân bản dòng clip (khi đang chọn trong bảng clip)"),
+    ("Space", "Bật / tắt các dòng đang chọn · phát / dừng trong hộp thoại Đoạn lấy"), ("Delete", "Xoá các dòng đang chọn"),
+    ("Ctrl+A", "Chọn tất cả dòng"), ("I / O", "Đặt điểm đầu / cuối (hộp thoại Đoạn lấy)"), ("Bấm đúp", "Tên file: xem / nghe · Ô số: sửa"),
+    ("Tab · ↑ ↓", "Sang ô giờ / phút / giây kế tiếp · tăng / giảm 1"),
     ("Lăn chuột", "Chỉ cuộn trang; muốn đổi ô số bằng lăn chuột thì bấm vào ô trước")], ("Phím", "Tác dụng")))
 
 GROUPS = ["Bắt đầu", "Làm video", "Âm thanh", "Xuất file", "Khác"]
@@ -472,7 +536,7 @@ class HelpPage(QWidget):
         sample_dir = Path(ft.app_dir()) / "Mau-Test"
         self._samples = sorted(sample_dir.glob("*.lsproj")) if sample_dir.is_dir() else []
         for proj in self._samples:
-            b = QPushButton(proj.stem.replace("Du-an-mau - ", "Mẫu: "))
+            b = QPushButton(sample_label(proj.stem))
             b.setObjectName("pill")
             b.setIcon(icons.icon("folder", 13))
             b.setToolTip(f"Mở dự án mẫu {proj.name} để thử")
@@ -498,6 +562,10 @@ class HelpPage(QWidget):
         self.search.setPlaceholderText("Tìm trong hướng dẫn… (gõ không dấu cũng được)")
         self.search.setClearButtonEnabled(True)
         self.search.textChanged.connect(self._filter)
+        from PySide6.QtGui import QKeySequence, QShortcut
+        find = QShortcut(QKeySequence.StandardKey.Find, self)
+        find.setContext(Qt.ShortcutContext.WidgetWithChildrenShortcut)
+        find.activated.connect(lambda: (self.search.setFocus(), self.search.selectAll()))
         self.toc = QListWidget()
         self.toc.setObjectName("helpToc")
         self.toc.setIconSize(QSize(16, 16))
@@ -627,7 +695,8 @@ class HelpPage(QWidget):
         elif s.startswith("app:"):
             act = s[4:]
             if act == "sample" and self._samples:
-                self.openProjectRequested.emit(str(self._samples[0]))
+                first = next((p for p in self._samples if "loop" in p.stem.lower()), self._samples[0])
+                self.openProjectRequested.emit(str(first))
             else:
                 self.actionRequested.emit(act)
         elif s.startswith("#"):

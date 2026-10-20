@@ -176,7 +176,7 @@ class TimelineBar(QWidget):
             return "CLIP: các clip trong bảng ở trang Video, xếp theo đúng thứ tự phát (cùng một file luôn cùng màu)"
         return {
             "NHẠC": "NHẠC: các bài trong playlist ở trang Nhạc, tự lặp cho đủ độ dài video",
-            "NHẠC + GỐC": "NHẠC + GỐC: playlist nhạc trộn với tiếng gốc của clip (chỉnh âm lượng ở thẻ Âm thanh)",
+            "NHẠC + GỐC": "NHẠC + GỐC: playlist nhạc trộn với tiếng gốc của clip (chỉnh âm lượng ở Bảng trộn âm)",
             "TIẾNG GỐC": "TIẾNG GỐC: chỉ dùng tiếng có sẵn trong clip, không có playlist nhạc",
         }[self._audio_lane_name()]
 

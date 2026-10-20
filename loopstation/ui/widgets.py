@@ -278,6 +278,15 @@ PLAYS_HELP = ("Không hiểu số lần phát vừa gõ. Gõ ví dụ: 70 (70 l�
               "10p / 1h30 / 3 tiếng / 10:00 (cho đủ thời lượng).")
 
 
+SAMPLE_NAMES = {"loop 70 lan": "Loop 70 lần", "3 tieng": "3 tiếng"}
+
+
+def sample_label(stem: str) -> str:
+    """'Du-an-mau - Loop 70 lan' → 'Mẫu: Loop 70 lần' (tên hiện trên nút dự án mẫu)."""
+    name = stem.replace("Du-an-mau - ", "")
+    return "Mẫu: " + SAMPLE_NAMES.get(name.lower(), name)
+
+
 def select_all_soon(widget) -> None:
     """Bôi đen hết chữ ngay sau khi ô nhận focus (gõ là thay luôn, khỏi xoá từng chữ)."""
     QTimer.singleShot(0, widget, widget.selectAll)

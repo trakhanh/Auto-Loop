@@ -9,6 +9,7 @@ from PySide6.QtWidgets import QGridLayout, QHBoxLayout, QLabel, QPushButton, QSi
 from ..core import ffmpeg_tools as ft
 from . import branding, icons
 from .theme import APP_NAME, AUTHOR
+from .widgets import sample_label
 
 # (khoá, biểu tượng, màu biểu tượng, tiêu đề, mô tả, ví dụ)
 CARDS = [
@@ -117,7 +118,7 @@ class HomePage(QWidget):
         sample_dir = Path(ft.app_dir()) / "Mau-Test"
         has = False
         for proj in sorted(sample_dir.glob("*.lsproj")) if sample_dir.is_dir() else []:
-            b = QPushButton(proj.stem.replace("Du-an-mau - ", "Mẫu: "))
+            b = QPushButton(sample_label(proj.stem))
             b.setObjectName("pill")
             b.setToolTip(str(proj))
             b.clicked.connect(lambda _=False, p=str(proj): self.openSample.emit(p))
