@@ -68,19 +68,44 @@ class Mixer:
             out.append(part)
 
 
+_RETIRED: list = []  # nguồn tiếng đã ngừng dùng, giữ lại tới khi bộ phát âm thanh thật sự dừng
+
+
+def retire(sink, dev) -> None:
+    """Dừng bộ phát âm thanh rồi mới đóng nguồn tiếng. Đóng nguồn ngay (khi Qt — bản dùng FFmpeg — còn đọc thêm
+    một nhịp) làm hiện cảnh báo “QIODevice::read: device not open / pullFromQIODeviceToRingbuffer…”."""
+    if dev is not None:
+        dev.owner = None  # từ giờ chỉ trả "không còn dữ liệu"
+    if sink is None:
+        if dev is not None:
+            dev.close()
+        return
+    sink.stop()
+    if dev is not None:
+        _RETIRED.append(dev)
+
+        def done(*_args, d=dev):
+            d.close()
+            if d in _RETIRED:
+                _RETIRED.remove(d)
+
+        sink.destroyed.connect(done)
+    sink.deleteLater()
+
+
 class _Device(QIODevice):
     def __init__(self, owner: "LivePlayer"):
         super().__init__()
         self.owner = owner
 
     def readData(self, maxlen):  # noqa: N802
-        return self.owner._read(maxlen)
+        return self.owner._read(maxlen) if self.owner is not None else b""
 
     def writeData(self, data):  # noqa: N802
         return 0
 
     def bytesAvailable(self) -> int:  # noqa: N802
-        m = self.owner.mixer
+        m = self.owner.mixer if self.owner is not None else None
         return (m.length - m.pos if m else 0) + super().bytesAvailable()
 
     def isSequential(self) -> bool:  # noqa: N802
@@ -157,9 +182,5 @@ class LivePlayer(QObject):
     def stop(self) -> None:
         self._watch.stop()
         sink, self._sink = self._sink, None
-        if sink is not None:
-            sink.stop()
-            sink.deleteLater()
-        if self._dev is not None:
-            self._dev.close()
-            self._dev = None
+        dev, self._dev = self._dev, None
+        retire(sink, dev)

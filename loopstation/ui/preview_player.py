@@ -26,7 +26,7 @@ from PySide6.QtWidgets import (
 from ..core import audio_preview, preview_engine, timeline
 from ..core import ffmpeg_tools as ft
 from . import icons
-from .live_mix import BUFFER_MS, CHUNK, FRAME, LIMIT, RATE, WIDTH, read_pcm
+from .live_mix import BUFFER_MS, CHUNK, FRAME, LIMIT, RATE, WIDTH, read_pcm, retire
 
 BPS = RATE * FRAME  # byte âm thanh mỗi giây
 FIRST_CHUNK, NEXT_CHUNK, AHEAD = 4.0, 20.0, 12.0  # giây: đoạn tiếng đầu ngắn cho nhanh, sau đó dựng trước ~12 s
@@ -127,13 +127,13 @@ class _Device(QIODevice):
         self.owner = owner
 
     def readData(self, maxlen):  # noqa: N802
-        return self.owner._read(maxlen)
+        return self.owner._read(maxlen) if self.owner is not None else b""
 
     def writeData(self, data):  # noqa: N802
         return 0
 
     def bytesAvailable(self) -> int:  # noqa: N802
-        return CHUNK + super().bytesAvailable()
+        return (CHUNK if self.owner is not None else 0) + super().bytesAvailable()
 
     def isSequential(self) -> bool:  # noqa: N802
         return True
@@ -314,12 +314,8 @@ class AudioStream(QObject):
             self._runner.cancel()
             self._runner = None
         sink, self._sink = self._sink, None
-        if sink is not None:
-            sink.stop()
-            sink.deleteLater()
-        if self._dev is not None:
-            self._dev.close()
-            self._dev = None
+        dev, self._dev = self._dev, None
+        retire(sink, dev)  # đóng nguồn tiếng sau khi bộ phát đã dừng (không hiện cảnh báo QIODevice)
         self.mixer = None
 
 
