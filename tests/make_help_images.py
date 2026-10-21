@@ -21,7 +21,7 @@ sys.dont_write_bytecode = True
 sys.path.insert(0, str(ROOT))
 warnings.simplefilter("ignore", DeprecationWarning)
 
-from PySide6.QtCore import QPoint, QRect, QRectF, QSettings, Qt  # noqa: E402
+from PySide6.QtCore import QPoint, QRect, QRectF, QSettings, QSize, Qt  # noqa: E402
 from PySide6.QtGui import QColor, QFont, QImage, QPainter, QPen  # noqa: E402
 from PySide6.QtWidgets import QApplication, QGroupBox  # noqa: E402
 
@@ -165,12 +165,36 @@ bd = BatchDialog(win.collect_project(), st, win)
 bd.resize(1180, 820)
 bd.show()
 wait(2.5)
+for _ in range(80):  # trình phát bên phải nạp xong video của dòng đầu
+    wait(0.25)
+    if bd.player_panel.player.state == "paused" and bd.player_panel.view.image is not None:
+        break
 row0 = bd._play_btns.get(0)
 edit0 = bd.tree.itemWidget(bd.tree.topLevelItem(0), 5)
 shoot(bd, [(bd.kind_bar, 1), (bd.folder, 2), (bd.len_mode, 3), (bd.preset, 4),
-           (bd.vol_music.parentWidget(), 5), (bd.listen_at, 6), (bd.tree, 7)]
-      + ([(edit0, 8)] if edit0 else []) + ([(row0, 9)] if row0 else []) + [(bd.ok_btn, 10)], "batch")
+           (bd.vol_music.parentWidget(), 5), (bd.tree, 6)]
+      + ([(edit0, 7)] if edit0 else []) + ([(row0, 8)] if row0 else [])
+      + [(bd.player_panel, 9), (bd.ok_btn, 10)], "batch")
 bd.done(0)
+
+# 8b) Trình phát (luôn hiện bên phải bước Video / Nhạc / Xuất) + dòng thời gian ở đáy
+win.go_to(0)
+pv = win.viewer
+for _ in range(120):  # nạp lịch phát + khung hình đầu
+    wait(0.25)
+    if pv.player.state == "paused" and pv.view.image is not None:
+        break
+pv.player.seek(pv.player.total * 0.27)
+for _ in range(60):
+    wait(0.25)
+    if pv.player._seek_to is None and pv.view.image is not None:
+        break
+wait(1.0)
+tlb = win.video_tab.timeline
+x = int(tlb._x(tlb.playhead or 0))
+head = QRect(tlb.mapTo(win, QPoint(x - 12, 0)), QSize(24, tlb.height()))
+shoot(win, [(pv.view, 1), (pv.play_btn, 2), (pv.back_btn, 3), (pv.slider, 4), (head, 5), (pv.quality, 6),
+            (pv.full_btn, 7)], "preview")
 
 # 9) Cài đặt (thông số + tăng tốc)
 win.go_to(3)

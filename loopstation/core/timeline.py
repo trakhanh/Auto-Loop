@@ -99,7 +99,8 @@ def build(project: Project) -> Timeline:
     if ex.fps != "source":
         tl.fps = Fraction(int(ex.fps))
     else:
-        tl.fps = snap_fps(first.fps) if first else Fraction(30)
+        main = _main_clip(vs, tl.clip_infos)
+        tl.fps = snap_fps(main.fps) if main else Fraction(30)
     _, w, h = RESOLUTIONS.get(ex.resolution, RESOLUTIONS["1080p"])
     if not w:  # theo clip đầu tiên (ảnh nếu không có video)
         ref = first or tl.clip_infos[min(tl.clip_infos)]
@@ -149,7 +150,7 @@ def build(project: Project) -> Timeline:
     elif vs.length_mode == "music" and project.output_kind != "video_only":
         # (kiểu Chỉ video không có nhạc: độ dài theo số lần phát của clip, như "Thủ công")
         if not tl.use_music:
-            tl.errors.append("Chế độ 'Theo nhạc' cần ít nhất một bài nhạc được bật.")
+            tl.errors.append("Cách “Theo độ dài nhạc” cần ít nhất một bài nhạc được bật.")
             return tl
         target = planner.first_round_seconds(ms, tl.track_durations)
 
@@ -175,6 +176,24 @@ def build(project: Project) -> Timeline:
     if tl.use_music and not tl.errors:
         tl.music_items = planner.plan_music(ms, tl.track_durations, tl.total)
     return tl
+
+
+def _main_clip(vs, infos: dict[int, MediaInfo]) -> MediaInfo | None:
+    """Clip video chiếm nhiều thời lượng nhất (số lần phát × độ dài) — fps xuất theo clip này, để phần lớn video
+    không bị đổi fps (ví dụ Content 30 fps phát 1 lần + 6 loop 24 fps phát 60 lần → xuất 24 fps, loop không giật)."""
+    best, best_w = None, -1.0
+    for k in sorted(infos):
+        inf = infos[k]
+        if inf.is_image or k < 0:
+            continue
+        c = vs.clips[k]
+        if c.plays_mode == "duration":
+            weight = c.play_seconds
+        else:
+            weight = inf.duration * max(1, c.max if c.plays_mode == "random" else c.count)
+        if weight > best_w:
+            best, best_w = inf, weight
+    return best
 
 
 def _hours(sec: float) -> str:

@@ -53,7 +53,7 @@ RESOLUTIONS = {
     "square": ("Vuông 1:1 — 1080×1080", 1080, 1080),
 }
 
-FPS_CHOICES = {"source": "Theo clip đầu tiên", "24": "24", "25": "25", "30": "30", "50": "50", "60": "60"}
+FPS_CHOICES = {"source": "Theo clip chính (phát lâu nhất)", "24": "24", "25": "25", "30": "30", "50": "50", "60": "60"}
 
 
 AUDIO_LABELS = {

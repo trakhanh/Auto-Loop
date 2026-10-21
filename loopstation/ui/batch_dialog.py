@@ -20,7 +20,6 @@ from . import icons
 from . import widgets as w
 from ..core.probe import probe_many
 from .interleave_dialog import USER_PREFIX, InterleaveDialog, all_presets, arrange_from_preset
-from .live_mix import LivePlayer
 from .music_tab import EXPORT_MODE
 from .video_tab import LENGTH, quick_buttons
 from .mixer_panel import MixerPanel
@@ -30,8 +29,6 @@ MUSIC = [("auto", "Nhạc trong từng thư mục; thư mục không có nhạc 
          ("template", "Luôn dùng playlist của dự án đang mở"),
          ("folder", "Chỉ dùng nhạc trong từng thư mục (không có thì không có nhạc)")]
 C_NAME, C_BASE, C_CLIPS, C_MUSIC, C_DUR, C_EDIT, C_PLAY, C_NOTE = range(8)
-LISTEN_AT = [("start", "Đầu video"), ("mid", "Giữa video"), ("change", "Chỗ đổi bài nhạc đầu tiên")]
-LISTEN_AT_MUSIC = [("start", "Đầu file"), ("mid", "Giữa file"), ("change", "Chỗ đổi bài nhạc đầu tiên")]
 
 
 class VolSlider(QWidget):
@@ -200,7 +197,7 @@ def kind_card_html(kind: str, audio_ext: str = ".mp3") -> tuple[str, str]:
 class BatchDialog(QDialog):
     def __init__(self, template: Project, settings: QSettings, parent=None):
         super().__init__(parent)
-        self.setWindowTitle("Xuất hàng loạt theo thư mục")
+        self.setWindowTitle("Xuất hàng loạt")
         self.setMinimumSize(1000, 640)
         # bản riêng của hộp thoại: đổi kiểu ngay tại chỗ, không đụng dự án đang mở
         self.template = copy.deepcopy(template)
@@ -221,7 +218,7 @@ class BatchDialog(QDialog):
         # ---- chọn kiểu ngay trong hộp thoại (mặc định theo dự án đang mở) ----
         kind_row = QHBoxLayout()
         kind_row.setSpacing(0)
-        kl = QLabel("Xuất ra:")
+        kl = QLabel("Kiểu xuất:")
         kl.setStyleSheet("font-weight:600; margin-right:10px;")
         kind_row.addWidget(kl)
         self.kind_group = QButtonGroup(self)
@@ -279,7 +276,7 @@ class BatchDialog(QDialog):
         self.folder.setPlaceholderText("Ví dụ: D:\\Video-can-lam\\Tuan-1")
         browse = QPushButton("Chọn…")
         browse.clicked.connect(self._browse)
-        self.sample = QPushButton("Thư mục mẫu")
+        self.sample = QPushButton("Thư mục thử")
         self.sample.setObjectName("ghost")
         self.sample.setIcon(icons.icon("folder", 14))
         self.sample.setIconSize(QSize(14, 14))
@@ -292,14 +289,19 @@ class BatchDialog(QDialog):
         frow.addWidget(browse)
         frow.addWidget(self.sample)
 
+        # cách xếp clip: cùng tên với 2 nút ở trang Video (Xen kẽ clip nền… / Xếp lần lượt…), mẫu tự lưu cũng có ở đây
         self.preset = QComboBox()
         for p in all_presets(settings):
-            self.preset.addItem((USER_PREFIX if p.get("user") else "") + p["name"], p)
-        self.preset.addItem("Không xen kẽ — phát lần lượt theo tên file", None)
+            p = dict(p, key=(USER_PREFIX if p.get("user") else "") + p["name"])
+            feature = "Xếp lần lượt" if p.get("kind") == "sequence" else "Xen kẽ clip nền"
+            self.preset.addItem(f"{feature}: {p['key']}", p)
+        self.preset.addItem("Không xếp — phát theo thứ tự tên file", None)
         last = settings.value("batch/preset", "")
-        idx = self.preset.findText(last) if last else -1
+        idx = next((k for k in range(self.preset.count())
+                    if (self.preset.itemData(k) or {}).get("key", self.preset.itemText(k)) == last), -1) if last else -1
         self.preset.setCurrentIndex(idx if idx >= 0 else 0)
-        self.preset.setToolTip("Mẫu xếp clip (giống nút Xen kẽ clip nền). Mẫu tự lưu cũng có ở đây.")
+        self.preset.setToolTip("Giống 2 nút ở trang Video: Xen kẽ clip nền (một clip nền xen giữa các cảnh) và Xếp lần "
+                               "lượt (Loop1 → Loop2 … mỗi cái lặp N lần). Cách xếp tự lưu cũng có ở đây.")
         # crossfade không bắt buộc: 0 = "Cắt" (nối thẳng, không hoà hình) — giống ô crossfade ở trang Video
         self.loop_xf = w.xf_spin()
         self.loop_xf.setValue(float(settings.value("batch/loop_xf", 1.0)))
@@ -307,7 +309,7 @@ class BatchDialog(QDialog):
         self.next_xf = w.xf_spin()
         self.next_xf.setValue(float(settings.value("batch/next_xf", 0.5)))
         self.next_xf.setToolTip("Hoà hình khi chuyển giữa clip nền và cảnh chèn. Kéo về 0 (hiện “Cắt”) = cắt thẳng.")
-        no_xf = QPushButton("Không dùng crossfade")
+        no_xf = QPushButton("Không hoà hình")
         no_xf.setObjectName("pill")
         no_xf.setToolTip("Đặt cả hai về “Cắt”: các đoạn nối thẳng với nhau, không hoà hình")
         no_xf.clicked.connect(lambda: (self.loop_xf.setValue(0), self.next_xf.setValue(0)))
@@ -316,7 +318,7 @@ class BatchDialog(QDialog):
         xrow.addWidget(QLabel("Nối loop"))
         xrow.addWidget(self.loop_xf)
         xrow.addSpacing(10)
-        xrow.addWidget(QLabel("Chuyển cảnh"))
+        xrow.addWidget(QLabel("Sang clip"))
         xrow.addWidget(self.next_xf)
         xrow.addSpacing(10)
         xrow.addWidget(no_xf)
@@ -364,7 +366,7 @@ class BatchDialog(QDialog):
 
         # âm lượng chung cho cả loạt (mặc định = Bảng trộn âm của dự án đang mở)
         self.vol_music = VolSlider("Nhạc", t.video.music_volume)
-        self.vol_source = VolSlider("Tiếng gốc", t.video.source_volume)
+        self.vol_source = VolSlider("Tiếng gốc clip", t.video.source_volume)
         self.vol_amb = [VolSlider(ambient_lib.display_name(a.path), a.volume) for a in t.music.ambient]
         for k, (a, s) in enumerate(zip(t.music.ambient, self.vol_amb)):
             s.set_usable(a.enabled, "Lớp này đang tắt trong dự án đang mở")
@@ -374,29 +376,23 @@ class BatchDialog(QDialog):
         vfl.addWidget(self.vol_source)
         for s in self.vol_amb:
             vfl.addWidget(s)
-        vol_reset = QPushButton("Theo dự án đang mở")
+        vol_reset = QPushButton("Theo dự án")
         vol_reset.setObjectName("ghost")
         vol_reset.setToolTip("Đặt lại theo Bảng trộn âm của dự án đang mở")
         vol_reset.clicked.connect(self._reset_volumes)
         vfl.addWidget(vol_reset)
         for s in (self.vol_music, self.vol_source, *self.vol_amb):
             s.valueChanged.connect(lambda *_: self._volumes_changed())
-        # nghe thử từng dòng
-        self.listen_at = QComboBox()
-        self.listen_status = w.muted("")
-        self.listen_status.setWordWrap(True)
-        lrow = QHBoxLayout()
-        lrow.setSpacing(8)
-        lrow.addWidget(QLabel("Nghe từ"))
-        lrow.addWidget(self.listen_at)
-        lrow.addWidget(self.listen_status, 1)
-        self.live = LivePlayer(self)
-        self.live.finished.connect(self._listen_finished)
-        self.stems_job = StemsJob(self)
-        self.stems_job.done.connect(self._on_stems)
-        self._listen_tick = QTimer(self)
-        self._listen_tick.setInterval(250)
-        self._listen_tick.timeout.connect(self._update_listen_status)
+        # trình phát giống màn hình chính: bấm một dòng là xem đúng video đó (hình + tiếng), Space = Phát / Dừng
+        from .preview_player import PreviewPanel, SpaceToggle
+        self.player_panel = PreviewPanel(settings, self, title="VIDEO ĐANG CHỌN")
+        self.player_panel.setMinimumWidth(320)
+        self._space = SpaceToggle(self, lambda: self.player_panel)
+        self._preview_key = None
+        self._preview_timer = QTimer(self)
+        self._preview_timer.setSingleShot(True)
+        self._preview_timer.setInterval(350)
+        self._preview_timer.timeout.connect(self._load_preview)
 
         # mọi hàng đều dựng sẵn; đổi kiểu chỉ ẩn / hiện hàng (không đóng mở lại hộp thoại)
         self.form = form = QFormLayout()
@@ -409,15 +405,14 @@ class BatchDialog(QDialog):
         self.len_val_label = QLabel()
         self.len_val_box = self._wrap(val_row)
         form.addRow(self.len_val_label, self.len_val_box)
-        form.addRow("Mẫu xếp clip:", self.preset)
-        form.addRow("Crossfade:", self.xf_box)
+        form.addRow("Cách xếp clip:", self.preset)
+        form.addRow("Hoà hình:", self.xf_box)
         form.addRow("Tiếng gốc clip:", self.source)
         form.addRow("Nhạc:", self.music)
         form.addRow("Âm lượng:", vol_box)
-        form.addRow("Nghe thử:", self._wrap(lrow))
 
         self.tree = QTreeWidget()
-        self.tree.setHeaderLabels(["", "Clip nền", "Clip", "", "Thời lượng", "Thứ tự cảnh", "Nghe thử", "Ghi chú"])
+        self.tree.setHeaderLabels(["", "Clip nền", "Clip", "", "Thời lượng", "Thứ tự clip", "Xem", "Ghi chú"])
         self.tree.headerItem().setToolTip(C_EDIT, "Bấm Chỉnh… để đổi thứ tự cảnh / số lần phát riêng cho video đó")
         self.tree.setRootIsDecorated(False)
         self.tree.setAlternatingRowColors(True)
@@ -430,6 +425,7 @@ class BatchDialog(QDialog):
         self.tree.customContextMenuRequested.connect(self._row_menu)
         self.tree.itemDoubleClicked.connect(lambda it, _c: self._edit(self.tree.indexOfTopLevelItem(it)))
         self.tree.itemChanged.connect(lambda *_: self._update_summary())
+        self.tree.currentItemChanged.connect(lambda *_: self._preview_timer.start())
         self.summary = QLabel("Chọn thư mục cha để xem danh sách video sẽ tạo.")
         self.summary.setWordWrap(True)
         self.run_now = QCheckBox("Chạy hàng đợi ngay sau khi thêm")
@@ -454,7 +450,17 @@ class BatchDialog(QDialog):
         bl.setSpacing(10)
         bl.addWidget(card)
         bl.addLayout(form)
-        bl.addWidget(self.tree, 1)
+        from PySide6.QtWidgets import QSplitter
+        self.list_split = QSplitter(Qt.Orientation.Horizontal)
+        self.list_split.setObjectName("workSplit")
+        self.list_split.setHandleWidth(3)
+        self.list_split.setChildrenCollapsible(False)
+        self.list_split.addWidget(self.tree)
+        self.list_split.addWidget(self.player_panel)
+        self.list_split.setStretchFactor(0, 3)
+        self.list_split.setStretchFactor(1, 2)
+        self.list_split.setSizes([700, 400])
+        bl.addWidget(self.list_split, 1)
         bl.addWidget(self.summary)
 
         lay = QVBoxLayout(self)
@@ -503,7 +509,7 @@ class BatchDialog(QDialog):
         k, mo, t = self.kind, self.music_only, self.template
         self.kind_buttons[k].setChecked(True)
         if k == self._project_kind:
-            self.kind_hint.setText("Kiểu của dự án đang mở được chọn sẵn — bấm để đổi kiểu cho cả loạt.")
+            self.kind_hint.setText("Kiểu của dự án đang mở được chọn sẵn — bấm để đổi kiểu xuất cho cả loạt.")
         else:
             self.kind_hint.setText(f"Chỉ đổi cho loạt này — dự án đang mở vẫn là <b>{KIND_TEXT[self._project_kind]}</b>.")
         left, right = kind_card_html(k, self._audio_ext)
@@ -526,10 +532,10 @@ class BatchDialog(QDialog):
         self._update_len_widgets()
 
         if k == "video_only":
-            src_items = [("mix", "Giữ tiếng gốc của clip"), ("off", "Tắt tiếng gốc của clip")]
+            src_items = [("mix", "Giữ tiếng gốc clip"), ("off", "Tắt tiếng gốc clip")]
         else:
-            src_items = [("mix", "Giữ tiếng gốc, trộn với nhạc"), ("only", "Chỉ tiếng gốc của clip — không dùng nhạc"),
-                         ("off", "Tắt tiếng gốc của clip")]
+            src_items = [("mix", "Giữ tiếng gốc clip, trộn với nhạc (mặc định)"), ("only", "Chỉ tiếng gốc clip — không dùng nhạc"),
+                         ("off", "Tắt tiếng gốc clip")]
         cur = t.video.source_audio if initial or self.source.count() == 0 else self.source.currentData()
         self._refill(self.source, src_items, "mix" if (k == "video_only" and cur == "only") else cur)
 
@@ -540,14 +546,10 @@ class BatchDialog(QDialog):
         self.vol_music.setVisible(k != "video_only")
         self.vol_source.setVisible(not mo)
 
-        self._refill(self.listen_at, LISTEN_AT_MUSIC if mo else LISTEN_AT, self.listen_at.currentData() or "start")
-        self.listen_at.setToolTip(f"Bấm Nghe ở một dòng để nghe 20 giây của đúng {self._unit} đó, từ mốc này")
-        self.listen_status.setText(f"Bấm <b>Nghe</b> ở một dòng để nghe thử 20 giây của {self._unit} đó — kéo thanh "
-                                   "âm lượng là nghe đổi ngay.")
         head = self.tree.headerItem()
         head.setText(C_NAME, f"Thư mục (= tên {self._unit})")
         head.setText(C_MUSIC, "Âm thanh" if k == "video_only" else "Nhạc")
-        head.setToolTip(C_PLAY, f"Nghe 20 giây của {self._unit} đó với âm lượng đang chọn")
+        head.setToolTip(C_PLAY, f"Phát {self._unit} đó trong trình phát bên phải (bấm vào dòng cũng được)")
         for c in (C_BASE, C_CLIPS, C_EDIT):
             self.tree.setColumnHidden(c, mo)
         self._update_music_enabled()
@@ -571,7 +573,7 @@ class BatchDialog(QDialog):
         if mode == "rounds":
             self.len_val_label.setText("Số lượt playlist:")
         else:
-            self.len_val_label.setText("Dài bao lâu:" if self.music_only else "Thời lượng đích:")
+            self.len_val_label.setText("Dài bao lâu:")
         unit = self._unit
         if mode == "target":
             fill = "playlist tự lặp" if self.music_only else "clip tự lặp"
@@ -579,7 +581,7 @@ class BatchDialog(QDialog):
         elif mode == "music":
             hint = "→ mỗi video dài bằng <b>một lượt playlist</b> của nó — thư mục có nhạc riêng thì theo nhạc đó, nên mỗi video một độ dài."
         elif mode == "manual":
-            hint = "→ đúng số lần phát: mỗi cảnh 1 lần, clip nền theo <b>Mẫu xếp clip</b> — độ dài xem ở cột Thời lượng."
+            hint = "→ đúng số lần phát: mỗi cảnh 1 lần, clip nền theo <b>Cách xếp clip</b> — độ dài xem ở cột Thời lượng."
         else:
             hint = (f"→ playlist mỗi thư mục phát <b>{self.len_rounds.value()} lượt</b> — độ dài tuỳ số bài "
                     "(xem cột Thời lượng).")
@@ -768,7 +770,7 @@ class BatchDialog(QDialog):
             ok = proj is not None
             edited = job.folder in self._overrides
             vol_edited = job.folder in self._vol_overrides
-            notes = (["Thứ tự cảnh đã chỉnh tay"] if edited else []) + (["Đã chỉnh âm lượng riêng"] if vol_edited
+            notes = (["Thứ tự clip đã chỉnh tay"] if edited else []) + (["Đã chỉnh âm lượng riêng"] if vol_edited
                                                                         else []) + job.notes + extra
             it.setText(C_NOTE, note or " · ".join(notes) or ("Sẵn sàng" if ok else ""))
             it.setToolTip(C_NOTE, "\n".join([note] if note else notes))
@@ -788,13 +790,13 @@ class BatchDialog(QDialog):
             self._row_info.append((total, changes))
             self.tree.addTopLevelItem(it)
             if ok:
-                pbtn = QPushButton("Nghe")
+                pbtn = QPushButton("Xem")
                 pbtn.setObjectName("pill")
                 pbtn.setIcon(icons.icon("play", 12))
                 pbtn.setIconSize(QSize(12, 12))
-                pbtn.setToolTip("Nghe 20 giây của video này (mốc chọn ở ô Nghe từ) với âm lượng đang đặt")
+                pbtn.setToolTip(f"Phát {self._unit} này trong trình phát bên phải (hình + tiếng, đúng âm lượng đang đặt)")
                 pbtn.setMinimumWidth(pbtn.sizeHint().width() + 10)
-                pbtn.clicked.connect(lambda _=False, k=len(self._projects) - 1: self._listen(k))
+                pbtn.clicked.connect(lambda _=False, k=len(self._projects) - 1: self._watch(k))
                 self.tree.setItemWidget(it, C_PLAY, pbtn)
                 self._play_btns[len(self._projects) - 1] = pbtn
             if ok and not self.music_only:
@@ -818,13 +820,33 @@ class BatchDialog(QDialog):
                 durations[os.path.normcase(c.path)] = (self.template.video.image_duration if info.is_image
                                                        else info.duration)
         ov = self._overrides.get(job.folder)
-        preset = None if ov else self.preset.currentText()
+        p = self.preset.currentData() or {}
+        if p.get("kind") == "sequence":  # mẫu "lần lượt từng loop": chỉnh bằng hộp thoại Xếp lần lượt
+            self._edit_sequence(row, clips, durations, p, ov)
+            return
+        preset = None if ov else (self.preset.currentData() or {}).get("key")
         dlg = InterleaveDialog(clips, durations, self.settings, self, preset_name=preset)
         dlg.setWindowTitle(f"Chỉnh thứ tự cảnh — {job.name}")
         if ov:  # mở lại: điền đúng như lần bấm OK trước (số lần xuất hiện, số lượt, cảnh bỏ tick…)
             self._restore_state(dlg, ov[1])
         if dlg.exec() and dlg.result_clips:
             self._overrides[job.folder] = (dlg.result_clips, self._dialog_state(dlg))
+            self._rebuild()
+
+    def _edit_sequence(self, row: int, clips, durations: dict, preset: dict, ov) -> None:
+        from .sequence_dialog import SequenceDialog
+        job = self.jobs[row]
+        dlg = SequenceDialog(clips, durations, self.settings, self)
+        dlg.setWindowTitle(f"Chỉnh thứ tự — {job.name}")
+        st = ov[1] if ov and ov[1].get("kind") == "sequence" else {
+            "plays": str(preset.get("base", "60")), "pos": preset.get("content", "start"), "repeat": 1}
+        dlg.plays.setText(st["plays"])
+        dlg.pos.setCurrentIndex(max(0, dlg.pos.findData(st["pos"])))
+        dlg.repeat.setValue(int(st.get("repeat", 1)))
+        if dlg.exec() and dlg.result_clips:
+            self._overrides[job.folder] = (dlg.result_clips, {"kind": "sequence", "plays": dlg.plays.text().strip(),
+                                                              "pos": dlg.pos.currentData(),
+                                                              "repeat": dlg.repeat.value()})
             self._rebuild()
 
     @staticmethod
@@ -882,15 +904,57 @@ class BatchDialog(QDialog):
         folder = self.jobs[row].folder
         menu = QMenu(self)
         if not self.music_only:
-            menu.addAction(icons.icon("repeat", 14), "Chỉnh thứ tự cảnh cho video này…", lambda: self._edit(row))
+            menu.addAction(icons.icon("repeat", 14), "Chỉnh thứ tự clip cho video này…", lambda: self._edit(row))
             if folder in self._overrides:
-                menu.addAction(icons.icon("undo", 14), "Bỏ chỉnh tay — dùng lại mẫu chung", lambda: self._reset(row))
+                menu.addAction(icons.icon("undo", 14), "Bỏ chỉnh tay — dùng lại cách xếp chung", lambda: self._reset(row))
             menu.addSeparator()
         menu.addAction(icons.icon("sliders", 14), f"Chỉnh âm lượng {what} này…", lambda: self._edit_volume(row))
         if folder in self._vol_overrides:
             menu.addAction(icons.icon("undo", 14), "Bỏ âm lượng riêng — dùng mức chung", lambda: self._reset_volume(row))
-        menu.addAction(icons.icon("play", 14), "Nghe thử 20 giây", lambda: self._listen(row))
+        menu.addAction(icons.icon("play", 14), f"Xem {what} này trong trình phát", lambda: self._watch(row))
         menu.exec(self.tree.viewport().mapToGlobal(pos))
+
+    # ---------- trình phát ----------
+    def _current_row(self) -> int | None:
+        it = self.tree.currentItem()
+        if it is not None:
+            r = self.tree.indexOfTopLevelItem(it)
+            if 0 <= r < len(self._projects) and self._projects[r] is not None:
+                return r
+        return None
+
+    def _load_preview(self, play: bool = False) -> None:
+        """Trình phát bên phải hiện đúng video của dòng đang chọn (âm lượng chung hoặc riêng của dòng đó)."""
+        from .preview_player import project_signature
+        row = self._current_row()
+        if row is None:
+            if self._preview_key is not None or self.player_panel.player.project is not None:
+                self._preview_key = None
+                self.player_panel.title.setText(f"{self._unit.upper()} ĐANG CHỌN")
+                self.player_panel.clear(f"Bấm một dòng để xem {self._unit} đó")
+            return
+        vol = self._vol_for(row)
+        proj = self._apply_vol(copy.deepcopy(self._projects[row]), vol)
+        key = (self.jobs[row].folder, project_signature(proj))
+        if key != self._preview_key:
+            self._preview_key = key
+            self.player_panel.title.setText(self.jobs[row].name.upper())
+            self.player_panel.open_project(proj, self._gains(vol))
+        else:
+            self.player_panel.player.set_gains(self._gains(vol))
+        if play:
+            self.player_panel.player.play()
+
+    def _watch(self, row: int) -> None:
+        """Nút Xem / chuột phải: chọn dòng đó và phát ngay."""
+        if not (0 <= row < len(self._projects)) or self._projects[row] is None:
+            return
+        self.tree.setCurrentItem(self.tree.topLevelItem(row))
+        self._preview_timer.stop()
+        self._load_preview(play=True)
+
+    def _preview_row(self, row: int) -> None:  # tên cũ (bài kiểm tra / chỗ gọi cũ)
+        self._watch(row)
 
     # ---------- âm lượng ----------
     def _batch_vol(self) -> dict:
@@ -922,11 +986,10 @@ class BatchDialog(QDialog):
             s.setValue(a.volume)
 
     def _volumes_changed(self) -> None:
-        """Kéo thanh âm lượng chung: đang nghe dòng nào (không có âm lượng riêng) thì đổi ngay."""
-        r = self._playing_row
-        if r is not None and self.live.is_playing() and self.jobs[r].folder not in self._vol_overrides:
-            for k, v in self._gains(self._batch_vol()).items():
-                self.live.set_gain(k, v)
+        """Kéo thanh âm lượng chung: dòng đang xem (không có âm lượng riêng) nghe đổi ngay."""
+        r = self._current_row()
+        if r is not None and self.jobs[r].folder not in self._vol_overrides:
+            self.player_panel.player.set_gains(self._gains(self._batch_vol()))
 
     def _edit_volume(self, row: int) -> None:
         proj = self._projects[row]
@@ -946,90 +1009,28 @@ class BatchDialog(QDialog):
         if self._vol_overrides.pop(self.jobs[row].folder, None) is not None:
             self._rebuild()
 
-    # ---------- nghe thử từng dòng ----------
-    def _listen(self, row: int) -> None:
-        if self._projects[row] is None:
-            return
-        if self._playing_row == row:  # bấm lại dòng đang nghe / đang chuẩn bị = dừng
-            self._stop_listen()
-            return
-        self._stop_listen()
-        total, changes = self._row_info[row]
-        at = self.listen_at.currentData()
-        start = {"start": 0.0, "mid": total / 2,
-                 "change": max(0.0, changes[0] - 8) if changes else 0.0}[at]
-        self._playing_row = row
-        btn = self._play_btns.get(row)
-        if btn:
-            btn.setText("Dừng")
-            btn.setIcon(icons.icon("stop", 12))
-        self.listen_status.setText(f"Đang chuẩn bị <b>{self.jobs[row].name}</b> (lần đầu đo độ to các bài nên lâu "
-                                   "hơn một chút)…")
-        self.stems_job.start(self._projects[row], start, tag=row)
-
-    def _on_stems(self, payload, err: str, tag) -> None:
-        if tag != self._playing_row:
-            return
-        if err or not payload:
-            self.listen_status.setText("<span style='color:#fca5a5'>Chưa nghe thử được: "
-                                       + (err or "lỗi").strip().splitlines()[-1][:200] + "</span>")
-            self._reset_play_btn(tag)
-            self._playing_row = None
-            return
-        data, start = payload
-        self._listen_start = start
-        gains = self._gains(self._vol_for(tag))
-        if self.live.available():
-            self.live.play(data, gains)
-            self._listen_tick.start()
-            self._update_listen_status()
-        else:  # máy không phát trực tiếp được: hoà sẵn rồi mở bằng trình phát mặc định
-            import wave
-            from .live_mix import CH, RATE, WIDTH, Mixer
-            out = ft.preview_dir() / "nghe-thu_hang-loat.wav"
-            with wave.open(str(out), "wb") as f:
-                f.setnchannels(CH)
-                f.setsampwidth(WIDTH)
-                f.setframerate(RATE)
-                f.writeframes(Mixer(data, gains).mix_all())
-            w.open_with_default_app(str(out))
-            self._listen_finished()
-
-    def _update_listen_status(self) -> None:
-        r = self._playing_row
-        if r is None or not self.live.is_playing():
-            return
-        pos = min(20.0, self.live.position())
-        own = " (âm lượng riêng)" if self.jobs[r].folder in self._vol_overrides else ""
-        self.listen_status.setText(f"Đang nghe <b>{self.jobs[r].name}</b>{own} — {format_hms(self._listen_start + pos)} "
-                                   f"({int(pos)}/20 giây). Kéo thanh âm lượng là nghe đổi ngay.")
-
-    def _reset_play_btn(self, row) -> None:
-        btn = self._play_btns.get(row) if row is not None else None
-        if btn:
-            btn.setText("Nghe")
-            btn.setIcon(icons.icon("play", 12))
-
-    def _listen_finished(self) -> None:
-        self._listen_tick.stop()
-        self._reset_play_btn(self._playing_row)
-        self._playing_row = None
-        self.listen_status.setText("Đã nghe xong. Bấm <b>Nghe</b> ở dòng khác, hoặc đổi mốc <b>Nghe từ</b>.")
-
     def _stop_listen(self) -> None:
-        if not hasattr(self, "live"):
-            return
-        self.stems_job.cancel()
-        self.live.stop()
-        self._listen_tick.stop()
-        self._reset_play_btn(self._playing_row)
-        self._playing_row = None
+        """Tạm dừng trình phát (đổi kiểu, mở hộp thoại con…)."""
+        if hasattr(self, "player_panel"):
+            self.player_panel.player.pause()
 
-    def done(self, r) -> None:  # đóng hộp thoại: dừng nghe
-        self._stop_listen()
+    def done(self, r) -> None:  # đóng hộp thoại: dừng hẳn trình phát
+        if hasattr(self, "player_panel"):
+            self._preview_timer.stop()
+            self.player_panel.shutdown()
         super().done(r)
 
+    def _sync_preview(self) -> None:
+        if self.tree.currentItem() is None:
+            for r, p in enumerate(self._projects):
+                if p is not None:
+                    self.tree.setCurrentItem(self.tree.topLevelItem(r))
+                    break
+        self._preview_timer.start()
+
     def _update_summary(self) -> None:
+        if hasattr(self, "player_panel"):
+            self._sync_preview()  # trình phát bên phải: theo bảng vừa dựng lại / dòng đang chọn
         chosen = [i for i in range(self.tree.topLevelItemCount())
                   if self.tree.topLevelItem(i).checkState(C_NAME) == Qt.CheckState.Checked and self._projects[i]]
         total = sum(self.tree.topLevelItem(i).data(C_NAME, Qt.ItemDataRole.UserRole) or 0 for i in chosen)
@@ -1059,7 +1060,7 @@ class BatchDialog(QDialog):
     def _save_settings(self) -> None:
         s = self.settings
         s.setValue("batch/folder", self.folder.text().strip())
-        s.setValue("batch/preset", self.preset.currentText())
+        s.setValue("batch/preset", (self.preset.currentData() or {}).get("key", self.preset.currentText()))
         s.setValue("batch/music", self.music.currentData())
         s.setValue("batch/loop_xf", self.loop_xf.value())
         s.setValue("batch/next_xf", self.next_xf.value())

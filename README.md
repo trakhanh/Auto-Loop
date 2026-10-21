@@ -4,7 +4,7 @@
 
 # KT Loop Station
 
-**Ghép và loop clip + nhạc thành video YouTube dài hàng giờ — chỉ vài cú kéo thả.**
+**Ghép và loop clip + nhạc thành video YouTube dài hàng giờ — xem trước ngay trong app, xuất nhanh bằng card đồ hoạ.**
 
 <sub>By Khánh Trà · Ứng dụng Windows · Giao diện tiếng Việt</sub>
 
@@ -25,9 +25,42 @@
 
 <br><br>
 
-<img src="docs/screenshots/02-video.png" width="900" alt="Giao diện KT Loop Station">
+<img src="docs/screenshots/02-video.png" width="900" alt="Giao diện KT Loop Station: bảng clip bên trái, Trình phát bên phải, dòng thời gian ở đáy">
+
+<sub>Trang đang làm bên trái · <b>Trình phát</b> bên phải · <b>dòng thời gian</b> ở đáy — bố cục giống CapCut / Premiere</sub>
 
 </div>
+
+<br>
+
+## Có gì mới ở 1.5
+
+<table>
+<tr>
+<td width="50%" valign="top">
+<img src="docs/icons/play.png" width="36"><br>
+<b>Trình phát ngay trong app</b><br>
+Xem thử video thành phẩm — hình, nhạc, tiếng gốc, tiếng nền, hoà hình, màu &amp; logo y như bản xuất — <b>không phải xuất file</b>. Kéo vạch trên dòng thời gian để tua, <kbd>Space</kbd> phát / dừng ở mọi chỗ, nhấp đúp để xem toàn màn hình. Sửa dự án là trình phát tự cập nhật.
+</td>
+<td width="50%" valign="top">
+<img src="docs/icons/sort.png" width="36"><br>
+<b>Xếp lần lượt từng loop</b><br>
+Thư mục có <code>Content.mp4</code> + <code>Loop1.mp4</code> … <code>Loop6.mp4</code>? Bấm <b>Xếp lần lượt…</b> → <i>Content → Loop1 ×60 → Loop2 ×60 → … → Loop6 ×60</i>. App tự gợi ý khi kéo thư mục vào, và xuất theo fps của các loop để hình không giật.
+</td>
+</tr>
+<tr>
+<td valign="top">
+<img src="docs/icons/folder.png" width="36"><br>
+<b>Xuất hàng loạt dễ hơn</b><br>
+3 nút kiểu xuất ngay trong hộp thoại (Video có nhạc · Chỉ video · Chỉ nhạc), khung ghi rõ mỗi thư mục con cần có gì, <b>trình phát nhúng</b> để xem từng video, ô độ dài giống hệt trang chính.
+</td>
+<td valign="top">
+<img src="docs/icons/eye.png" width="36"><br>
+<b>Chung một bộ từ ngữ</b><br>
+Mỗi việc chỉ một tên ở mọi trang (Nối loop · Sang clip · Dài bao lâu · Cách xếp clip…). Hướng dẫn trong app (<kbd>F1</kbd>) có trang <b>Từ ngữ trong app</b>. Thêm <kbd>Ctrl</kbd>+<kbd>C</kbd> / <kbd>Ctrl</kbd>+<kbd>V</kbd> / <kbd>Ctrl</kbd>+<kbd>D</kbd> cho bảng clip và playlist.
+</td>
+</tr>
+</table>
 
 <br>
 
@@ -38,34 +71,34 @@
 <td width="33%" valign="top">
 <img src="docs/icons/film.png" width="36"><br>
 <b>Loop clip thành video dài</b><br>
-Mỗi clip phát <code>70</code> lần, ngẫu nhiên <code>50-80</code>, hoặc cho đủ <code>10p</code> / <code>3:00:00</code>. Cắt đoạn, crossfade, Intro / Outro.
+Mỗi clip phát <code>70</code> lần, ngẫu nhiên <code>50-80</code>, hoặc cho đủ <code>10p</code>. Video dài đúng số giờ đặt ở 3 ô giờ · phút · giây. Cắt đoạn, hoà hình, Intro / Outro.
 </td>
 <td width="33%" valign="top">
 <img src="docs/icons/repeat.png" width="36"><br>
-<b>Xen kẽ clip nền tự động</b><br>
-Đặt tên <code>loop_…</code> cho clip nền, <code>2_…</code>, <code>3_…</code> cho các cảnh → app tự xếp <i>nền → cảnh → nền…</i>
+<b>Tự xếp clip theo tên file</b><br>
+<b>Xen kẽ clip nền</b>: <code>loop_…</code> là clip nền, <code>2_…</code>, <code>3_…</code> là cảnh → <i>nền → cảnh → nền…</i>. <b>Xếp lần lượt</b>: <i>Loop1 ×60 → Loop2 ×60 …</i>
 </td>
 <td width="33%" valign="top">
 <img src="docs/icons/music.png" width="36"><br>
 <b>Nhạc tự lặp theo video</b><br>
-Playlist lặp đủ độ dài, chuẩn hoá -14 LUFS, crossfade giữa bài, ghim bài. Hoặc xuất riêng file nhạc dài, nhiều bản khác thứ tự.
+Playlist lặp đủ độ dài, chuẩn hoá -14 LUFS, hoà tiếng giữa bài, ghim bài. Hoặc xuất riêng file nhạc dài, nhiều bản khác thứ tự.
 </td>
 </tr>
 <tr>
 <td valign="top">
 <img src="docs/icons/waves.png" width="36"><br>
 <b>Tiếng nền có sẵn</b><br>
-Mưa rào, mưa hiên nhà, sóng biển, gió, lửa củi, white / pink / brown noise — app tự tạo, lặp liền mạch. Làm được cả file ASMR 8 tiếng.
+Mưa rào, mưa hiên nhà, sóng biển, gió, lửa củi, white / pink / brown noise — app tự tạo, lặp liền mạch. Làm được cả file ASMR 8 giờ.
 </td>
 <td valign="top">
 <img src="docs/icons/sliders.png" width="36"><br>
-<b>Bảng trộn âm + nghe thử</b><br>
-Chỉnh to / nhỏ nhạc, tiếng gốc, từng lớp tiếng nền, từng bài. Nghe thử 20 giây — kéo thanh là nghe đổi ngay.
+<b>Bảng trộn âm</b><br>
+Chỉnh to / nhỏ nhạc, tiếng gốc clip, từng lớp tiếng nền, từng bài — đang phát ở Trình phát mà kéo thanh là nghe đổi ngay.
 </td>
 <td valign="top">
 <img src="docs/icons/zap.png" width="36"><br>
 <b>Xuất nhanh bằng card đồ hoạ</b><br>
-NVIDIA / Intel / AMD (không có card thì dùng CPU). Video 10 tiếng chỉ vài phút. Dự đoán dung lượng trước khi xuất.
+NVIDIA / Intel / AMD (không có card thì dùng CPU). Video 10 giờ chỉ vài phút. Dự đoán dung lượng trước khi xuất.
 </td>
 </tr>
 <tr>
@@ -77,7 +110,7 @@ Xếp nhiều video rồi để máy xuất lần lượt; máy không tự ng�
 <td valign="top">
 <img src="docs/icons/folder.png" width="36"><br>
 <b>Xuất hàng loạt theo thư mục</b><br>
-Mỗi thư mục con thành một video, chỉnh riêng thứ tự cảnh / âm lượng từng video, nghe thử từng dòng.
+Mỗi thư mục con thành một video / file nhạc, chỉnh riêng thứ tự clip / âm lượng từng video, xem từng video ngay trong hộp thoại.
 </td>
 <td valign="top">
 <img src="docs/icons/file_plus.png" width="36"><br>
@@ -112,19 +145,19 @@ Tracklist (dán làm Chapters), mốc thời gian đoạn LOOP / THƯỜNG (<cod
 </table>
 
 > [!TIP]
-> Không cần mật khẩu quản trị, không cần cài thêm gì (đã kèm sẵn FFmpeg). Có sẵn **dự án mẫu** ở màn hình **Bắt đầu** để bấm thử ngay.
+> Không cần mật khẩu quản trị, không cần cài thêm gì (đã kèm sẵn FFmpeg). Màn hình **Bắt đầu** có nút **Thử: Loop 70 lần** / **Thử: 3 tiếng** — dự án có sẵn clip, nhạc, tiếng nền để bấm Phát thử ngay.
 
 <details>
-<summary><b>Thông tin thêm</b> (yêu cầu máy, gỡ cài đặt, dữ liệu lưu ở đâu)</summary>
+<summary><b>Thông tin thêm</b> (yêu cầu máy, cập nhật, gỡ cài đặt, dữ liệu lưu ở đâu)</summary>
 
 <br>
 
 - Windows 10 / 11 64-bit. Cài vào tài khoản đang dùng, **không cần quyền quản trị**.
 - Card đồ hoạ NVIDIA / Intel / AMD giúp xuất nhanh hơn nhiều; không có card thì app tự dùng CPU.
 - Cảnh báo *“Windows protected your PC”* xuất hiện vì bộ cài chưa ký số — bấm **More info → Run anyway** để cài.
-- Cài bản mới đè lên bản cũ được; dự án và hàng đợi được giữ nguyên.
+- **Lên bản mới**: tải bộ cài mới, cài đè lên bản cũ; dự án, hàng đợi, cài đặt được giữ nguyên.
 - Gỡ cài đặt: *Settings → Apps → KT Loop Station → Uninstall*.
-- Dự án tự lưu, hàng đợi, bộ nhớ đệm nằm ở `%LOCALAPPDATA%\KTLoopStation`.
+- Dự án tự lưu, hàng đợi, bộ nhớ đệm nằm ở `%LOCALAPPDATA%\KTLoopStation` (Cài đặt → *Mở thư mục dữ liệu*).
 
 </details>
 
@@ -134,14 +167,30 @@ Tracklist (dán làm Chapters), mốc thời gian đoạn LOOP / THƯỜNG (<cod
 
 | | Bước | Làm gì |
 |:-:|---|---|
-| **1** | **Video** | Kéo thả clip hoặc cả thư mục vào bảng, đặt số lần phát (có clip `loop…` thì bấm **Xen kẽ clip nền**). |
-| **2** | **Nhạc &amp; Nền** | Kéo thả bài nhạc — nhạc tự lặp theo độ dài video. Thêm tiếng mưa, chỉnh **Bảng trộn âm**, bấm **Nghe thử 20 giây**. |
-| **3** | **Xuất** | Chọn thư mục lưu → **Bắt đầu xuất**, hoặc **Thêm vào hàng đợi** để xuất nhiều video liền nhau. |
+| **1** | **Video** | Kéo thả clip hoặc cả thư mục vào bảng, đặt **số lần phát**. Có clip `loop…` thì bấm **Xen kẽ clip nền…**; có nhiều clip Loop1, Loop2… thì bấm **Xếp lần lượt…** |
+| **2** | **Nhạc &amp; Nền** | Kéo thả bài nhạc — nhạc tự lặp theo độ dài video. Thêm tiếng mưa, chỉnh **Bảng trộn âm**. |
+| **3** | **Xuất** | Bấm Phát ở **Trình phát** để xem thử, rồi chọn thư mục lưu → **Bắt đầu xuất**, hoặc **Thêm vào hàng đợi** để xuất nhiều video liền nhau. |
 
-Chọn kiểu sản phẩm ở thanh trên cùng: **Video có nhạc** (`.mp4`) · **Chỉ video** (`.mp4`, giữ tiếng gốc / thêm tiếng nền) · **Chỉ nhạc** (`.mp3 .m4a .flac .wav`). Hướng dẫn có ảnh minh hoạ từng bước nằm ngay trong app: **Hướng dẫn** ở thanh bên hoặc phím **F1**.
+Chọn **kiểu xuất** ở thanh trên cùng: **Video có nhạc** (`.mp4`) · **Chỉ video** (`.mp4`, giữ tiếng gốc clip / thêm tiếng nền) · **Chỉ nhạc** (`.mp3 .m4a .flac .wav`). Hướng dẫn có ảnh minh hoạ từng bước nằm ngay trong app: **Hướng dẫn** ở thanh bên hoặc phím <kbd>F1</kbd>.
+
+<details>
+<summary><b>Phím tắt hay dùng</b></summary>
+
+<br>
+
+| Phím | Tác dụng |
+|---|---|
+| <kbd>Space</kbd> | Phát / dừng Trình phát — ở mọi chỗ trong cửa sổ, trừ lúc đang gõ chữ vào ô |
+| <kbd>←</kbd> <kbd>→</kbd> · <kbd>Home</kbd> | Tua 5 giây · về đầu (bấm vào khung hình trước) |
+| Nhấp đúp vào hình · <kbd>Esc</kbd> | Xem toàn màn hình · thoát |
+| <kbd>Ctrl</kbd>+<kbd>C</kbd> / <kbd>Ctrl</kbd>+<kbd>V</kbd> / <kbd>Ctrl</kbd>+<kbd>D</kbd> | Chép / dán / nhân bản dòng (bảng clip và playlist) |
+| <kbd>Ctrl</kbd>+<kbd>Space</kbd> · <kbd>Delete</kbd> | Bật / tắt dòng · xoá dòng |
+| <kbd>Ctrl</kbd>+<kbd>Z</kbd> · <kbd>Ctrl</kbd>+<kbd>S</kbd> · <kbd>F1</kbd> | Hoàn tác · lưu dự án · mở Hướng dẫn |
+
+</details>
 
 > [!TIP]
-> Cần tài liệu đầy đủ để gửi hoặc in cho nhân viên? Tải **[Sổ tay KT Loop Station](https://github.com/trakhanh/Auto-Loop/releases/latest/download/So-tay-KT-Loop-Station.html)** — một file, mở bằng trình duyệt (Chrome / Edge), có ảnh chụp đánh số: cài đặt, làm video loop có nhạc, chỉ video, chỉ nhạc, xuất hàng loạt, xử lý sự cố. Muốn in hoặc lưu PDF: mở file rồi bấm `Ctrl+P`.
+> Cần tài liệu đầy đủ để gửi hoặc in cho nhân viên? Tải **[Sổ tay KT Loop Station](https://github.com/trakhanh/Auto-Loop/releases/latest/download/So-tay-KT-Loop-Station.html)** — một file, mở bằng trình duyệt (Chrome / Edge), có ảnh chụp đánh số: cài đặt, trình phát, làm video loop có nhạc, xếp lần lượt, chỉ nhạc, xuất hàng loạt, từ ngữ trong app, xử lý sự cố. Muốn in hoặc lưu PDF: mở file rồi bấm `Ctrl+P`.
 
 <br>
 
@@ -150,11 +199,14 @@ Chọn kiểu sản phẩm ở thanh trên cùng: **Video có nhạc** (`.mp4`) 
 <table>
 <tr>
 <td width="50%"><img src="docs/screenshots/01-bat-dau.png"><p align="center"><sub><b>Màn hình Bắt đầu</b> — chọn việc muốn làm</sub></p></td>
-<td width="50%"><img src="docs/screenshots/03-nhac-bang-tron-am.png"><p align="center"><sub><b>Trang Nhạc</b> — playlist, Bảng trộn âm, nghe thử</sub></p></td>
+<td width="50%"><img src="docs/screenshots/03-nhac-bang-tron-am.png"><p align="center"><sub><b>Trang Nhạc</b> — playlist, Bảng trộn âm, Trình phát</sub></p></td>
 </tr>
 <tr>
 <td><img src="docs/screenshots/04-xuat.png"><p align="center"><sub><b>Trang Xuất</b> — chất lượng, dự đoán dung lượng, hàng đợi</sub></p></td>
-<td><img src="docs/screenshots/05-hang-loat.png"><p align="center"><sub><b>Xuất hàng loạt</b> — mỗi thư mục con một video</sub></p></td>
+<td><img src="docs/screenshots/05-hang-loat.png"><p align="center"><sub><b>Xuất hàng loạt</b> — 3 kiểu xuất, mỗi thư mục con một video, trình phát nhúng</sub></p></td>
+</tr>
+<tr>
+<td colspan="2" align="center"><img src="docs/screenshots/06-xep-lan-luot.png" width="480"><p align="center"><sub><b>Xếp lần lượt</b> — Content → Loop1 ×60 → Loop2 ×60 → …</sub></p></td>
 </tr>
 </table>
 
@@ -187,20 +239,25 @@ Các script khác (đều dùng thư mục dữ liệu riêng, không đụng d�
 |---|---|
 | `python tests/render_check.py <thư_mục>` | Xuất thật 14 kịch bản rồi kiểm tra bằng ffprobe |
 | `python tests/ui_smoke.py <thư_mục>` | Chạy khắp giao diện (không hiện cửa sổ), bắt lỗi ngầm |
-| `python tests/batch_volume_check.py <thư_mục>` | Kiểm tra âm lượng / nghe thử trong Xuất hàng loạt |
-| `python tests/help_check.py <thư_mục>` | Kiểm tra trang Hướng dẫn (mọi chủ đề, ảnh, ô tìm, nút) |
-| `python tests/make_help_images.py` | Chụp lại ảnh đánh số cho trang Hướng dẫn |
-| `python tests/make_screenshots.py` · `make_readme_icons.py` | Ảnh màn hình / biểu tượng cho README |
+| `python tests/preview_check.py <thư_mục>` | Trình phát: đồng bộ hình / tiếng, tua, dừng, sửa dự án khi đang xem |
+| `python tests/player_audit_check.py <thư_mục>` | Trình phát: không tiếng, hết video, bộ nhớ đệm, nhấp đúp |
+| `python tests/keys_check.py <thư_mục>` | Phím Space / Ctrl+Space ở mọi chỗ |
+| `python tests/sequence_check.py <thư_mục>` | Xếp lần lượt, fps theo clip chính, Ctrl+C / V / D |
+| `python tests/batch_kinds_check.py <thư_mục>` · `batch_volume_check.py` | Xuất hàng loạt: 3 kiểu, độ dài, âm lượng, trình phát |
+| `python tests/help_check.py <thư_mục>` · `input_check.py` | Trang Hướng dẫn · ô nhập giờ / phút / giây |
+| `python tests/make_help_images.py` · `make_screenshots.py` · `make_readme_icons.py` | Ảnh cho Hướng dẫn / README |
 | `python tests/make_test_pack.py` · `make_samples.py` | Tạo lại media mẫu `Mau-Test/`, `samples/` |
 
 ### Cấu trúc
 
 ```
 app.py                  khởi động (màn hình chờ, chỉ mở 1 cửa sổ, ghi lỗi bất ngờ)
-loopstation/core/       xử lý: lập kế hoạch phát, dựng khối video / âm thanh, xuất, hàng đợi, hàng loạt…
-loopstation/ui/         giao diện PySide6 (các trang, Bảng trộn âm, Hướng dẫn, hộp thoại)
+loopstation/core/       xử lý: lập kế hoạch phát, dựng khối video / âm thanh, xuất, hàng đợi, hàng loạt,
+                        bộ máy xem trước (preview_engine: dựng khung hình thô, không mã hoá)
+loopstation/ui/         giao diện PySide6 (các trang, Trình phát, Bảng trộn âm, Hướng dẫn, hộp thoại)
 tests/                  kiểm thử + script kiểm tra / tạo ảnh / tạo mẫu
 Mau-Test/, samples/     media mẫu do script tự tạo (đi kèm bộ cài)
+docs/                   ảnh README, sổ tay nhân viên (So-tay-KT-Loop-Station.html)
 SPEC.md                 đặc tả chi tiết
 ```
 

@@ -138,7 +138,7 @@ class RenderJob:
         plan = tl.video
         total = tl.total
         self.log(f"Xuất {tl.width}x{tl.height} @ {float(tl.fps):g} fps, dài {_fmt_dur(total)} "
-                 f"({plan.rounds} vòng).")
+                 f"({plan.rounds} lượt).")
 
         out_dir = self.output.parent
         out_dir.mkdir(parents=True, exist_ok=True)

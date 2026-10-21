@@ -69,7 +69,20 @@ class MusicTab(QWidget):
         self.list.emptyClicked.connect(self._add_files)
         self.list.openRequested.connect(w.open_with_default_app)
         self.list.menu_extras = [("pin", "Ghim / bỏ ghim: luôn có trong file (mọi bản)", self._toggle_pin),
-                                 ("volume", "Đặt âm lượng bài đang chọn…", self._ask_track_volume)]
+                                 ("volume", "Đặt âm lượng bài đang chọn…", self._ask_track_volume),
+                                 ("copy", "Nhân bản bài (Ctrl+D) — phát lại bài này ở chỗ khác", lambda _it: self._duplicate()),
+                                 ("copy", "Chép các bài đang chọn (Ctrl+C)", lambda _it: self._copy_rows()),
+                                 ("file_plus", "Dán bên dưới (Ctrl+V)", lambda _it: self._paste_rows())]
+        # Ctrl+D nhân bản · Ctrl+C / Ctrl+V chép rồi dán xuống dưới bài đang chọn (giữ số lần, âm lượng, ghim)
+        from PySide6.QtGui import QKeySequence, QShortcut
+        self._clipboard: list[tuple] = []
+        for seq, fn, ctx in ((QKeySequence("Ctrl+D"), self._duplicate, Qt.ShortcutContext.WidgetWithChildrenShortcut),
+                             (QKeySequence(QKeySequence.StandardKey.Copy), self._copy_rows, Qt.ShortcutContext.WidgetShortcut),
+                             (QKeySequence(QKeySequence.StandardKey.Paste), self._paste_rows,
+                              Qt.ShortcutContext.WidgetShortcut)):
+            sc = QShortcut(seq, self.list)
+            sc.setContext(ctx)
+            sc.activated.connect(fn)
         self.toolbar = w.ListToolbar(self.list, self._add_files, self._add_folder, random.Random)
         self.count_label = QLabel("0 bài")
         self.count_label.setObjectName("chip")
@@ -265,7 +278,7 @@ class MusicTab(QWidget):
         av.addWidget(ar_box)
 
         # ----- xuất riêng nhạc: chuyển sang kiểu "Chỉ nhạc" -----
-        to_music = QPushButton("Chuyển sang chế độ 'Chỉ nhạc'")
+        to_music = QPushButton("Chuyển sang kiểu “Chỉ nhạc”")
         to_music.setIcon(icons.icon("music", 14))
         to_music.setIconSize(QSize(14, 14))
         to_music.clicked.connect(lambda: self.switchModeRequested.emit("music_only"))
@@ -288,7 +301,7 @@ class MusicTab(QWidget):
         f_len = QFormLayout(self.g_length)
         f_len.setVerticalSpacing(8)
         f_len.addRow(w.muted("Playlist tự lặp cho đủ độ dài này. Ví dụ 10 bài dài 30 phút → chọn <b>1h</b> "
-                             "là ra file 1 tiếng."))
+                             "là ra file 1 giờ."))
         f_len.addRow("Tính theo", self.len_mode)
         self.len_target_wrap = QWidget()
         self.len_target_wrap.setLayout(quick_buttons(
@@ -614,6 +627,52 @@ class MusicTab(QWidget):
         self.set_playlist_enabled(mode != "video_only")
         self.g_exp.setVisible(mode == "video_music")
         self.g_length.setVisible(mode == "music_only")
+
+    def _row_copy(self, it) -> tuple:
+        t: MusicTrack = it.data(0, w.ROLE_DATA)
+        return (t, it.data(0, w.ROLE_INFO), it.text(COL_PLAYS), it.text(COL_VOL), it.checkState(0))
+
+    def _insert_rows(self, rows: list[tuple], pos: int, what: str) -> None:
+        self.list.blockSignals(True)
+        new_items = []
+        for k, (t, info, plays, vol, check) in enumerate(rows):
+            # bản sao không mang ghim (ghim 2 lần = bài đó phát 2 lần liền ở đầu file)
+            it = self._make_item(MusicTrack(path=t.path, enabled=True, plays=t.plays, pinned=False,
+                                            volume=t.volume), info)
+            self.list.insertTopLevelItem(pos + k, it)
+            it.setText(COL_PLAYS, plays)
+            it.setText(COL_VOL, vol)
+            it.setCheckState(0, check)
+            new_items.append(it)
+        self.list.blockSignals(False)
+        self.list.clearSelection()
+        for it in new_items:
+            it.setSelected(True)
+        self.list.scrollToItem(new_items[-1])
+        self._refresh_track_styles()
+        self.status.setText(f"{what} {len(new_items)} bài — cùng một bài có thể phát ở nhiều chỗ trong playlist.")
+        self._emit()
+
+    def _duplicate(self) -> None:
+        sel = sorted(self.list.selectedItems(), key=self.list.indexOfTopLevelItem)
+        if not sel:
+            return
+        self._insert_rows([self._row_copy(it) for it in sel], self.list.indexOfTopLevelItem(sel[-1]) + 1, "Đã nhân bản")
+
+    def _copy_rows(self) -> None:
+        sel = sorted(self.list.selectedItems(), key=self.list.indexOfTopLevelItem)
+        if not sel:
+            return
+        self._clipboard = [self._row_copy(it) for it in sel]
+        self.status.setText(f"Đã chép {len(sel)} bài — chọn chỗ muốn dán rồi bấm Ctrl+V (dán ngay bên dưới).")
+
+    def _paste_rows(self) -> None:
+        if not self._clipboard:
+            self.status.setText("Chưa chép bài nào — bôi đen các bài rồi bấm Ctrl+C trước.")
+            return
+        sel = self.list.selectedItems()
+        pos = max(self.list.indexOfTopLevelItem(it) for it in sel) + 1 if sel else self.list.topLevelItemCount()
+        self._insert_rows(self._clipboard, pos, "Đã dán")
 
     def _make_item(self, t: MusicTrack, info: MediaInfo) -> QTreeWidgetItem:
         lufs = audio_build.cached_loudness(t.path) if info.ok else None

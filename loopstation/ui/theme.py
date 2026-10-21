@@ -11,7 +11,7 @@ from ..core import ffmpeg_tools as ft
 
 APP_NAME = "KT Loop Station"
 AUTHOR = "By Khánh Trà"
-APP_VERSION = "1.4.13"
+APP_VERSION = "1.5.0"
 # nơi lưu cài đặt (registry); KTLS_SETTINGS_ORG dùng cho test để không đụng cài đặt thật
 SETTINGS_ORG = os.environ.get("KTLS_SETTINGS_ORG", "KTLoopStation")
 
@@ -243,6 +243,26 @@ QComboBox QAbstractItemView {{ background: {C['surface2']}; border: 1px solid {C
     selection-background-color: {C['accent']}; padding: 4px; border-radius: 8px; }}
 
 QSpinBox, QDoubleSpinBox {{ padding-right: 20px; }}
+QFrame#playerPanel {{ background: #0b0d13; border-left: 1px solid {C['border']}; }}
+QLabel#playerInfo {{ color: {C['muted']}; background: {C['surface2']}; border-radius: 6px; padding: 1px 7px;
+                    font-size: 8.5pt; }}
+QLabel#playerTitle {{ color: {C['muted']}; font-weight: 700; font-size: 9pt; letter-spacing: 1px; }}
+QLabel#playerTime {{ color: {C['text']}; font-family: Consolas, 'Cascadia Mono', monospace; font-weight: 700; }}
+QLabel#playerTimeTotal {{ color: {C['muted']}; font-family: Consolas, 'Cascadia Mono', monospace; }}
+QPushButton#playerBtn {{ background: transparent; border: 1px solid transparent; border-radius: 9px; padding: 6px 8px;
+                        color: {C['text']}; font-weight: 700; font-size: 8.5pt; }}
+QPushButton#playerBtn:hover {{ background: {C['surface2']}; border-color: {C['border_light']}; }}
+QPushButton#playerBtn:disabled {{ color: #475166; }}
+QPushButton#playerPlay {{ background: qlineargradient(x1:0, y1:0, x2:1, y2:1, stop:0 #8f6dff, stop:1 #4f7dff);
+                         border: none; border-radius: 21px; min-width: 42px; max-width: 42px;
+                         min-height: 42px; max-height: 42px; padding: 0; }}
+QPushButton#playerPlay:hover {{ background: qlineargradient(x1:0, y1:0, x2:1, y2:1, stop:0 #a184ff, stop:1 #6a90ff); }}
+QPushButton#playerPlay:pressed {{ background: #6a4cf0; }}
+QPushButton#playerPlay:disabled {{ background: {C['surface3']}; }}
+QComboBox#playerCombo {{ padding: 2px 8px; font-size: 9pt; }}
+QWidget#timelineDock {{ background: {C['bg']}; border-top: 1px solid {C['border']}; }}
+QSplitter#workSplit::handle {{ background: {C['border']}; }}
+QSplitter#workSplit::handle:hover {{ background: {C['accent']}; }}
 QFrame#batchCard {{ background: {C['surface']}; border: 1px solid {C['border']}; border-radius: 10px; }}
 QLabel#batchTree {{ background: {C['field']}; border: 1px solid {C['border']}; border-radius: 8px; padding: 8px 12px; }}
 QSpinBox#timeBox {{ padding: 4px 2px; }}  /* ô giờ / phút / giây: không mũi tên, số căn giữa */

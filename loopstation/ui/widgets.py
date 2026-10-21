@@ -282,9 +282,9 @@ SAMPLE_NAMES = {"loop 70 lan": "Loop 70 lần", "3 tieng": "3 tiếng"}
 
 
 def sample_label(stem: str) -> str:
-    """'Du-an-mau - Loop 70 lan' → 'Mẫu: Loop 70 lần' (tên hiện trên nút dự án mẫu)."""
+    """'Du-an-mau - Loop 70 lan' → 'Thử: Loop 70 lần' (tên hiện trên nút dự án thử)."""
     name = stem.replace("Du-an-mau - ", "")
-    return "Mẫu: " + SAMPLE_NAMES.get(name.lower(), name)
+    return "Thử: " + SAMPLE_NAMES.get(name.lower(), name)
 
 
 def select_all_soon(widget) -> None:
@@ -479,7 +479,7 @@ def fold(text: str) -> str:
 
 class MediaList(QTreeWidget):
     """Bảng file: tick bật/tắt, kéo thả đổi thứ tự, kéo file từ Explorer vào,
-    bấm trực tiếp khi bảng trống để chọn file, phím Space bật/tắt, Delete để xoá."""
+    bấm trực tiếp khi bảng trống để chọn file, Ctrl+Space bật/tắt, Delete để xoá."""
     changed = Signal()
     filesDropped = Signal(list)
     openRequested = Signal(str)
@@ -668,7 +668,7 @@ class MediaList(QTreeWidget):
                 for ic, text, fn in getattr(self, "menu_extras", []):  # mục riêng của từng bảng
                     menu.addAction(icons.icon(ic, 14), text, lambda f=fn, it=item: f(it))
                 menu.addSeparator()
-            menu.addAction(icons.icon("check", 14), "Bật / Tắt dòng chọn (Space)", self.toggle_selected_checked)
+            menu.addAction(icons.icon("check", 14), "Bật / Tắt dòng chọn (Ctrl+Space)", self.toggle_selected_checked)
             menu.addAction(icons.icon("up", 14), "Đưa lên trên", lambda: self.move_selected(-1))
             menu.addAction(icons.icon("down", 14), "Đưa xuống dưới", lambda: self.move_selected(1))
             menu.addSeparator()
@@ -676,13 +676,15 @@ class MediaList(QTreeWidget):
         if self.topLevelItemCount() > 0:
             if not menu.isEmpty():
                 menu.addSeparator()
-            menu.addAction(icons.icon("check", 14), "Tick chọn tất cả", lambda: self.set_all_checked("all"))
-            menu.addAction("Bỏ tick tất cả", lambda: self.set_all_checked("none"))
+            menu.addAction(icons.icon("check", 14), "Bật tất cả", lambda: self.set_all_checked("all"))
+            menu.addAction("Tắt tất cả", lambda: self.set_all_checked("none"))
         if not menu.isEmpty():
             menu.exec(e.globalPos())
 
     def keyPressEvent(self, e: QKeyEvent) -> None:  # noqa: N802
-        if e.key() == Qt.Key.Key_Space and self.state() != QAbstractItemView.State.EditingState:
+        # Ctrl+Space bật / tắt dòng (Space để dành cho Phát / Dừng trình phát, như CapCut / Premiere)
+        if (e.key() == Qt.Key.Key_Space and e.modifiers() & Qt.KeyboardModifier.ControlModifier
+                and self.state() != QAbstractItemView.State.EditingState):
             self.toggle_selected_checked()
             return
         if e.key() == Qt.Key.Key_Delete and self.state() != QAbstractItemView.State.EditingState:
@@ -739,7 +741,7 @@ class ListToolbar(QWidget):
 
     def __init__(self, lst: MediaList, add_files, add_folder, rng_factory, parent=None):
         super().__init__(parent)
-        self.recursive = QCheckBox("Thư mục con")
+        self.recursive = QCheckBox("Quét thư mục con")
         self.recursive.setFixedHeight(32)
         self.recursive.setToolTip("Khi thêm thư mục hoặc kéo thả thư mục, tự quét cả các thư mục con bên trong")
         lay = FlowLayout(self, spacing=4)
@@ -772,7 +774,7 @@ class ListToolbar(QWidget):
         btn("", "Đưa dòng đang chọn lên trên", lambda: lst.move_selected(-1), "ghost", "up")
         btn("", "Đưa dòng đang chọn xuống dưới", lambda: lst.move_selected(1), "ghost", "down")
         btn("A–Z", "Sắp xếp tự nhiên theo tên (clip2 trước clip10)", lst.sort_by_name, "ghost", "sort")
-        btn("Trộn", "Xáo trộn ngẫu nhiên thứ tự ngay trên bảng",
+        btn("Xáo", "Xáo ngẫu nhiên thứ tự ngay trên bảng",
             lambda: lst.shuffle(rng_factory()), "ghost", "shuffle")
         sep()
 
@@ -782,8 +784,8 @@ class ListToolbar(QWidget):
         sel_btn.setIconSize(QSize(14, 14))
         sel_btn.setToolTip("Các thao tác bật/tắt nhanh danh sách")
         sel_menu = QMenu(sel_btn)
-        sel_menu.addAction(icons.icon("check", 14), "Bật (tick) tất cả", lambda: lst.set_all_checked("all"))
-        sel_menu.addAction("Tắt (bỏ tick) tất cả", lambda: lst.set_all_checked("none"))
+        sel_menu.addAction(icons.icon("check", 14), "Bật tất cả", lambda: lst.set_all_checked("all"))
+        sel_menu.addAction("Tắt tất cả", lambda: lst.set_all_checked("none"))
         sel_menu.addAction("Đảo ngược trạng thái bật/tắt", lambda: lst.set_all_checked("invert"))
         sel_menu.addAction("Chỉ bật các dòng đang bôi đen", lambda: lst.set_all_checked("selected"))
         sel_btn.setMenu(sel_menu)

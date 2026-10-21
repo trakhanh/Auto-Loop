@@ -186,14 +186,18 @@ def seamless_loop(runner: ft.Runner, path: str, duration: float) -> str:
 
 
 def ambient_graph(paths: list[str], volumes: list[int], total: float, fade_in: float = 0.0,
-                  fade_out: float = 0.0) -> tuple[list[str], list[str]]:
-    """Mỗi lớp tiếng nền tự lặp vô hạn rồi cắt đúng `total` giây. Trả về (dòng graph, nhãn)."""
+                  fade_out: float = 0.0, offsets: list[float] | None = None) -> tuple[list[str], list[str]]:
+    """Mỗi lớp tiếng nền tự lặp vô hạn rồi cắt đúng `total` giây. Trả về (dòng graph, nhãn).
+    `offsets`: bắt đầu từ giây thứ mấy của vòng lặp (nghe thử / xem trước giữa video: nghe đúng như bản xuất)."""
     lines, labels = [], []
     for k, (path, vol) in enumerate(zip(paths, volumes)):
         src = escape_filter_value(path.replace("\\", "/"))
+        off = (offsets[k] if offsets and k < len(offsets) else 0.0) or 0.0
+        cut = (f"atrim=start={off:.6f}:end={off + total:.6f},asetpts=PTS-STARTPTS" if off > 0
+               else f"atrim=end={total:.6f}")
         lines.append(f"amovie=filename={src}:loop=0,asetpts=N/SR/TB,aresample=48000,"
                      f"aformat=sample_fmts=fltp:channel_layouts=stereo,volume={vol / 100:.3f},"
-                     f"atrim=end={total:.6f}{_fades(fade_in, fade_out, total)}[amb{k}];")
+                     f"{cut}{_fades(fade_in, fade_out, total)}[amb{k}];")
         labels.append(f"amb{k}")
     return lines, labels
 

@@ -106,6 +106,14 @@ class MainWindow(QMainWindow):
         self._mixer_idle.timeout.connect(self._mixer_settled)
         self._mixer_dirty = False
         self.music_tab.mixer.changed.connect(self._mixer_idle.start)
+        self._preview_sig = ""
+        self._preview_timer = QTimer(self)  # chỉnh dự án → bản xem trước tự cập nhật (gom các lần sửa liền nhau)
+        self._preview_timer.setSingleShot(True)
+        self._preview_timer.setInterval(700)
+        self._preview_timer.timeout.connect(self._preview_refresh)
+        self.music_tab.mixer.changed.connect(self._preview_gains)
+        self.video_tab.timeline.seekRequested.connect(self._preview_seek)
+        self.video_tab.timeline.seek_enabled = True
         self.music_tab.mixer.playbackStopped.connect(self._mixer_stopped)
         self.music_tab.mixer.previewRequested.connect(self.preview_audio)
         self.music_tab.list.changed.connect(lambda: self.music_tab.mixer.mark_stale(
@@ -165,6 +173,11 @@ class MainWindow(QMainWindow):
         self.export_tab.set_queue(self.queue)
 
         self.setCentralWidget(self._build_shell())
+        self.viewer.positionChanged.connect(self.video_tab.timeline.set_playhead)
+        from .preview_player import SpaceToggle
+        self._space = SpaceToggle(self, lambda: self.viewer)  # Space = Phát / Dừng ở mọi chỗ (trừ khi đang gõ chữ)
+        self.viewer.player.stateChanged.connect(self._preview_state)
+        self.music_tab.mixer.previewRequested.connect(lambda *_: self.viewer.player.pause())
         self.toast = motion.Toast(self)
         self.video_tab.notify.connect(self.notify)
         for key, fn in ((QKeySequence.StandardKey.New, self.new_project),
@@ -415,24 +428,42 @@ class MainWindow(QMainWindow):
         self.tl_toggle.setIconSize(QSize(14, 14))
         self.tl_toggle.setCheckable(True)
         self.tl_toggle.setChecked(True)
-        self.tl_toggle.setToolTip("Ẩn / hiện thanh dòng thời gian trực quan phía trên")
-        pref = self.settings.value("ui/timeline", "")
+        self.tl_toggle.setToolTip("Ẩn / hiện dòng thời gian ở đáy màn hình (kéo vạch phát trên đó để tua trình phát)")
+        pref = self.settings.value("ui/timeline_dock", "")
         self._tl_user = pref in ("on", "off")  # người dùng đã tự chọn → không tự ẩn / hiện nữa
         if self._tl_user:
             self.tl_toggle.setChecked(pref == "on")
         # nối tín hiệu SAU khi đặt trạng thái đã lưu: lúc này khung dòng thời gian chưa được tạo
         self.tl_toggle.toggled.connect(self._update_timeline_visibility)
-        self.tl_toggle.clicked.connect(lambda on: (self.settings.setValue("ui/timeline", "on" if on else "off"),
+        self.tl_toggle.clicked.connect(lambda on: (self.settings.setValue("ui/timeline_dock", "on" if on else "off"),
                                                    setattr(self, "_tl_user", True)))
         hv.addWidget(self.tl_toggle)
 
-        # Thanh dòng thời gian dùng chung cho cả 3 bước (Video, Nhạc, Xuất)
+        # Thanh dòng thời gian dùng chung cho cả 3 bước (Video, Nhạc, Xuất) — nằm ở đáy như CapCut / Premiere
         self.timeline_wrap = QWidget()
-        self.timeline_wrap.setObjectName("subHeader")
+        self.timeline_wrap.setObjectName("timelineDock")
         tl_lay = QVBoxLayout(self.timeline_wrap)
         tl_lay.setContentsMargins(16, 8, 16, 8)
         tl_lay.setSpacing(0)
         tl_lay.addWidget(self.video_tab.timeline)
+
+        # Trình phát xem trước luôn hiện cạnh trang đang làm (bước Video / Nhạc / Xuất)
+        from PySide6.QtWidgets import QSplitter
+        from .preview_player import PreviewPanel
+        self.viewer = PreviewPanel(self.settings, self)
+        self.viewer.setMinimumWidth(300)
+        self.work = QSplitter(Qt.Orientation.Horizontal)
+        self.work.setObjectName("workSplit")
+        self.work.setHandleWidth(3)
+        self.work.setChildrenCollapsible(False)
+        self.work.addWidget(self.stack)
+        self.work.addWidget(self.viewer)
+        self.work.setStretchFactor(0, 3)
+        self.work.setStretchFactor(1, 2)
+        state = self.settings.value("ui/work_split")
+        if state is None or not self.work.restoreState(state):
+            self.work.setSizes([600, 400])
+        self.work.splitterMoved.connect(self._work_split_moved)
 
         main = QWidget()
         mv = QVBoxLayout(main)
@@ -440,8 +471,8 @@ class MainWindow(QMainWindow):
         mv.setSpacing(0)
         mv.addWidget(header)
         mv.addWidget(self.guide)
+        mv.addWidget(self.work, 1)
         mv.addWidget(self.timeline_wrap)
-        mv.addWidget(self.stack, 1)
         shell = QWidget()
         shell.setObjectName("shell")
         lay = QHBoxLayout(shell)
@@ -455,8 +486,33 @@ class MainWindow(QMainWindow):
         if not hasattr(self, "timeline_wrap"):
             return
         idx = self.stack.currentIndex()
-        self.timeline_wrap.setVisible(idx in (0, 1, 2) and self.tl_toggle.isChecked())
-        self.tl_toggle.setVisible(idx in (0, 1, 2))
+        on_steps = idx in (0, 1, 2)
+        self.timeline_wrap.setVisible(on_steps and self.tl_toggle.isChecked())
+        self.tl_toggle.setVisible(on_steps)
+        if hasattr(self, "viewer"):
+            was = self.viewer.isVisible()
+            self.viewer.setVisible(on_steps)
+            if not on_steps and self.viewer.is_playing():
+                self.viewer.player.pause()  # sang trang khác (Cài đặt, Hướng dẫn…): dừng phát
+            if on_steps and not was:
+                self._preview_timer.start()
+            QTimer.singleShot(0, self._adapt_pages)
+
+    def _work_split_moved(self, *_) -> None:
+        # kéo vạch chia: chỉ sắp xếp lại trang khi ngừng kéo (~0,12 giây) — kéo mượt, không giật
+        if not hasattr(self, "_split_idle"):
+            self._split_idle = QTimer(self)
+            self._split_idle.setSingleShot(True)
+            self._split_idle.setInterval(120)
+            self._split_idle.timeout.connect(lambda: (self.settings.setValue("ui/work_split", self.work.saveState()),
+                                                      self._adapt_pages()))
+        self._split_idle.start()
+
+    def _adapt_pages(self) -> None:
+        """Trang đang làm co giãn theo chỗ còn lại cạnh trình phát (hẹp thì phần cài đặt xếp xuống dưới)."""
+        avail = self.stack.width() if self.stack.width() > 200 else self.width() - self.side.width() - 20
+        for page in self.pages:
+            page.adapt(avail)
 
     def _update_header_chips_visibility(self) -> None:
         width = self.width()
@@ -493,12 +549,11 @@ class MainWindow(QMainWindow):
             super().resizeEvent(e)
         self._set_compact(self.width() < 1280)
         if not getattr(self, "_tl_user", True):  # màn hình laptop thấp: nhường chỗ cho nội dung chính
-            want = self.height() >= 820
+            want = self.height() >= 700  # dòng thời gian là nơi kéo vạch phát: chỉ ẩn khi màn hình rất thấp
             if self.tl_toggle.isChecked() != want:
                 self.tl_toggle.setChecked(want)
-        avail = self.width() - self.side.width() - 20
-        for page in self.pages:
-            page.adapt(avail)
+        self._adapt_pages()
+        QTimer.singleShot(0, self._adapt_pages)  # đo lại khi bố cục đã xếp xong
         self._update_header_chips_visibility()
         QTimer.singleShot(0, self._refresh_overlays)
 
@@ -590,7 +645,7 @@ class MainWindow(QMainWindow):
             self.set_mode("music_only")
             self.go_to(1)
             QTimer.singleShot(300, lambda: self.music_tab.g_amb.parentWidget() and self._scroll_to(self.music_tab.g_amb))
-            self.notify("Âm thanh nền: thêm file mưa / lửa / sóng ở thẻ Lớp tiếng nền (bên phải) — "
+            self.notify("Tiếng nền: thêm file mưa / lửa / sóng ở thẻ Lớp tiếng nền (bên phải) — "
                         "không cần thêm bài nhạc", "info", 6000)
         elif key == "batch":
             self.batch_from_folders()
@@ -799,6 +854,48 @@ class MainWindow(QMainWindow):
     def recompute(self) -> None:
         self._recompute_core()
         self._update_guide()
+        if hasattr(self, "viewer") and self.viewer.isVisible():
+            self._preview_timer.start()
+
+    # ---------- Xem trước ----------
+    @staticmethod
+    def _preview_signature(proj) -> str:
+        from .preview_player import project_signature
+        return project_signature(proj)
+
+    def open_preview(self) -> None:
+        """Nút "Mở trình phát" ở trang Hướng dẫn: sang bước Video (hoặc Nhạc) và đưa con trỏ vào trình phát."""
+        if self.stack.currentIndex() not in (0, 1, 2):
+            self.go_to(1 if self.mode == "music_only" else 0)
+        self._preview_refresh()
+        self.viewer.view.setFocus()
+
+    def _preview_refresh(self) -> None:
+        if not hasattr(self, "viewer") or not self.viewer.isVisible():
+            return
+        proj = self.collect_project()
+        version = self.music_tab.preview_version() if proj.output_kind == "music_only" else 0
+        sig = self._preview_signature(proj) + f"|v{version}"
+        if sig == self._preview_sig:
+            return
+        self._preview_sig = sig
+        if proj.output_kind != "music_only" and not proj.video.clips:
+            self.viewer.clear("Kéo thả clip vào trang Video để xem trước")
+            return
+        self.viewer.open_project(proj, self.music_tab.mixer.gains(), version)
+
+    def _preview_gains(self) -> None:
+        if hasattr(self, "viewer"):
+            self.viewer.player.set_gains(self.music_tab.mixer.gains())
+
+    def _preview_seek(self, t: float) -> None:
+        if hasattr(self, "viewer") and self.viewer.player.tl is not None:
+            self.viewer.player.seek(t)
+
+    def _preview_state(self, state: str) -> None:
+        # chỉ khi trình phát thật sự phát (không phải lúc tính lại vì dự án vừa đổi): không phát chồng Nghe thử 20 giây
+        if state == "playing":
+            self.music_tab.mixer.stop(quiet=True)
 
     def _recompute_core(self) -> None:
         proj = self.collect_project()
@@ -826,7 +923,7 @@ class MainWindow(QMainWindow):
             self.export_tab.set_can_export(False)
             self._set_chips(error="Chưa có clip", neutral=True)
             self.video_tab.set_preview("Kéo thả video, ảnh hoặc thư mục vào bảng phía trên để bắt đầu.")
-            self.music_tab.set_schedule([], track_paths, 0, "Chế độ Chỉ video: trang Nhạc đã được bỏ qua."
+            self.music_tab.set_schedule([], track_paths, 0, "Kiểu “Chỉ video”: trang Nhạc đã được bỏ qua."
                                         if self.mode == "video_only" else
                                         "Thêm clip ở trang Video trước — nhạc sẽ tự lặp theo độ dài video.")
             self.export_tab.set_summary("Chưa có clip để xuất. Hãy thêm clip ở trang <b>1. Video</b>.")
@@ -919,13 +1016,16 @@ class MainWindow(QMainWindow):
 
         def work():
             try:
-                est = size_estimate.estimate(proj, tl, available, runner)
-            except CancelledError:
-                return
-            except Exception as e:  # noqa: BLE001
-                self.bridge.size.emit(gen, None, str(e))
-                return
-            self.bridge.size.emit(gen, (est, proj, tl), "")
+                try:
+                    est = size_estimate.estimate(proj, tl, available, runner)
+                except CancelledError:
+                    return
+                except Exception as e:  # noqa: BLE001
+                    self.bridge.size.emit(gen, None, str(e))
+                    return
+                self.bridge.size.emit(gen, (est, proj, tl), "")
+            except RuntimeError:  # cửa sổ đã đóng trong lúc đang đo
+                pass
 
         threading.Thread(target=work, daemon=True).start()
 
@@ -1025,7 +1125,7 @@ class MainWindow(QMainWindow):
             banner += "<br><span style='color:#fcd34d'>" + "<br>".join(tl.warnings) + "</span>"
         self.music_tab.set_schedule(tl.music_items, track_paths, tl.total, banner)
         self.export_tab.start_btn.setText(f"Xuất {n_ver} bản nhạc" if n_ver > 1 else "Bắt đầu xuất file nhạc")
-        self.video_tab.set_preview("Chế độ 'Chỉ nhạc' — trang Video đã được bỏ qua.")
+        self.video_tab.set_preview("Kiểu “Chỉ nhạc” — trang Video đã được bỏ qua.")
         # byte/giây theo định dạng (FLAC tuỳ bài, lấy mức trung bình)
         size = {"mp3_320": 40_000, "flac": 110_000, "wav": 192_000}.get(proj.music.export_format, 24_000)
         est = size_estimate.fmt_size(size * tl.total)
@@ -1061,14 +1161,14 @@ class MainWindow(QMainWindow):
             self.chip_total.setToolTip(
                 (f"Thời lượng file nhạc: {fmt_dur(total)}\n1 lượt playlist: {fmt_dur(seq)} · {plays} lượt bài")
                 if music_only else
-                (f"Thời lượng video: {fmt_dur(total)}\nMột lượt các clip: {fmt_dur(seq)} · {rounds} vòng · "
+                (f"Thời lượng video: {fmt_dur(total)}\nMột lượt các clip: {fmt_dur(seq)} · {rounds} lượt · "
                  f"{plays} lần phát clip"))
             if music_only:
                 self.chip_seq.setText(f"1 lượt playlist {fmt_dur(seq)}")
                 self.chip_rounds.setText(f"{plays} lượt bài")
             else:
                 self.chip_seq.setText(f"Một chuỗi {fmt_dur(seq)}")
-                self.chip_rounds.setText(f"{rounds} vòng · {plays} lần phát")
+                self.chip_rounds.setText(f"{rounds} lượt · {plays} lần phát")
             self._warn_wanted = bool(warnings)
             self.chip_warn.setText(f"{len(warnings)} lưu ý")
             self.chip_warn.setToolTip("\n".join(warnings))
@@ -1294,6 +1394,7 @@ class MainWindow(QMainWindow):
                                 "xuất vào đó (mỗi video một thư mục riêng nếu đang bật).")
             self.go_to(2)
             return
+        self.viewer.player.pause()  # hộp thoại hàng loạt có trình phát riêng: không phát chồng phía sau
         dlg = BatchDialog(template, self.settings, self)  # đổi kiểu (Video có nhạc / Chỉ video / Chỉ nhạc) ngay trong hộp thoại
         dlg.exec()
         if dlg.result() != QDialog.DialogCode.Accepted or not dlg.result_projects:
@@ -1419,6 +1520,8 @@ class MainWindow(QMainWindow):
             self._open_mixer()
         elif act == "batch":
             self.batch_from_folders()
+        elif act == "preview":
+            self.open_preview()
         elif act == "interleave":
             if self.mode == "music_only":
                 self.set_mode("video_music")
@@ -1629,6 +1732,7 @@ class MainWindow(QMainWindow):
         self._timer.stop()
         power.keep_awake(False)
         self.music_tab.mixer.stop()
+        self.viewer.shutdown()
         if self._audio_prev_runner:
             self._audio_prev_runner.cancel()
         if self._size_runner:

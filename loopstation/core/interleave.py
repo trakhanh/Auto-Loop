@@ -146,3 +146,58 @@ def build(clips: list[ClipItem], opt: InterleaveOptions) -> list[ClipItem]:
     if not out:
         out.append(base_copy())
     return out + kept_off
+
+
+# ======================= Lần lượt từng loop =======================
+# Ví dụ thư mục: Content.mp4, Loop1.mp4 … Loop6.mp4 → Content → Loop1 ×60 → Loop2 ×60 → … → Loop6 ×60
+
+CONTENT_POS = ("start", "end", "both")  # clip "nội dung" (không phải loop) đặt ở đầu / cuối / cả đầu và cuối
+
+
+def split_loops(clips: list[ClipItem]) -> tuple[list[ClipItem], list[ClipItem]]:
+    """(clip nội dung, clip loop) — mỗi file một lần, theo thứ tự tên tự nhiên (Loop2 trước Loop10).
+    Clip loop = tên có chữ loop / nen / bg / base; còn lại là nội dung (Content, Intro…). Bỏ clip đang tắt."""
+    seen: set[str] = set()
+    contents, loops = [], []
+    for c in sorted(clips, key=lambda c: natural_key(c.path)):
+        key = os.path.normcase(c.path)
+        if key in seen or not c.enabled:
+            continue
+        seen.add(key)
+        (loops if looks_like_base(c.path) else contents).append(c)
+    return contents, loops
+
+
+def looks_like_sequence(paths: list[str]) -> bool:
+    """Có từ 2 file loop khác nhau (Loop1, Loop2…) → hợp kiểu "lần lượt từng loop" hơn là "nền xen cảnh"."""
+    uniq = {os.path.normcase(p): p for p in paths}
+    return sum(1 for p in uniq.values() if looks_like_base(p)) >= 2
+
+
+def build_sequence(clips: list[ClipItem], loop_plays: tuple[str, int, int, float] = ("fixed", 60, 60, 0.0),
+                   content_pos: str = "start", repeat: int = 1, content_plays: int = 1) -> list[ClipItem]:
+    """Nội dung → Loop1 ×N → Loop2 ×N → … (cả chuỗi loop lặp `repeat` lượt) → [nội dung nếu "end"/"both"].
+    Giữ cắt đoạn / crossfade của lần xuất hiện đầu tiên mỗi file; clip đang tắt được giữ ở cuối bảng (tắt)."""
+    contents, loops = split_loops(clips)
+    mode, lo, hi, secs = loop_plays
+    used = {os.path.normcase(c.path) for c in contents + loops}
+    kept_off: list[ClipItem] = []
+    seen: set[str] = set()
+    for c in clips:
+        key = os.path.normcase(c.path)
+        if key not in used and key not in seen:
+            seen.add(key)
+            kept_off.append(replace(c, enabled=False))
+
+    def loop_copy(c: ClipItem) -> ClipItem:
+        return replace(c, enabled=True, plays_mode=mode, count=lo, min=lo, max=hi, play_seconds=secs)
+
+    def content_copy(c: ClipItem) -> ClipItem:
+        n = max(1, content_plays)
+        return replace(c, enabled=True, plays_mode="fixed", count=n, min=n, max=n, play_seconds=0.0)
+
+    head = [content_copy(c) for c in contents] if content_pos in ("start", "both") else []
+    tail = [content_copy(c) for c in contents] if content_pos in ("end", "both") else []
+    body = [loop_copy(c) for _ in range(max(1, repeat)) for c in loops]
+    out = head + body + tail
+    return (out or [content_copy(c) for c in contents]) + kept_off

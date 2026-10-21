@@ -12,6 +12,7 @@ from pathlib import Path
 from . import audio_build, planner, timeline, video_build
 from . import ffmpeg_tools as ft
 from .planner import MusicItem
+from .probe import probe
 
 PREVIEW_SECONDS = 20.0
 
@@ -20,11 +21,16 @@ class PreviewError(RuntimeError):
     pass
 
 
-def clean_old(keep: str | None = None) -> None:
+def clean_old(keep: str | None = None, min_age: float = 120.0) -> None:
+    """Dọn bản nghe thử cũ. Chỉ xoá thứ đã cũ hơn `min_age` giây: nhiều chỗ dựng cùng lúc (Bảng trộn âm,
+    cửa sổ Xem trước, hộp thoại hàng loạt) không xoá nhầm thư mục của nhau khi đang đọc dở."""
+    now = time.time()
     for f in ft.preview_dir().glob("nghe-thu_*"):
         if keep and f.name == Path(keep).name:
             continue
         try:
+            if now - f.stat().st_mtime < min_age:
+                continue
             if f.is_dir():
                 import shutil
                 shutil.rmtree(f, ignore_errors=True)
@@ -139,9 +145,13 @@ def _render(project, start: float, runner: ft.Runner | None, version: int, secon
         keys = sorted(tl.ambient_infos)
         a_paths = [audio_build.seamless_loop(runner, tl.ambient_infos[k].path, tl.ambient_infos[k].duration)
                    for k in keys]
+        offsets = []  # đang ở giây thứ mấy của vòng lặp tiếng nền tại mốc `start` (giống bản xuất)
+        for ap in a_paths:
+            loop_len = probe(ap).duration
+            offsets.append(start % loop_len if loop_len and loop_len > 0.5 else 0.0)
         lines, ambient_labels = audio_build.ambient_graph(
             a_paths, [ms.ambient[k].volume for k in keys], dur,
-            ms.fade_in if start <= 0 else 0.0, ms.fade_out if end >= total - 1e-3 else 0.0)
+            ms.fade_in if start <= 0 else 0.0, ms.fade_out if end >= total - 1e-3 else 0.0, offsets)
         graph += lines
 
     if not (music_label or source_label or ambient_labels):

@@ -29,7 +29,7 @@ from loopstation.core.project import Project  # noqa: E402
 
 ini = os.path.join(scratch, "settings.ini")
 st = QSettings(ini, QSettings.Format.IniFormat)
-st.setValue("ui/timeline", "off")  # trường hợp từng gây lỗi lúc khởi động
+st.setValue("ui/timeline_dock", "off")  # trường hợp từng gây lỗi lúc khởi động
 st.sync()
 mw.QSettings = lambda org, name: QSettings(ini, QSettings.Format.IniFormat)
 win = mw.MainWindow()

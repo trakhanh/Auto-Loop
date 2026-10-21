@@ -40,6 +40,12 @@ BUILTIN = [
      "order": "shuffle", "plays": 1, "start": True, "end": True},
 ]
 
+# mẫu "lần lượt từng loop" (Content → Loop1 ×60 → Loop2 ×60 …) — dùng ở Xuất hàng loạt (trang Video có hộp thoại riêng)
+SEQUENCE_PRESETS = [
+    {"name": "Từng loop ×60, clip nội dung ở đầu", "kind": "sequence", "base": "60", "content": "start"},
+    {"name": "Từng loop ×60, clip nội dung ở cuối", "kind": "sequence", "base": "60", "content": "end"},
+]
+
 
 class InterleaveDialog(QDialog):
     """durations: path (normcase) → độ dài một lần phát (đã trừ phần cắt) để ước tính tổng thời lượng."""
@@ -47,7 +53,7 @@ class InterleaveDialog(QDialog):
     def __init__(self, clips: list[ClipItem], durations: dict[str, float], settings: QSettings | None = None,
                  parent=None, preset_name: str | None = None):
         super().__init__(parent)
-        self.setWindowTitle("Xếp kịch bản: xen kẽ clip nền")
+        self.setWindowTitle("Xen kẽ clip nền")
         self.setMinimumSize(960, 640)
         self.clips = clips
         self.durations = durations
@@ -136,8 +142,8 @@ class InterleaveDialog(QDialog):
         form.setVerticalSpacing(8)
         form.addRow("Mẫu có sẵn:", self._wrap(prow))
         form.addRow("Clip nền:", self.base)
-        form.addRow("Nền phát mỗi lần:", self._wrap(brow))
-        form.addRow("Lặp lại cả mẫu:", self._wrap(rrow))
+        form.addRow("Số lần phát clip nền:", self._wrap(brow))
+        form.addRow("Lặp lại cả chuỗi:", self._wrap(rrow))
         form.addRow("", self._wrap(erow))
 
         # ----- danh sách cảnh chèn -----
@@ -177,10 +183,10 @@ class InterleaveDialog(QDialog):
 
         trow = QHBoxLayout()
         trow.setSpacing(4)
-        trow.addWidget(tool("", "Đưa cảnh đang chọn lên trước", lambda: self._move(-1), "up"))
+        trow.addWidget(tool("", "Đưa cảnh đang chọn lên trên", lambda: self._move(-1), "up"))
         trow.addWidget(tool("", "Đưa cảnh đang chọn xuống sau", lambda: self._move(1), "down"))
         trow.addWidget(tool("A–Z", "Xếp theo số / tên file (2, 3, … 10)", lambda: self._sort("name"), "sort"))
-        trow.addWidget(tool("Trộn", "Xáo ngẫu nhiên thứ tự cảnh", lambda: self._sort("shuffle"), "shuffle"))
+        trow.addWidget(tool("Xáo", "Xáo ngẫu nhiên thứ tự cảnh", lambda: self._sort("shuffle"), "shuffle"))
         trow.addStretch(1)
         trow.addWidget(QLabel("Đặt cho dòng chọn: phát"))
         self.bulk_plays = QSpinBox()
@@ -517,16 +523,23 @@ def all_presets(settings: QSettings | None) -> list[dict]:
             users = [dict(p, user=True) for p in data if isinstance(p, dict) and p.get("name")]
         except (TypeError, ValueError):
             users = []
-    return [dict(p) for p in BUILTIN] + users
+    return [dict(p) for p in BUILTIN] + [dict(p) for p in SEQUENCE_PRESETS] + users
 
 
 def arrange_from_preset(preset: dict):
-    """Hàm (clips, chỉ số clip nền) → bảng clip đã xếp theo mẫu. None nếu số lần phát của nền không hợp lệ."""
+    """Hàm (clips, chỉ số clip nền) → bảng clip đã xếp theo mẫu. None nếu số lần phát của nền không hợp lệ.
+    Mẫu "lần lượt từng loop" (kind = sequence) không cần clip nền: hàm có thuộc tính `kind = "sequence"`."""
     parsed = w.parse_plays(str(preset.get("base", "70")))
     if parsed is None:
         return None
     mode, lo, hi = parsed
     base_plays = ("duration", 1, 1, float(lo)) if mode == "duration" else (mode, int(lo), int(hi), 0.0)
+    if preset.get("kind") == "sequence":
+        def arrange_seq(clips: list[ClipItem], _base_i: int = -1) -> list[ClipItem]:
+            return il.build_sequence(clips, base_plays, str(preset.get("content", "start")),
+                                     int(preset.get("repeat", 1)))
+        arrange_seq.kind = "sequence"
+        return arrange_seq
     plays = int(preset.get("plays", 1))
     scenes = {str(sc.get("file", "")).lower(): (k, sc) for k, sc in enumerate(preset.get("scenes") or [])}
 

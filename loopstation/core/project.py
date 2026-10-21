@@ -248,7 +248,7 @@ class Project:
         v.length_mode = vd.get("length_mode", v.length_mode)
         v.target_duration = parse_hms(str(vd.get("target_duration", format_hms(v.target_duration))))
         if v.target_duration > MAX_DURATION:  # dự án cũ lỡ gõ số quá lớn (ví dụ 16666 giờ) → mở app bị treo
-            proj.notes.append(f"Thời lượng đích {format_hms(v.target_duration)} quá dài — đã đưa về tối đa "
+            proj.notes.append(f"Thời lượng video {format_hms(v.target_duration)} quá dài — đã đưa về tối đa "
                               f"{MAX_DURATION // 3600} giờ.")
             v.target_duration = float(MAX_DURATION)
         v.fill = vd.get("fill", v.fill)

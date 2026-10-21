@@ -31,7 +31,7 @@ FILL = [("repeat_sequence", "Lặp lại cả chuỗi (V1→Vn, V1→Vn…)"),
         ("stretch_marked", "Tăng số lần phát của clip tick 'Tự giãn'")]
 FIT = [("letterbox", "Viền đen (giữ nguyên tỉ lệ)"), ("blur", "Nền mờ (đẹp cho clip dọc/khác tỉ lệ)"),
        ("crop", "Cắt cho đầy khung hình"), ("stretch", "Kéo giãn đầy khung")]
-SOURCE = [("mix", "Giữ tiếng gốc, trộn với nhạc nền (mặc định)"), ("only", "Chỉ tiếng gốc của clip, không dùng nhạc"),
+SOURCE = [("mix", "Giữ tiếng gốc clip, trộn với nhạc (mặc định)"), ("only", "Chỉ tiếng gốc clip — không dùng nhạc"),
           ("off", "Tắt tiếng gốc clip")]
 
 
@@ -222,7 +222,9 @@ class VideoTab(QWidget):
         self.list.openRequested.connect(w.open_with_default_app)
         self.list.itemDoubleClicked.connect(self._on_double_click)
         self.list.menu_extras = [("scissors", "Chọn đoạn lấy (cắt đầu/cuối)…", self._open_trim),
-                                 ("copy", "Nhân bản dòng (dùng lại clip này ở chỗ khác)", self._duplicate),
+                                 ("copy", "Nhân bản dòng (Ctrl+D) — dùng lại clip này ở chỗ khác", self._duplicate),
+                                 ("copy", "Chép các dòng đang chọn (Ctrl+C)", lambda _it: self._copy_rows()),
+                                 ("file_plus", "Dán bên dưới (Ctrl+V)", lambda _it: self._paste_rows()),
                                  ("repeat", "Xen kẽ clip nền giữa các cảnh…", lambda _it: self._open_interleave())]
         self.toolbar = w.ListToolbar(self.list, self._add_files, self._add_folder, random.Random)
 
@@ -312,7 +314,7 @@ class VideoTab(QWidget):
         r1.addWidget(st_on)
         r1.addWidget(st_off)
         r1.addStretch(1)
-        self.more_tools = QPushButton("Cắt đoạn && chuyển cảnh ▾")
+        self.more_tools = QPushButton("Cắt đoạn && hoà hình ▾")
         self.more_tools.setObjectName("ghost")
         self.more_tools.setCheckable(True)
         self.more_tools.setToolTip("Hiện thêm: bỏ đầu / bỏ cuối clip, nhân bản dòng, crossfade nối loop / sang clip, "
@@ -345,6 +347,13 @@ class VideoTab(QWidget):
         dup_key = QShortcut(QKeySequence("Ctrl+D"), self.list)
         dup_key.setContext(Qt.ShortcutContext.WidgetWithChildrenShortcut)
         dup_key.activated.connect(self._duplicate_selected)
+        # Ctrl+C / Ctrl+V: chép các dòng đang chọn rồi dán xuống dưới dòng đang chọn (giữ số lần phát, cắt, crossfade).
+        # Chỉ khi đang chọn trong bảng (đang sửa chữ trong một ô thì Ctrl+C / V vẫn là chép / dán chữ như thường).
+        self._clipboard: list[tuple] = []
+        for seq, fn in ((QKeySequence.StandardKey.Copy, self._copy_rows), (QKeySequence.StandardKey.Paste, self._paste_rows)):
+            sc = QShortcut(QKeySequence(seq), self.list)
+            sc.setContext(Qt.ShortcutContext.WidgetShortcut)
+            sc.activated.connect(fn)
         cut_dialog = QPushButton("Chọn đoạn…")
         cut_dialog.setIcon(icons.icon("scissors", 13))
         cut_dialog.setIconSize(QSize(13, 13))
@@ -367,10 +376,10 @@ class VideoTab(QWidget):
 
         r2 = QHBoxLayout()
         r2.setSpacing(6)
-        r2.addWidget(QLabel("Chuyển cảnh:"))
-        r2.addWidget(QLabel("Nối vòng lặp"))
+        r2.addWidget(QLabel("Hoà hình:"))
+        r2.addWidget(QLabel("Nối loop"))
         r2.addWidget(self.bulk_loop)
-        r2.addWidget(QLabel("Sang clip sau"))
+        r2.addWidget(QLabel("Sang clip"))
         r2.addWidget(self.bulk_next)
         r2.addWidget(x_apply)
         r2.addWidget(x_clear)
@@ -385,7 +394,7 @@ class VideoTab(QWidget):
         def show_more(on: bool) -> None:
             for box in self._extra_rows:
                 box.setVisible(on)
-            self.more_tools.setText("Cắt đoạn && chuyển cảnh ▴" if on else "Cắt đoạn && chuyển cảnh ▾")
+            self.more_tools.setText("Cắt đoạn && hoà hình ▴" if on else "Cắt đoạn && hoà hình ▾")
             self.settings.setValue("ui/video_more_tools", "true" if on else "false")
 
         self.more_tools.toggled.connect(show_more)
@@ -406,7 +415,7 @@ class VideoTab(QWidget):
         self.preview.setMaximumBlockCount(500)
         self.preview.setVisible(False)
 
-        self.preview_toggle = QPushButton("Xem chi tiết kịch bản phát từng vòng")
+        self.preview_toggle = QPushButton("Xem chi tiết từng lượt phát")
         self.preview_toggle.setObjectName("ghost")
         self.preview_toggle.setIcon(icons.icon("eye", 14))
         self.preview_toggle.setIconSize(QSize(14, 14))
@@ -432,6 +441,14 @@ class VideoTab(QWidget):
                                        "(clip nền có chữ 'loop' trong tên, cảnh chèn xếp theo số đầu tên)")
         self.interleave_btn.clicked.connect(self._open_interleave)
         top_bar.addWidget(self.interleave_btn)
+        self.sequence_btn = QPushButton("Xếp lần lượt…")
+        self.sequence_btn.setObjectName("pill")
+        self.sequence_btn.setIcon(icons.icon("sort", 13))
+        self.sequence_btn.setIconSize(QSize(13, 13))
+        self.sequence_btn.setToolTip("Content → Loop1 ×60 → Loop2 ×60 → … : phát lần lượt từng clip loop theo tên, mỗi "
+                                     "cái lặp N lần, clip nội dung (không có chữ 'loop') ở đầu / cuối")
+        self.sequence_btn.clicked.connect(self._open_sequence)
+        top_bar.addWidget(self.sequence_btn)
         lv.addLayout(top_bar)
         lv.addWidget(self.toolbar)
         # gợi ý khi vừa thêm file có clip nền (loop…) cùng các cảnh khác
@@ -446,9 +463,11 @@ class VideoTab(QWidget):
         self.suggest_text = QLabel()
         self.suggest_text.setWordWrap(True)
         sg.addWidget(self.suggest_text, 1)
-        sg_go = QPushButton("Xen kẽ ngay…")
+        self.suggest_go = sg_go = QPushButton("Xen kẽ ngay…")
         sg_go.setObjectName("accentBtn")
-        sg_go.clicked.connect(self._open_interleave)
+        sg_go.clicked.connect(lambda: self._open_sequence() if self._suggest_kind == "sequence"
+                              else self._open_interleave())
+        self._suggest_kind = "interleave"
         sg.addWidget(sg_go)
         sg_close = QPushButton("Để sau")
         sg_close.setObjectName("ghost")
@@ -470,7 +489,7 @@ class VideoTab(QWidget):
         self.length_mode = combo(LENGTH)
         self.target = hms_edit()
         self.fill = combo(FILL)
-        self.reshuffle = QCheckBox("Mỗi vòng lặp lại sẽ xáo thứ tự mới")
+        self.reshuffle = QCheckBox("Mỗi lượt lặp lại xáo thứ tự mới")
         self.exact_end = QCheckBox("Cắt chính xác đúng thời lượng đích (kèm mờ dần)")
         self.stretch_hint = w.muted("Tick cột <b>Tự giãn</b> trong bảng cho các clip được phép tăng số lần phát. "
                                     "Clip không tick sẽ giữ nguyên số lần phát.")
@@ -483,7 +502,7 @@ class VideoTab(QWidget):
             self.target, (("30p", 1800), ("1h", 3600), ("2h", 7200), ("3h", 10800), ("10h", 36000))
         ))
         self.target_wrap.layout().setContentsMargins(0, 0, 0, 0)
-        self.lbl_target = QLabel("Thời lượng đích")
+        self.lbl_target = QLabel("Dài bao lâu")
         self.form_len.addRow(self.lbl_target, self.target_wrap)
         self.lbl_fill = QLabel("Cách lấp đầy")
         self.form_len.addRow(self.lbl_fill, self.fill)
@@ -664,7 +683,7 @@ class VideoTab(QWidget):
     def _toggle_preview(self, checked: bool) -> None:
         self.preview.setVisible(checked)
         self.preview_toggle.setText(
-            ("Ẩn chi tiết kịch bản phát" if checked else "Xem chi tiết kịch bản phát từng vòng")
+            ("Ẩn chi tiết kịch bản phát" if checked else "Xem chi tiết từng lượt phát")
         )
 
     def _quick_plays(self, val: str) -> None:
@@ -882,14 +901,14 @@ class VideoTab(QWidget):
             it.setForeground(COL_TRIM, QColor("#646c80") if skipped else (
                 QColor("#fcd34d") if trimmed else QColor("#8c96b0")))
             it.setToolTip(COL_TRIM, (f"Bỏ {c.trim_start:g}s đầu, {c.trim_end:g}s cuối → mỗi lần phát dài {d:.1f}s. "
-                                     if trimmed else "Dùng toàn bộ clip. ") + "Bấm đúp để chọn đoạn lấy.")
+                                     if trimmed else "Lấy toàn bộ clip. ") + "Bấm đúp để chọn đoạn lấy.")
 
         # Cảnh báo crossfade vượt d <= L/2 hoặc khoá ô nối vòng lặp khi chỉ phát <= 1 lần
         single_play = c.plays_mode == "fixed" and c.count <= 1
         if single_play:
             it.setText(COL_LOOPXF, "—")
             it.setForeground(COL_LOOPXF, QColor("#4d556a"))
-            it.setToolTip(COL_LOOPXF, "Clip phát 1 lần (không lặp) nên bỏ qua nối vòng lặp")
+            it.setToolTip(COL_LOOPXF, "Clip phát 1 lần (không lặp) nên không có Nối loop")
         else:
             it.setText(COL_LOOPXF, w.xf_text(c.loop_xfade))
             if c.loop_xfade > d * 0.5:
@@ -982,6 +1001,38 @@ class VideoTab(QWidget):
         self._emit()
 
     # ---------- nhân bản dòng ----------
+    def _copy_rows(self) -> None:
+        sel = sorted(self.list.selectedItems(), key=self.list.indexOfTopLevelItem)
+        if not sel:
+            return
+        self._clipboard = [(self._clip_from_item(it), it.data(0, w.ROLE_INFO), it.text(COL_PLAYS), it.text(COL_LOOPXF),
+                            it.text(COL_NEXTXF)) for it in sel]
+        self.status.setText(f"Đã chép {len(sel)} dòng — chọn chỗ muốn dán rồi bấm Ctrl+V (dán ngay bên dưới).")
+
+    def _paste_rows(self) -> None:
+        if not self._clipboard:
+            self.status.setText("Chưa chép dòng nào — bôi đen các dòng rồi bấm Ctrl+C trước.")
+            return
+        sel = self.list.selectedItems()
+        pos = max(self.list.indexOfTopLevelItem(it) for it in sel) + 1 if sel else self.list.topLevelItemCount()
+        self.list.blockSignals(True)
+        new_items = []
+        for k, (c, info, plays, loop_xf, next_xf) in enumerate(self._clipboard):
+            it = self._make_item(ClipItem(**c.__dict__), info)
+            self.list.insertTopLevelItem(pos + k, it)
+            it.setText(COL_PLAYS, plays)
+            it.setText(COL_LOOPXF, loop_xf)
+            it.setText(COL_NEXTXF, next_xf)
+            new_items.append(it)
+        self._refresh_rows()
+        self.list.blockSignals(False)
+        self.list.clearSelection()
+        for it in new_items:
+            it.setSelected(True)
+        self.list.scrollToItem(new_items[-1])
+        self.status.setText(f"Đã dán {len(new_items)} dòng — Ctrl+Z để hoàn tác.")
+        self._emit()
+
     def _duplicate_selected(self) -> None:
         sel = self._selected_or_warn()
         for it in sorted(sel, key=self.list.indexOfTopLevelItem, reverse=True):
@@ -1129,10 +1180,24 @@ class VideoTab(QWidget):
     def _maybe_suggest_interleave(self) -> None:
         clips = [it.data(0, w.ROLE_DATA) for it in self.list.items()]
         unique = {os.path.normcase(c.path): c.path for c in clips}
+        from ..core import interleave as il
+        if len(clips) == len(unique) and il.looks_like_sequence(list(unique.values())):
+            # nhiều clip loop (Loop1, Loop2…): gợi ý phát lần lượt từng loop thay cho "nền xen cảnh"
+            contents, loops = il.split_loops(clips)
+            names = " → ".join(Path(c.path).stem for c in loops[:3]) + (" → …" if len(loops) > 3 else "")
+            head = (", ".join(Path(c.path).stem for c in contents[:2]) + " → ") if contents else ""
+            self._suggest_kind = "sequence"
+            self.suggest_go.setText("Xếp lần lượt…")
+            self.suggest_text.setText(f"Có <b>{len(loops)} clip loop</b>"
+                                      + (f" và {len(contents)} clip nội dung" if contents else "")
+                                      + f". Xếp <b>{head}{names}</b>, mỗi loop lặp nhiều lần?")
+            motion.slide_visible(self.suggest, True)
+            return
+        self._suggest_kind = "interleave"
+        self.suggest_go.setText("Xen kẽ ngay…")
         if len(unique) < 3 or len(clips) > len(unique) or not has_base_candidate(list(unique.values())):
             self.suggest.setVisible(False)  # đã xen kẽ (có dòng trùng) hoặc không có clip nền theo tên
             return
-        from ..core import interleave as il
         base = il.detect_base(clips)
         self.suggest_text.setText(f"Có clip nền <b>{Path(clips[base].path).name}</b> và {len(unique) - 1} cảnh khác. "
                                   "Tự xếp thành <b>nền → cảnh → nền → cảnh … → nền</b>?")
@@ -1158,17 +1223,49 @@ class VideoTab(QWidget):
         dlg = InterleaveDialog(clips, durations, self.settings, self)
         if not dlg.exec() or not dlg.result_clips:
             return
+        self._apply_arranged(dlg.result_clips, infos, "Đã xen kẽ")
+
+    def _table_media(self):
+        """(clip của bảng, MediaInfo theo file, thời lượng một lần phát theo file) cho các hộp thoại xếp kịch bản."""
+        items = self.list.items()
+        clips = [self._clip_from_item(it) for it in items]
+        infos: dict[str, MediaInfo] = {}
+        durations: dict[str, float] = {}
+        for it, c in zip(items, clips):
+            key = os.path.normcase(c.path)
+            info: MediaInfo = it.data(0, w.ROLE_INFO)
+            infos.setdefault(key, info)
+            if key not in durations and info is not None and info.ok:
+                durations[key] = (self.image_dur.value() if info.is_image
+                                  else max(MIN_KEEP, info.duration - c.trim_start - c.trim_end))
+        return clips, infos, durations
+
+    def _open_sequence(self) -> None:
+        from .sequence_dialog import SequenceDialog
+        clips, infos, durations = self._table_media()
+        if not clips:
+            QMessageBox.information(self, "Xếp lần lượt", "Thêm clip vào bảng trước (ví dụ Content.mp4, Loop1.mp4, "
+                                    "Loop2.mp4…).")
+            return
+        dlg = SequenceDialog(clips, durations, self.settings, self)
+        if not dlg.exec() or not dlg.result_clips:
+            return
+        self._apply_arranged(dlg.result_clips, infos, "Đã xếp lần lượt")
+
+    def _apply_arranged(self, result: list[ClipItem], infos: dict, what: str) -> None:
+        """Thay bảng clip bằng bảng đã xếp (Hoàn tác được)."""
+        dlg_result = result
         self._hist_timer.stop()
         self._push_history()  # để Hoàn tác quay lại đúng bảng trước khi xen kẽ
         self.list.blockSignals(True)
         self.list.clear()
-        for c in dlg.result_clips:
+        for c in dlg_result:
             self.list.addTopLevelItem(self._make_item(ClipItem(**c.__dict__), infos[os.path.normcase(c.path)]))
         self._refresh_rows()
         self.list.blockSignals(False)
         motion.slide_visible(self.suggest, False)
-        self.status.setText(f"Đã xen kẽ: {len(dlg.result_clips)} dòng. Bấm Hoàn tác (Ctrl+Z) để quay lại.")
-        self.notify.emit(f"Đã xếp {len(dlg.result_clips)} dòng theo mẫu — Ctrl+Z để quay lại", "ok")
+        self.status.setText(f"{what}: {len(dlg_result)} dòng. Bấm Hoàn tác (Ctrl+Z) để quay lại.")
+        self.notify.emit(f"{what} {len(dlg_result)} dòng — Ctrl+Z để quay lại", "ok")
         self._emit()
 
     # ---------- cập nhật hiển thị thông minh (Progressive Disclosure) ----------

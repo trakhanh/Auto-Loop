@@ -40,6 +40,16 @@ def wait(sec: float) -> None:
         time.sleep(0.02)
 
 
+def wait_for(cond, limit: float = 40) -> None:
+    t = time.time()
+    while time.time() - t < limit and not cond():
+        wait(0.1)
+
+
+def player_ready(pl) -> bool:
+    return pl.state == "paused" and pl._seek_to is None and pl.sch is not None
+
+
 win = mw.MainWindow()
 win.resize(1440, 900)
 win.show()
@@ -54,7 +64,12 @@ win.load_project(p)
 win.go_to(0)
 wait(8)  # đợi tạo xong tiếng nền có sẵn (không còn dòng “Đang tạo tiếng nền…” trong ảnh)
 win.recompute()
-wait(2)
+pl = win.viewer.player
+wait_for(lambda: player_ready(pl) and win.viewer.view.image is not None)
+pl.seek(404)  # khung hình có chữ, vạch phát nằm giữa dòng thời gian
+wait(1.5)
+wait_for(lambda: player_ready(pl))
+wait(1.5)
 win.grab().save(str(OUT / "02-video.png"))
 win.go_to(1)
 wait(1.5)
@@ -69,11 +84,37 @@ from loopstation.ui.batch_dialog import BatchDialog  # noqa: E402
 st = QSettings(ini, QSettings.Format.IniFormat)
 st.setValue("batch/folder", str(ROOT / "Mau-Test" / "Hang-loat"))
 dlg = BatchDialog(win.collect_project(), st, win)
-dlg.resize(1180, 720)
+dlg.resize(1280, 860)
 dlg.show()
-wait(2)
+bp = dlg.player_panel.player
+wait_for(lambda: player_ready(bp) and dlg.player_panel.view.image is not None)
+bp.seek(404)
+wait(1.5)
+wait_for(lambda: player_ready(bp))
+wait(1.5)
 dlg.grab().save(str(OUT / "05-hang-loat.png"))
 dlg.done(0)
+
+# Xếp lần lượt: thư mục kiểu Content.mp4 + Loop1..Loop3.mp4
+import shutil  # noqa: E402
+from loopstation.core.project import ClipItem  # noqa: E402
+from loopstation.ui.sequence_dialog import SequenceDialog  # noqa: E402
+src = ROOT / "Mau-Test" / "Hang-loat"
+seq_dir = tmp / "seq"
+seq_dir.mkdir()
+shutil.copy(src / "Video 01 - Mua dem" / "2_hoang-hon.mp4", seq_dir / "Content.mp4")
+for k, f in enumerate(("Video 01 - Mua dem/loop_mua-dem.mp4", "Video 02 - Rung xanh/loop_rung-xanh.mp4",
+                       "Video 01 - Mua dem/3_bau-troi-sao.mp4"), 1):
+    shutil.copy(src / f, seq_dir / f"Loop{k}.mp4")
+clips = [ClipItem(str(f)) for f in sorted(seq_dir.iterdir())]
+sd = SequenceDialog(clips, {os.path.normcase(c.path): 8.0 for c in clips}, st, win)
+sd.plays.setText("60")
+sd.resize(580, 470)
+sd.show()
+wait(0.8)
+sd.grab().save(str(OUT / "06-xep-lan-luot.png"))
+sd.reject()
+
 win._closing = True
 win.close()
 wait(0.3)

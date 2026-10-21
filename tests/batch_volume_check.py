@@ -65,7 +65,10 @@ wait(1.5)
 check("quét 3 video", len(dlg.jobs) == 3)
 check("âm lượng chung lấy theo dự án đang mở", (dlg.vol_music.value(), dlg.vol_source.value(),
                                                dlg.vol_amb[0].value()) == (80, 100, 60))
-check("mỗi dòng có nút Nghe", len(dlg._play_btns) == sum(p is not None for p in dlg._projects))
+check("mỗi dòng có nút Xem", len(dlg._play_btns) == sum(p is not None for p in dlg._projects))
+pp = dlg.player_panel.player
+check("trình phát bên phải tự hiện video của dòng đầu", wait(40, lambda: pp.state == "paused" and pp.total > 0)
+      and dlg._current_row() == 0, pp.state)
 
 # âm lượng riêng cho dòng 1 (giả lập bấm OK trong hộp thoại riêng)
 vd = VolumeDialog(dlg._projects[1], dlg._vol_for(1), dlg._row_info[1], dlg.jobs[1].name, dlg)
@@ -84,25 +87,28 @@ dlg._rebuild()
 wait(0.5)
 check("dòng có âm lượng riêng được ghi chú", "âm lượng riêng" in dlg.tree.topLevelItem(1).text(C_NOTE))
 
-# nghe thử (mọi mức 0% → im lặng), kéo thanh chung trong lúc nghe
+# xem trong trình phát (mọi mức 0% → im lặng), kéo thanh chung trong lúc phát
 dlg.vol_music.setValue(0)
 dlg.vol_source.setValue(0)
 dlg.vol_amb[0].setValue(0)
-dlg.listen_at.setCurrentIndex(1)
 t0 = time.time()
-dlg._listen(0)
-check("dòng 0: bắt đầu nghe", wait(120, dlg.live.is_playing), f"{time.time() - t0:.1f}s chuẩn bị")
+dlg._watch(0)
+check("dòng 0: bấm Xem → phát", wait(120, lambda: pp.state == "playing"), f"{time.time() - t0:.1f}s chuẩn bị")
 dlg.vol_amb[0].setValue(2)
 wait(0.2)
-check("kéo thanh chung → bộ phát đổi ngay", dlg.live.mixer.gains.get("amb:0") == 0.02, str(dlg.live.mixer.gains))
+check("kéo thanh chung → trình phát đổi ngay", pp.audio.mixer is not None and pp.audio.mixer.gains.get("amb:0") == 0.02,
+      str(pp.audio.mixer.gains if pp.audio.mixer else None))
 dlg.grab().save(os.path.join(scratch, "batch_volume.png"))
-dlg._listen(1)  # dòng có âm lượng riêng
-check("dòng 1: nghe với âm lượng riêng", wait(120, lambda: dlg.live.is_playing() and dlg._playing_row == 1)
-      and dlg.live.mixer.gains.get("music") == 0.03, str(dlg.live.mixer.gains if dlg.live.mixer else None))
+dlg._watch(1)  # dòng có âm lượng riêng
+check("dòng 1: phát với âm lượng riêng", wait(120, lambda: pp.state == "playing" and dlg._current_row() == 1
+                                                 and pp.audio.mixer is not None
+                                                 and pp.audio.mixer.gains.get("music") == 0.03),
+      str(pp.audio.mixer.gains if pp.audio.mixer else None))
 dlg.vol_music.setValue(1)
 wait(0.2)
-check("thanh chung không đè âm lượng riêng", dlg.live.mixer.gains.get("music") == 0.03)
+check("thanh chung không đè âm lượng riêng", pp.audio.mixer.gains.get("music") == 0.03)
 dlg._stop_listen()
+check("tạm dừng trình phát", wait(3, lambda: pp.state == "paused"), pp.state)
 
 # OK: âm lượng vào dự án hàng đợi
 dlg.vol_music.setValue(55)

@@ -13,7 +13,7 @@ from .widgets import sample_label
 
 # (khoá, biểu tượng, màu biểu tượng, tiêu đề, mô tả, ví dụ)
 CARDS = [
-    ("video_music", "video_music", "#a78bfa", "Video loop có nhạc",
+    ("video_music", "video_music", "#a78bfa", "Video có nhạc",
      "Clip loop (Google Flow…) + playlist nhạc → video dài cho YouTube.",
      "Ví dụ: clip nền ×70 xen các cảnh, nhạc tự lặp đủ 1 giờ"),
     ("video_only", "film", "#60a5fa", "Chỉ video",
@@ -22,10 +22,10 @@ CARDS = [
     ("music_only", "music", "#34d399", "Chỉ nhạc",
      "Playlist → một file nhạc dài, hoặc nhiều bản khác thứ tự.",
      "Ví dụ: 10 bài → file MP3 1 giờ, xuất 4 bản"),
-    ("ambient", "waves", "#22d3ee", "Âm thanh nền (ASMR)",
+    ("ambient", "waves", "#22d3ee", "Tiếng nền (ASMR)",
      "Chỉ tiếng mưa, lửa, sóng… phối nhiều lớp, tự lặp liền mạch.",
      "Ví dụ: mưa 70% + lửa 50% → file 8 giờ"),
-    ("batch", "folder", "#fbbf24", "Hàng loạt từ thư mục",
+    ("batch", "folder", "#fbbf24", "Xuất hàng loạt",
      "Nhiều video cùng kiểu một lần: mỗi thư mục con = một video.",
      "Dùng dự án đang mở làm khuôn"),
     ("open", "save", "#f472b6", "Mở dự án đã lưu",

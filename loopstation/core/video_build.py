@@ -105,6 +105,60 @@ def _run_cached(runner: ft.Runner, sub: str, key: str, ext: str, build) -> Path:
     return out
 
 
+def segment_look(seg: Segment, look, look_bookends: bool):
+    """Màu & logo cho một khối: mặc định không áp lên khối chỉ có Intro/Outro (trừ `look_bookends`).
+    Trả về (look hoặc None, side): side = "a"/"b" khi crossfade giữa Intro/Outro và clip chính — chỉ áp màu & logo
+    lên phía clip chính (không "bật" đột ngột lên intro)."""
+    main = seg.clip >= 0 or (seg.kind == "xfade" and seg.clip_b >= 0)
+    if look is not None and not (look.active and (main or look_bookends)):
+        look = None
+    side = ""
+    if look is not None and seg.kind == "xfade" and not look_bookends:
+        side = "a" if seg.clip_b < 0 <= seg.clip else ("b" if seg.clip < 0 <= seg.clip_b else "")
+    return look, side
+
+
+def segment_graph(seg: Segment, paths: dict[int, str], fps: Fraction, width: int, height: int, fit: str, pix: str,
+                  fade: float, off_a: int, off_b: int, look, side: str, skip: int = 0, seek_a: int = 0) -> str:
+    """Filtergraph của một khối (chỉ hình) → nhãn [v]. Dùng chung cho lúc xuất (mã hoá) và bộ phát xem trước
+    (khung hình thô), nên hình xem trước giống hệt bản xuất.
+    `skip`: bỏ `skip` frame đầu của khối (xem trước bắt đầu giữa khối).
+    `seek_a`: số frame đầu vào A đã được tua sẵn bằng -ss (xem trước clip dài: không giải mã lại từ đầu clip)."""
+    from .look import graph as look_graph
+    n = seg.frames
+    n_out = n - skip
+    fade_f = ""
+    if fade > 0:
+        st = seconds(n, fps) - fade - seconds(skip, fps)
+        fade_f = (f",fade=t=out:st={st:.6f}:d={fade:.6f}" if st >= 0
+                  else f",fade=t=out:st=0:d={max(0.001, fade + st):.6f}")  # bắt đầu giữa đoạn mờ dần
+    a0 = seg.start + off_a + skip - seek_a
+    if seg.kind == "body":
+        pre = (f"[0:v]{_norm(fit, width, height, fps, '', paths[seg.clip])},"
+               f"trim=start_frame={a0}:end_frame={a0 + n_out},setpts=PTS-STARTPTS")
+        if look is not None:
+            fx = (fade_f[1:] + ",") if fade_f else ""
+            return f"{pre}[pre];{look_graph(look, 'pre', 'lk', width, height)};[lk]{fx}format={pix}[v]"
+        return f"{pre}{fade_f},format={pix}[v]"
+    d = seconds(n, fps)
+    graph = (f"[0:v]{_norm(fit, width, height, fps, 'x', paths[seg.clip])},"
+             f"trim=start_frame={seg.start + off_a}:end_frame={seg.end + off_a},setpts=PTS-STARTPTS[va];"
+             f"[1:v]{_norm(fit, width, height, fps, 'y', paths[seg.clip_b])},"
+             f"trim=start_frame={off_b}:end_frame={off_b + n},setpts=PTS-STARTPTS[vb];")
+    va, vb = "va", "vb"
+    if look is not None and side:
+        src = "va" if side == "a" else "vb"
+        graph += f"{look_graph(look, src, src + 'l', width, height, 'l' + side)};"
+        va, vb = (va + "l", vb) if side == "a" else (va, vb + "l")
+    graph += f"[{va}][{vb}]xfade=transition=fade:duration={d:.6f}:offset=0"
+    tr = f"trim=start_frame={skip},setpts=PTS-STARTPTS," if skip else ""
+    if look is not None and not side:
+        graph += f"[xv];{look_graph(look, 'xv', 'lk', width, height)};[lk]{tr}format={pix}[v]"
+    else:
+        graph += f",{tr}format={pix}[v]"
+    return graph
+
+
 def encode_segment(
     runner: ft.Runner,
     seg: Segment,
@@ -126,13 +180,7 @@ def encode_segment(
     `offsets`: số frame bỏ ở đầu mỗi clip (cắt chỉ lấy đoạn giữa); vị trí trong `seg` tính từ sau đoạn bỏ.
     `look`: màu & logo (core.look.Look); mặc định không áp lên khối chỉ có Intro/Outro (trừ `look_bookends`)."""
     n = seg.frames
-    main = seg.clip >= 0 or (seg.kind == "xfade" and seg.clip_b >= 0)
-    if look is not None and not (look.active and (main or look_bookends)):
-        look = None
-    # crossfade giữa Intro/Outro và clip chính: chỉ áp màu & logo lên phía clip chính (không "bật" đột ngột lên intro)
-    side = ""
-    if look is not None and seg.kind == "xfade" and not look_bookends:
-        side = "a" if seg.clip_b < 0 <= seg.clip else ("b" if seg.clip < 0 <= seg.clip_b else "")
+    look, side = segment_look(seg, look, look_bookends)
     fade = min(fade_out, seconds(n, fps)) if seg.fade else 0.0
     off_a = (offsets or {}).get(seg.clip, 0)
     off_b = (offsets or {}).get(seg.clip_b, 0) if seg.kind == "xfade" else 0
@@ -145,47 +193,11 @@ def encode_segment(
     tail = (["-frames:v", str(n), *encoders.encoder_args(encoder, quality, gop, maxrate, strict_cap),
              *COLOR_TAGS,
              "-video_track_timescale", str(timescale(fps)), "-an", "-sn", "-dn", "-f", "mp4"])
-    fade_f = f",fade=t=out:st={seconds(n, fps) - fade:.6f}:d={fade:.6f}" if fade > 0 else ""
+    graph = segment_graph(seg, paths, fps, width, height, fit, pix, fade, off_a, off_b, look, side)
+    inputs = _input(paths[seg.clip], fps) + (_input(paths[seg.clip_b], fps) if seg.kind == "xfade" else [])
 
-    if seg.kind == "body" and look is not None:
-        from .look import graph as look_graph
-        fx = (fade_f[1:] + ",") if fade_f else ""
-        lgraph = (f"[0:v]{_norm(fit, width, height, fps, '', paths[seg.clip])},"
-                  f"trim=start_frame={seg.start + off_a}:end_frame={seg.end + off_a},setpts=PTS-STARTPTS[pre];"
-                  f"{look_graph(look, 'pre', 'lk', width, height)};[lk]{fx}format={pix}[v]")
-
-        def build(out: str) -> list[str]:
-            return ["-v", "error", *_input(paths[seg.clip], fps), "-filter_complex", lgraph, "-map", "[v]",
-                    *tail, out]
-    elif seg.kind == "body":
-        vf = (f"{_norm(fit, width, height, fps, '', paths[seg.clip])},"
-              f"trim=start_frame={seg.start + off_a}:end_frame={seg.end + off_a},setpts=PTS-STARTPTS"
-              f"{fade_f},format={pix}")
-
-        def build(out: str) -> list[str]:
-            return ["-v", "error", *_input(paths[seg.clip], fps), "-map", "0:v:0", "-vf", vf, *tail, out]
-    else:
-        d = seconds(n, fps)
-        graph = (f"[0:v]{_norm(fit, width, height, fps, 'x', paths[seg.clip])},"
-                 f"trim=start_frame={seg.start + off_a}:end_frame={seg.end + off_a},setpts=PTS-STARTPTS[va];"
-                 f"[1:v]{_norm(fit, width, height, fps, 'y', paths[seg.clip_b])},"
-                 f"trim=start_frame={off_b}:end_frame={off_b + n},setpts=PTS-STARTPTS[vb];")
-        va, vb = "va", "vb"
-        if look is not None and side:
-            from .look import graph as look_graph
-            src = "va" if side == "a" else "vb"
-            graph += f"{look_graph(look, src, src + 'l', width, height, 'l' + side)};"
-            va, vb = (va + "l", vb) if side == "a" else (va, vb + "l")
-        graph += f"[{va}][{vb}]xfade=transition=fade:duration={d:.6f}:offset=0"
-        if look is not None and not side:
-            from .look import graph as look_graph
-            graph += f"[xv];{look_graph(look, 'xv', 'lk', width, height)};[lk]format={pix}[v]"
-        else:
-            graph += f",format={pix}[v]"
-
-        def build(out: str) -> list[str]:
-            return ["-v", "error", *_input(paths[seg.clip], fps), *_input(paths[seg.clip_b], fps),
-                    "-filter_complex", graph, "-map", "[v]", *tail, out]
+    def build(out: str) -> list[str]:
+        return ["-v", "error", *inputs, "-filter_complex", graph, "-map", "[v]", *tail, out]
 
     return _run_cached(runner, "blocks", key, ".mp4", build)
 

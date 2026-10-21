@@ -220,7 +220,7 @@ class MixerPanel(QGroupBox):
         elif mode == "video_only":
             self.music.set_usable(False, "Kiểu Chỉ video không dùng playlist nhạc.")
         elif source_audio == "only":
-            self.music.set_usable(False, "Đang chọn “Chỉ tiếng gốc của clip” (trang Video → Khung & Tiếng).")
+            self.music.set_usable(False, "Đang chọn “Chỉ tiếng gốc clip” (trang Video → Khung & Tiếng).")
         else:
             self.music.set_usable(True)
         show_src = mode != "music_only"

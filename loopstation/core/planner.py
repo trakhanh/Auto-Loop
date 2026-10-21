@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import math
+import os
 import random
 from dataclasses import dataclass, field
 from fractions import Fraction
@@ -286,9 +287,9 @@ def describe_rounds(plan: VideoPlan, names: list[str], max_rounds: int = 20) -> 
                 lst.append((clip, n))
     for r in sorted(rounds)[:max_rounds]:
         parts = [nm(c) + (f" ×{n}" if n > 1 else "") for c, n in rounds[r]]
-        lines.append(f"Vòng {r + 1}: " + " → ".join(parts))
+        lines.append(f"Lượt {r + 1}: " + " → ".join(parts))
     if len(rounds) > max_rounds:
-        lines.append(f"… và {len(rounds) - max_rounds} vòng nữa")
+        lines.append(f"… và {len(rounds) - max_rounds} lượt nữa")
     if plays and plays[-1][0] == OUTRO:
         lines.append("Kết thúc: Outro")
     xfs = sum(1 for o in plan.overlaps if o)
@@ -308,9 +309,12 @@ class MusicItem:
 
 def music_round(ms: MusicSettings, rng: random.Random, prev_last: int | None) -> list[int]:
     seq: list[int] = []
+    first: dict[str, int] = {}
     for i, t in enumerate(ms.tracks):
         if t.enabled and t.plays > 0:
-            seq += [i] * t.plays
+            # xáo ngẫu nhiên: cùng một file nhân bản nhiều dòng = thêm lượt phát của bài đó (không phát 2 lần liền)
+            k = i if ms.order == "list" else first.setdefault(os.path.normcase(t.path), i)
+            seq += [k] * t.plays
     if not seq or ms.order == "list":
         return seq
     rng.shuffle(seq)

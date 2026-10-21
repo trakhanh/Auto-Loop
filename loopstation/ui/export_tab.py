@@ -139,7 +139,7 @@ class ExportTab(QWidget):
         f_aud.setVerticalSpacing(6)
         f_aud.addRow("Định dạng xuất", self.exp_format)
         f_aud.addRow(self.exp_info)
-        f_aud.addRow(w.muted("Độ dài file nhạc (ví dụ 10 bài → 1 tiếng) chỉnh ở trang <b>2. Nhạc</b>, "
+        f_aud.addRow(w.muted("Độ dài file nhạc (ví dụ 10 bài → 1 giờ) chỉnh ở trang <b>2. Nhạc</b>, "
                              "thẻ <b>Độ dài file nhạc</b> trên cùng bên phải."))
         self.g_audio.hide()
         self.g_video = g_fmt
@@ -169,7 +169,7 @@ class ExportTab(QWidget):
         self.markers.setToolTip("4 file: .txt để đọc, .csv mở bằng Excel, .srt kéo vào Premiere / CapCut / DaVinci "
                                 "thành track chữ trên timeline, .edl nhập marker vào DaVinci Resolve. "
                                 "Đoạn THƯỜNG là cảnh chèn — chỗ editor thêm sound effect.")
-        g_out = QGroupBox("Nơi lưu && Tệp xuất kèm")
+        g_out = QGroupBox("Nơi lưu && File xuất kèm")
         f_out = QFormLayout(g_out)
         f_out.setVerticalSpacing(8)
         f_out.addRow("Thư mục lưu", row)
@@ -278,7 +278,7 @@ class ExportTab(QWidget):
         q_del.setIcon(icons.icon("trash", 13))
         q_del.setIconSize(QSize(13, 13))
         q_del.clicked.connect(self._remove_selected)
-        q_batch = QPushButton("Hàng loạt từ thư mục…")
+        q_batch = QPushButton("Xuất hàng loạt…")
         q_batch.setObjectName("pill")
         q_batch.setIcon(icons.icon("folder", 13))
         q_batch.setIconSize(QSize(13, 13))
@@ -294,7 +294,7 @@ class ExportTab(QWidget):
         q_up.setObjectName("ghost")
         q_up.setIcon(icons.icon("up", 14))
         q_up.setIconSize(QSize(14, 14))
-        q_up.setToolTip("Đưa mục đang chọn lên trước")
+        q_up.setToolTip("Đưa mục đang chọn lên trên")
         q_up.clicked.connect(lambda: self._move(-1))
         q_down = QPushButton("")
         q_down.setObjectName("ghost")

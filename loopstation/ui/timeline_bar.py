@@ -12,7 +12,7 @@ import re
 from dataclasses import dataclass
 from fractions import Fraction
 
-from PySide6.QtCore import QEasingCurve, QPointF, QRectF, Qt, QVariantAnimation
+from PySide6.QtCore import QEasingCurve, QPointF, QRectF, Qt, QVariantAnimation, Signal
 from PySide6.QtGui import QBrush, QColor, QFont, QLinearGradient, QPainter, QPainterPath, QPen
 from PySide6.QtWidgets import QToolTip, QWidget
 
@@ -49,6 +49,7 @@ def short_label(name: str) -> str:
 
 
 class TimelineBar(QWidget):
+    seekRequested = Signal(float)  # bấm (không kéo) vào dòng thời gian khi cửa sổ Xem trước đang mở
     LANE_V, LANE_M = 28, 20
     PAD_L, PAD_R = 116, 12
     TOP_V = 10
@@ -68,6 +69,10 @@ class TimelineBar(QWidget):
         self.use_source = False
         self.view0, self.view1 = 0.0, 0.0  # khoảng thời gian đang xem (phóng to)
         self._drag: tuple[float, float] | None = None
+        self._press: QPointF | None = None
+        self.playhead: float | None = None  # vạch đang xem (trình phát)
+        self.seek_enabled = False
+        self._scrub = False  # đang kéo vạch phát
         self._hits: list[tuple[QRectF, str]] = []
         self.note = "Kéo thả video hoặc nhạc vào dự án để xem trước dòng thời gian trực quan"
 
@@ -254,8 +259,27 @@ class TimelineBar(QWidget):
                        "Chỉ có tiếng nền" if self.ambient else
                        "Chưa có nhạc · tiếng gốc của clip đang tắt (bật ở thẻ Khung & Tiếng, trang Video)" if self.source_off
                        else "Không có âm thanh (chưa có nhạc, clip không có tiếng gốc)")
+        if self.playhead is not None and self.view0 <= self.playhead <= self.view1:
+            x = self._x(self.playhead)
+            p.setPen(QPen(QColor("#f8fafc"), 2))
+            p.drawLine(QPointF(x, top_v - 4), QPointF(x, top_m + self.LANE_M + 2))
+            head = QPainterPath()
+            head.moveTo(x - 5, top_v - 7)
+            head.lineTo(x + 5, top_v - 7)
+            head.lineTo(x, top_v - 1)
+            head.closeSubpath()
+            p.fillPath(head, QColor("#f8fafc"))
         p.restore()
         self._draw_ruler(p, top_m + self.LANE_M + 4, small, bold)
+        if self.playhead is not None and self.view0 <= self.playhead <= self.view1:
+            # tay nắm vạch phát trên thước giờ (kéo để tua, như CapCut / Premiere)
+            x = self._x(self.playhead)
+            ry = top_m + self.LANE_M + 4
+            knob = QPainterPath()
+            knob.addRoundedRect(QRectF(x - 5, ry + 1, 10, max(8.0, h - ry - 4)), 3, 3)
+            p.fillPath(knob, QColor("#f8fafc"))
+            p.setPen(QPen(QColor("#f8fafc"), 2))
+            p.drawLine(QPointF(x, top_m + self.LANE_M), QPointF(x, ry + 1))
 
     def _draw_lane(self, p: QPainter, blocks: list[Block], top: float, lane_h: float, small, tiny,
                    gradient: bool) -> None:
@@ -423,7 +447,31 @@ class TimelineBar(QWidget):
         self.view0, self.view1 = a0 + (b0 - a0) * k, a1 + (b1 - a1) * k
         self.update()
 
+    def set_playhead(self, t: float | None) -> None:
+        if t != self.playhead:
+            self.playhead = t
+            self.update()
+
+    def _ruler_y(self) -> float:
+        return self.TOP_V + self.LANE_V + 6 + self.LANE_M + 4
+
+    def _on_scrub_zone(self, pos) -> bool:
+        """Bấm trên thước giờ, hoặc ngay vạch phát → kéo để tua (không phải kéo khung nhìn)."""
+        if not (self.seek_enabled and self.total and pos.x() >= self.PAD_L):
+            return False
+        if pos.y() >= self._ruler_y() - 2:
+            return True
+        return self.playhead is not None and abs(self._x(self.playhead) - pos.x()) <= 6
+
     def mousePressEvent(self, e) -> None:  # noqa: N802
+        if e.button() == Qt.MouseButton.LeftButton and self._on_scrub_zone(e.position()):
+            self._scrub = True
+            self._press = None
+            self.setCursor(Qt.CursorShape.SizeHorCursor)
+            self.seekRequested.emit(max(0.0, min(self.total, self._t(e.position().x()))))
+            return
+        if e.button() == Qt.MouseButton.LeftButton:
+            self._press = e.position()
         if e.button() == Qt.MouseButton.LeftButton and self.total and not self._full_view(self.total):
             if self._zoom_running():
                 self._zoom_anim.stop()
@@ -431,8 +479,16 @@ class TimelineBar(QWidget):
             self.setCursor(Qt.CursorShape.ClosedHandCursor)
 
     def mouseReleaseEvent(self, e) -> None:  # noqa: N802
+        if self._scrub:
+            self._scrub = False
+            self.unsetCursor()
+            return
+        press, self._press = self._press, None
         self._drag = None
         self.unsetCursor()
+        if (press is not None and self.seek_enabled and self.total and e.button() == Qt.MouseButton.LeftButton
+                and (e.position() - press).manhattanLength() < 4 and e.position().x() >= self.PAD_L):
+            self.seekRequested.emit(max(0.0, min(self.total, self._t(e.position().x()))))
 
     def mouseDoubleClickEvent(self, e) -> None:  # noqa: N802
         if self.total:
@@ -441,6 +497,15 @@ class TimelineBar(QWidget):
     def mouseMoveEvent(self, e) -> None:  # noqa: N802
         if not self.total:
             return
+        if self._scrub:
+            t = max(0.0, min(self.total, self._t(e.position().x())))
+            self.set_playhead(t)
+            self.seekRequested.emit(t)
+            return
+        if self._on_scrub_zone(e.position()):
+            self.setCursor(Qt.CursorShape.SizeHorCursor)
+        elif self._drag is None:
+            self.unsetCursor()
         if self._drag is not None:
             x0, v0 = self._drag
             vs = self.view1 - self.view0
@@ -459,7 +524,8 @@ class TimelineBar(QWidget):
             QToolTip.showText(e.globalPosition().toPoint(), hit, self)
         elif pos.x() >= self.PAD_L:
             QToolTip.showText(e.globalPosition().toPoint(),
-                              f"{fmt_dur(self._t(pos.x()))}\nLăn chuột để phóng to · kéo để di chuyển · "
-                              "nhấp đúp để xem toàn bộ", self)
+                              f"{fmt_dur(self._t(pos.x()))}\n"
+                              + ("Bấm để xem trước từ chỗ này · " if self.seek_enabled else "")
+                              + "Lăn chuột để phóng to · kéo để di chuyển · nhấp đúp để xem toàn bộ", self)
         else:  # rê vào tên làn: giải thích làn đó
             QToolTip.showText(e.globalPosition().toPoint(), self._lane_tip(pos.y()), self)

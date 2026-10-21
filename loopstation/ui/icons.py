@@ -9,6 +9,18 @@ from PySide6.QtSvg import QSvgRenderer
 
 # Các đường nét SVG chuẩn khung nhìn 24x24, stroke-width 2, bo tròn đầu nét
 _PATHS: dict[str, str] = {
+    "fullscreen": (
+        '<path d="M3 9V3h6"/><path d="M21 9V3h-6"/><path d="M3 15v6h6"/><path d="M21 15v6h-6"/>'
+    ),
+    "replay10": (
+        '<path d="M3.5 12a8.5 8.5 0 1 0 2.5-6"/><polyline points="3 3.5 3 8.5 8 8.5"/>'
+    ),
+    "forward10": (
+        '<path d="M20.5 12a8.5 8.5 0 1 1-2.5-6"/><polyline points="21 3.5 21 8.5 16 8.5"/>'
+    ),
+    "to_start": (
+        '<line x1="5" y1="4" x2="5" y2="20"/><polygon points="19 4 8 12 19 20"/>'
+    ),
     "video": (
         '<rect x="2" y="4" width="15" height="16" rx="3"/>'
         '<polygon points="17 9 22 6 22 18 17 15"/>'

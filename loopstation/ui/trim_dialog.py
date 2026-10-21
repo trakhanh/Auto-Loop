@@ -302,7 +302,7 @@ class TrimDialog(QDialog):
 
         presets = QGridLayout()
         presets.setSpacing(6)
-        for k, (label, a, b) in enumerate((("Toàn bộ", 0, 0), ("Bỏ 0.5s mỗi đầu", 0.5, 0.5),
+        for k, (label, a, b) in enumerate((("Lấy toàn bộ", 0, 0), ("Bỏ 0.5s mỗi đầu", 0.5, 0.5),
                                            ("Bỏ 1s mỗi đầu", 1, 1), ("Bỏ 2s mỗi đầu", 2, 2))):
             pb = QPushButton(label)
             pb.setObjectName("pill")
