@@ -21,6 +21,8 @@ from . import widgets as w
 from ..core.probe import probe_many
 from .interleave_dialog import USER_PREFIX, InterleaveDialog, all_presets, arrange_from_preset
 from .live_mix import LivePlayer
+from .music_tab import EXPORT_MODE
+from .video_tab import LENGTH, quick_buttons
 from .mixer_panel import MixerPanel
 from .preview_worker import StemsJob
 
@@ -133,9 +135,17 @@ KINDS = (("video_music", "video_music", "segL", "Mỗi thư mục con → một 
          ("video_only", "film", "segM", "Mỗi thư mục con → một video .mp4 không nhạc (giữ tiếng gốc clip)"),
          ("music_only", "music", "segR", "Mỗi thư mục con → một file nhạc (playlist của thư mục đó)"))
 # độ dài mỗi video / file: (giá trị, chữ hiện)
-VIDEO_LEN = [("target", "Đúng thời lượng"), ("music", "Theo độ dài nhạc (playlist phát hết một lượt)"),
-             ("manual", "Theo số lần phát của clip (mỗi cảnh phát 1 lần, clip nền theo mẫu xếp)")]
-MUSIC_LEN = [("target", "Đúng thời lượng"), ("rounds", "Số lượt playlist")]
+VIDEO_LEN = LENGTH  # trang Video → Độ dài tổng của video → Chế độ độ dài
+MUSIC_LEN = EXPORT_MODE  # Chỉ nhạc → Độ dài file nhạc → Tính theo
+QUICK_LEN = (("30p", 1800), ("1h", 3600), ("2h", 7200), ("3h", 10800), ("10h", 36000))  # giống nút nhanh ở trang chính
+
+
+def human_len(sec: float) -> str:
+    """3600 → '1 giờ', 5400 → '1 giờ 30 phút', 45 → '45 giây'."""
+    s = int(round(sec))
+    h, m, x = s // 3600, s % 3600 // 60, s % 60
+    parts = [f"{h} giờ"] * bool(h) + [f"{m} phút"] * bool(m) + [f"{x} giây"] * bool(x)
+    return " ".join(parts) or "0 giây"
 
 
 def _k(text: str) -> str:
@@ -154,7 +164,7 @@ def kind_card_html(kind: str, audio_ext: str = ".mp3") -> tuple[str, str]:
     if kind == "music_only":
         head = f"Mỗi thư mục con → <b>một file nhạc {audio_ext}</b>"
         items = ("Các bài nhạc trong thư mục con (kể cả thư mục bên trong) = <b>playlist</b> của file đó.",
-                 "Playlist được lặp cho đủ <b>Độ dài mỗi file</b> bên dưới. Video / ảnh trong thư mục bị bỏ qua.",
+                 "Playlist được lặp cho đủ độ dài chọn ở ô <b>Tính theo</b> bên dưới. Video / ảnh trong thư mục bị bỏ qua.",
                  *common)
         tree = ("Nhac-can-lam\\           <span style='color:#8c96b0'>← chọn thư mục này</span>\n"
                 "├─ Piano-dem\\           <span style='color:#10b981'>→ Piano-dem" + audio_ext + "</span>\n"
@@ -327,13 +337,26 @@ class BatchDialog(QDialog):
         self.len_rounds.setSuffix(" lượt")
         self.len_rounds.setValue(t.music.export_rounds)
         self.len_rounds.setToolTip("Playlist phát hết bao nhiêu lượt (mỗi lượt đổi thứ tự nếu dự án để ngẫu nhiên)")
+        # 2 hàng giống trang chính: [Chế độ độ dài / Tính theo] rồi [Thời lượng đích / Dài bao lâu / Số lượt playlist]
         len_row = QHBoxLayout()
         len_row.setSpacing(10)
         len_row.addWidget(self.len_mode)
-        len_row.addWidget(self.len_target)
-        len_row.addWidget(self.len_rounds)
-        len_row.addStretch(1)
+        # nói rõ kết quả của lựa chọn ngay cạnh ô (ví dụ "→ mọi video dài đúng 3 giờ…")
+        self.len_hint = w.muted("")
+        self.len_hint.setWordWrap(True)
+        len_row.addWidget(self.len_hint, 1)
+        self.len_mode.setSizeAdjustPolicy(QComboBox.SizeAdjustPolicy.AdjustToContents)
+        self.len_target_wrap = QWidget()
+        self.len_target_wrap.setLayout(quick_buttons(self.len_target, QUICK_LEN))
+        self.len_target_wrap.layout().setContentsMargins(0, 0, 0, 0)
+        val_row = QHBoxLayout()
+        val_row.setSpacing(10)
+        val_row.addWidget(self.len_target_wrap)
+        val_row.addWidget(self.len_rounds)
+        val_row.addStretch(1)
         self.len_mode.currentIndexChanged.connect(self._update_len_widgets)
+        self.len_target.valueChanged.connect(self._update_len_widgets)
+        self.len_rounds.valueChanged.connect(self._update_len_widgets)
 
         # tiếng gốc của clip cho cả loạt (mặc định theo dự án khuôn; danh sách đổi theo kiểu)
         self.source = QComboBox()
@@ -383,6 +406,9 @@ class BatchDialog(QDialog):
         self.len_label = QLabel()
         self.len_box = self._wrap(len_row)
         form.addRow(self.len_label, self.len_box)
+        self.len_val_label = QLabel()
+        self.len_val_box = self._wrap(val_row)
+        form.addRow(self.len_val_label, self.len_val_box)
         form.addRow("Mẫu xếp clip:", self.preset)
         form.addRow("Crossfade:", self.xf_box)
         form.addRow("Tiếng gốc clip:", self.source)
@@ -495,7 +521,7 @@ class BatchDialog(QDialog):
         if want not in [v for v, _ in items]:
             want = "target"
         self._refill(self.len_mode, items, want)
-        self.len_label.setText("Độ dài mỗi file:" if mo else "Độ dài mỗi video:")
+        self.len_label.setText("Tính theo:" if mo else "Chế độ độ dài:")
         self.len_mode.setToolTip(f"Áp cho mọi {self._unit} trong loạt")
         self._update_len_widgets()
 
@@ -538,8 +564,26 @@ class BatchDialog(QDialog):
 
     def _update_len_widgets(self, *_) -> None:
         mode = self.len_mode.currentData()
-        self.len_target.setVisible(mode == "target")
+        self.len_target_wrap.setVisible(mode == "target")
         self.len_rounds.setVisible(mode == "rounds")
+        if hasattr(self, "form"):
+            self.form.setRowVisible(self.len_val_box, mode in ("target", "rounds"))
+        if mode == "rounds":
+            self.len_val_label.setText("Số lượt playlist:")
+        else:
+            self.len_val_label.setText("Dài bao lâu:" if self.music_only else "Thời lượng đích:")
+        unit = self._unit
+        if mode == "target":
+            fill = "playlist tự lặp" if self.music_only else "clip tự lặp"
+            hint = f"→ mọi {unit} đều dài đúng <b>{human_len(self.len_target.seconds())}</b> ({fill} cho đủ, phần dư được cắt)."
+        elif mode == "music":
+            hint = "→ mỗi video dài bằng <b>một lượt playlist</b> của nó — thư mục có nhạc riêng thì theo nhạc đó, nên mỗi video một độ dài."
+        elif mode == "manual":
+            hint = "→ đúng số lần phát: mỗi cảnh 1 lần, clip nền theo <b>Mẫu xếp clip</b> — độ dài xem ở cột Thời lượng."
+        else:
+            hint = (f"→ playlist mỗi thư mục phát <b>{self.len_rounds.value()} lượt</b> — độ dài tuỳ số bài "
+                    "(xem cột Thời lượng).")
+        self.len_hint.setText(hint)
 
     def _apply_len(self, p: Project) -> None:
         """Độ dài chung của hộp thoại → dự án (khuôn hoặc từng video)."""

@@ -405,8 +405,9 @@ Nhac-can-lam\\                 ← thư mục cha
 <p>Khuôn = dự án đang mở: cấu hình xuất, thư mục lưu, Intro / Outro, tiếng nền, playlist chung… áp cho cả loạt.</p>""" + img("batch") + legend([
     ("Xuất ra", "chọn kiểu: Video có nhạc / Chỉ video / Chỉ nhạc."),
     ("Thư mục cha", "chọn thư mục chứa các thư mục con (nút <i>Thư mục mẫu</i> để thử)."),
-    ("Độ dài mỗi video / file", "đúng thời lượng (gõ vào ô giờ · phút · giây), theo độ dài nhạc, hoặc số lượt playlist "
-                                "(Chỉ nhạc) — áp cho cả loạt."),
+    ("Chế độ độ dài / Tính theo", "giống hệt trang Video (<i>Thủ công · Thời lượng mục tiêu · Theo độ dài nhạc</i>) và "
+                                  "Chỉ nhạc (<i>Theo thời lượng · Theo số lượt playlist</i>), áp cho cả loạt. Ví dụ Thời lượng "
+                                  "mục tiêu 3 giờ → video nào cũng dài 3:00:00. Dòng chữ cạnh ô nói rõ kết quả."),
     ("Mẫu xếp clip", "cách xen kẽ clip nền cho mọi video (như hộp thoại Xen kẽ). Kiểu Chỉ nhạc không có ô này."),
     ("Âm lượng", "Nhạc / Tiếng gốc / từng lớp tiếng nền cho cả loạt (mặc định theo Bảng trộn âm)."),
     ("Nghe từ", "mốc nghe thử: đầu / giữa video / chỗ đổi bài."),

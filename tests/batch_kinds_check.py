@@ -90,9 +90,21 @@ d = open_dlg("video_music", vid_parent)
 check("VM: nút kiểu Video có nhạc được chọn sẵn", d.kind_buttons["video_music"].isChecked())
 check("VM: khung hướng dẫn nói video có nhạc", "có nhạc" in d.card_text.text() and "loop" in d.card_text.text())
 labels = form_labels(d)
-check("VM: có ô Nhạc + Độ dài mỗi video", "Nhạc:" in labels and "Độ dài mỗi video:" in labels, str(labels))
+check("VM: có ô Nhạc + Chế độ độ dài", "Nhạc:" in labels and "Chế độ độ dài:" in labels, str(labels))
 check("VM: quét 3 video", len(d.jobs) == 3)
 check("VM: độ dài theo dự án (2 giờ)", d.len_target.seconds() == 7200 and d.len_mode.currentData() == "target")
+check("VM: chữ giống trang Video", [d.len_mode.itemText(i) for i in range(d.len_mode.count())] ==
+      ["Thủ công — đúng số lần phát trong bảng", "Thời lượng mục tiêu (ví dụ 1h, 3h, 10h)", "Theo độ dài nhạc (1 lượt playlist)"])
+check("VM: hàng Thời lượng đích + dòng giải thích", "Thời lượng đích:" in form_labels(d) and "3 giờ" not in d.len_hint.text()
+      and "2 giờ" in d.len_hint.text(), d.len_hint.text())
+from PySide6.QtWidgets import QPushButton as _QB  # noqa: E402
+next(b for b in d.len_target_wrap.findChildren(_QB) if b.text() == "1h").click()
+wait(0.3)
+check("VM: nút nhanh 1h → 1 giờ", d.len_target.seconds() == 3600)
+d.len_mode.setCurrentIndex(d.len_mode.findData("manual"))
+wait(0.3)
+check("VM: Thủ công → ẩn hàng Thời lượng đích", "Thời lượng đích:" not in form_labels(d))
+d.len_mode.setCurrentIndex(d.len_mode.findData("target"))
 d.len_target.set_seconds(1800)
 wait(0.5)
 check("VM: đổi độ dài → bảng tính lại 30 phút", d.tree.topLevelItem(0).text(C_DUR).startswith(("30:00", "00:30:00")),
@@ -123,7 +135,7 @@ d.grab().save(os.path.join(scratch, "switch_video_only.png"))
 d.kind_buttons["music_only"].click()
 wait(0.5)
 labels = form_labels(d)
-check("VM→MO: chỉ còn hàng của Chỉ nhạc", "Độ dài mỗi file:" in labels and "Mẫu xếp clip:" not in labels
+check("VM→MO: chỉ còn hàng của Chỉ nhạc", "Tính theo:" in labels and "Mẫu xếp clip:" not in labels
       and "Tiếng gốc clip:" not in labels, str(labels))
 check("VM→MO: cột clip ẩn, tên cột theo file nhạc", d.tree.isColumnHidden(1)
       and "file nhạc" in d.tree.headerItem().text(0))
@@ -151,14 +163,14 @@ d.done(0)
 # ---- Chỉ nhạc ----
 d = open_dlg("music_only", mus_parent)
 labels = form_labels(d)
-check("MO: có Độ dài mỗi file, không có Mẫu xếp clip / Nhạc", "Độ dài mỗi file:" in labels
+check("MO: có Tính theo, không có Mẫu xếp clip / Nhạc", "Tính theo:" in labels
       and "Mẫu xếp clip:" not in labels and "Nhạc:" not in labels, str(labels))
 check("MO: khung hướng dẫn nói playlist → file nhạc", "playlist" in d.card_text.text())
 check("MO: quét 2 playlist", len(d.jobs) == 2 and all(p is not None for p in d._projects))
 d.len_mode.setCurrentIndex(d.len_mode.findData("rounds"))
 d.len_rounds.setValue(3)
 wait(0.3)
-check("MO: Số lượt → ẩn ô giờ, hiện ô lượt", not d.len_target.isVisible() and d.len_rounds.isVisible())
+check("MO: Số lượt → ẩn ô giờ, hiện ô lượt", not d.len_target_wrap.isVisible() and d.len_rounds.isVisible() and "Số lượt playlist:" in form_labels(d))
 d.grab().save(os.path.join(scratch, "batch_music_only.png"))
 d._accept()
 check("MO: dự án hàng đợi nhận 3 lượt", d.result_projects and all(
