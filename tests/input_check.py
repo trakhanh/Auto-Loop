@@ -35,6 +35,9 @@ from loopstation.ui.video_tab import set_combo  # noqa: E402
 
 ini = os.path.join(scratch, "s.ini")
 mw.QSettings = lambda org, name: QSettings(ini, QSettings.Format.IniFormat)
+_lv = QSettings(ini, QSettings.Format.IniFormat)
+_lv.setValue("ui/welcome_done", "1")
+_lv.sync()
 ok = True
 
 

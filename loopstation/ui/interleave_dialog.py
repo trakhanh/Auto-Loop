@@ -20,7 +20,7 @@ from PySide6.QtWidgets import (
 
 from ..core import interleave as il
 from ..core.project import ClipItem
-from . import icons
+from . import icons, theme
 from . import widgets as w
 
 COL_NAME, COL_APPEAR, COL_PLAYS = range(3)
@@ -482,7 +482,7 @@ class InterleaveDialog(QDialog):
             if not is_base and c.enabled:
                 n_ins += 1
             it = QListWidgetItem(f"{k + 1:>3}.  [{tag}]  {Path(c.path).name}    {plays}    ≈ {w.fmt_dur(sec)}")
-            it.setForeground(QColor("#a78bfa") if is_base else QColor("#64748b") if not c.enabled
+            it.setForeground(QColor(theme.C["mid"]) if is_base else QColor("#64748b") if not c.enabled
                              else QColor("#eef1f8"))
             self.preview.addItem(it)
         if n_ins == 0:

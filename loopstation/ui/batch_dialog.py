@@ -16,7 +16,7 @@ from PySide6.QtWidgets import (
 from ..core import ambient_lib, batch, encoders, timeline
 from ..core import ffmpeg_tools as ft
 from ..core.project import Project, format_hms
-from . import icons
+from . import icons, motion, theme
 from . import widgets as w
 from ..core.probe import probe_many
 from .interleave_dialog import USER_PREFIX, InterleaveDialog, all_presets, arrange_from_preset
@@ -128,9 +128,9 @@ class VolumeDialog(QDialog):
         self.job.cancel()
         super().done(r)
 KIND_TEXT = {"video_music": "Video có nhạc", "video_only": "Chỉ video", "music_only": "Chỉ nhạc"}
-KINDS = (("video_music", "video_music", "segL", "Mỗi thư mục con → một video .mp4 có nhạc"),
-         ("video_only", "film", "segM", "Mỗi thư mục con → một video .mp4 không nhạc (giữ tiếng gốc clip)"),
-         ("music_only", "music", "segR", "Mỗi thư mục con → một file nhạc (playlist của thư mục đó)"))
+KINDS = (("video_music", "video_music", "Mỗi thư mục con → một video .mp4 có nhạc"),
+         ("video_only", "film", "Mỗi thư mục con → một video .mp4 không nhạc (giữ tiếng gốc clip)"),
+         ("music_only", "music", "Mỗi thư mục con → một file nhạc (playlist của thư mục đó)"))
 # độ dài mỗi video / file: (giá trị, chữ hiện)
 VIDEO_LEN = LENGTH  # trang Video → Độ dài tổng của video → Chế độ độ dài
 MUSIC_LEN = EXPORT_MODE  # Chỉ nhạc → Độ dài file nhạc → Tính theo
@@ -147,11 +147,11 @@ def human_len(sec: float) -> str:
 
 def _k(text: str) -> str:
     """Tên file / thư mục nổi bật trong khung hướng dẫn (QLabel hiện <code> chữ rất nhỏ)."""
-    return f"<b style='color:#c4b5fd'>{text}</b>"
+    return f"<b style='color:{theme.C['soft']}'>{text}</b>"
 
 
 def _li(items) -> str:
-    return "".join(f"<tr><td style='color:#7c5cff; padding-right:6px;'>•</td><td>{t}</td></tr>" for t in items)
+    return "".join(f"<tr><td style='color:{theme.C['accent']}; padding-right:6px;'>•</td><td>{t}</td></tr>" for t in items)
 
 
 def kind_card_html(kind: str, audio_ext: str = ".mp3") -> tuple[str, str]:
@@ -222,12 +222,9 @@ class BatchDialog(QDialog):
         kl.setStyleSheet("font-weight:600; margin-right:10px;")
         kind_row.addWidget(kl)
         self.kind_group = QButtonGroup(self)
-        seg = QHBoxLayout()
-        seg.setSpacing(0)
         self.kind_buttons: dict[str, QPushButton] = {}
-        for key, ic, obj, tip in KINDS:
+        for key, ic, tip in KINDS:
             b = QPushButton(KIND_TEXT[key])
-            b.setObjectName(obj)
             b.setIcon(icons.icon(ic, 14))
             b.setIconSize(QSize(14, 14))
             b.setCheckable(True)
@@ -237,8 +234,7 @@ class BatchDialog(QDialog):
             b.clicked.connect(lambda _=False, k=key: self._switch_kind(k))
             self.kind_group.addButton(b)
             self.kind_buttons[key] = b
-            seg.addWidget(b)
-        self.kind_bar = self._wrap(seg)
+        self.kind_bar = motion.SegmentBox(list(self.kind_buttons.values()))  # khối sáng trượt như thanh trên cùng
         kind_row.addWidget(self.kind_bar)
         kind_row.addSpacing(12)
         self.kind_hint = w.muted("")
@@ -780,7 +776,7 @@ class BatchDialog(QDialog):
                 it.setFlags(it.flags() & ~Qt.ItemFlag.ItemIsUserCheckable & ~Qt.ItemFlag.ItemIsEnabled)
                 it.setForeground(C_NOTE, QColor("#f87171"))
             elif edited or vol_edited:
-                it.setForeground(C_NOTE, QColor("#a78bfa"))
+                it.setForeground(C_NOTE, QColor(theme.C["mid"]))
             elif job.notes or extra:
                 it.setForeground(C_NOTE, QColor("#fbbf24"))
             else:

@@ -85,7 +85,7 @@ def set_windows_app_id() -> None:
 
 
 def apply_window_frame(widget) -> None:
-    """Đồng bộ thanh tiêu đề và viền cửa sổ Windows 10/11 sang tông tối Studio (#0e1118 + viền #26304a)."""
+    """Đồng bộ thanh tiêu đề và viền cửa sổ Windows 10/11 sang tông tối, ánh màu chủ đạo đang chọn."""
     if sys.platform != "win32":
         return
     try:
@@ -99,11 +99,16 @@ def apply_window_frame(widget) -> None:
         # DWMWA_WINDOW_CORNER_PREFERENCE (33) = DWMWCP_ROUND (2)
         corner = ctypes.c_int(2)
         dwm.DwmSetWindowAttribute(hwnd, 33, ctypes.byref(corner), ctypes.sizeof(corner))
-        # DWMWA_BORDER_COLOR (34) = COLORREF 0x00BBGGRR (#2a3550 -> 0x0050352A)
-        border_col = ctypes.c_uint32(0x0050352A)
+        # viền + thanh tiêu đề theo bộ màu đang chọn (COLORREF = 0x00BBGGRR)
+        from . import theme
+
+        def colorref(hex_color: str) -> ctypes.c_uint32:
+            c = theme.QColor(hex_color)
+            return ctypes.c_uint32(c.red() | (c.green() << 8) | (c.blue() << 16))
+
+        border_col = colorref(theme.mix(theme.C["border_light"], theme.C["accent"], 0.35))
         dwm.DwmSetWindowAttribute(hwnd, 34, ctypes.byref(border_col), ctypes.sizeof(border_col))
-        # DWMWA_CAPTION_COLOR (35) = COLORREF 0x00BBGGRR (#0d1017 -> 0x0017100D)
-        cap_col = ctypes.c_uint32(0x0017100D)
+        cap_col = colorref(theme.mix(theme.C["bg"], theme.C["accent"], 0.06))
         dwm.DwmSetWindowAttribute(hwnd, 35, ctypes.byref(cap_col), ctypes.sizeof(cap_col))
         # DWMWA_TEXT_COLOR (36) = COLORREF 0x00BBGGRR (#eef1f8 -> 0x00F8F1EE)
         txt_col = ctypes.c_uint32(0x00F8F1EE)

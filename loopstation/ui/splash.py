@@ -7,7 +7,7 @@ from PySide6.QtCore import QEasingCurve, QPropertyAnimation, QRectF, Qt, QTimer,
 from PySide6.QtGui import QColor, QFont, QLinearGradient, QPainter, QPainterPath, QPen
 from PySide6.QtWidgets import QApplication, QWidget
 
-from . import branding
+from . import branding, theme
 from .theme import APP_NAME, APP_VERSION, AUTHOR
 
 MIN_SHOW = 0.9  # giây: đủ để thấy, không làm chậm việc mở app
@@ -104,17 +104,17 @@ class Splash(QWidget):
             sh.addRoundedRect(card.adjusted(-i / 2, -i / 2 + 2, i / 2, i / 2 + 2), 20, 20)
             p.fillPath(sh, QColor(0, 0, 0, a))
         bg = QLinearGradient(card.topLeft(), card.bottomRight())
-        bg.setColorAt(0.0, QColor("#1b1840"))
+        bg.setColorAt(0.0, QColor(theme.mix("#121621", theme.C["accent"], 0.22)))
         bg.setColorAt(0.55, QColor("#121621"))
         bg.setColorAt(1.0, QColor("#0d1018"))
         p.fillPath(path, bg)
-        p.setPen(QPen(QColor(124, 92, 255, 90), 1.2))
+        p.setPen(QPen(theme.qcolor("accent", 110), 1.2))
         p.drawPath(path)
 
         # quầng sáng nhịp thở sau logo
         cx, cy = self.W / 2, 82
         k = 0.5 - abs(self.pulse - 1.0) / 2  # 0..0.5
-        glow = QColor(124, 92, 255, int(40 + 70 * k))
+        glow = theme.qcolor("accent", int(40 + 70 * k))
         for r, alpha in ((52, 0.35), (44, 0.6), (38, 1.0)):
             c = QColor(glow)
             c.setAlpha(int(glow.alpha() * alpha))
@@ -145,8 +145,8 @@ class Splash(QWidget):
         fill = QPainterPath()
         fill.addRoundedRect(done, 2.5, 2.5)
         g = QLinearGradient(done.topLeft(), done.topRight())
-        g.setColorAt(0.0, QColor("#7c5cff"))
-        g.setColorAt(1.0, QColor("#22d3ee"))
+        g.setColorAt(0.0, theme.qcolor("accent"))
+        g.setColorAt(1.0, theme.qcolor("accent2"))
         p.fillPath(fill, g)
         sx = bar.left() + (bar.width() + 120) * self.shine - 60
         sg = QLinearGradient(sx - 50, 0, sx + 50, 0)

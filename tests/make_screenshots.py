@@ -30,6 +30,9 @@ import loopstation.ui.main_window as mw  # noqa: E402
 from loopstation.core.project import AmbientLayer, Project  # noqa: E402
 
 ini = str(tmp / "s.ini")
+_st = QSettings(ini, QSettings.Format.IniFormat)
+_st.setValue("ui/welcome_done", "1")  # màn hình chào chụp riêng bên dưới
+_st.sync()
 mw.QSettings = lambda org, name: QSettings(ini, QSettings.Format.IniFormat)
 
 
@@ -58,6 +61,13 @@ win._load_initial_project()
 wait(1)
 win.grab().save(str(OUT / "01-bat-dau.png"))
 
+# màn hình chào lần đầu
+win.show_welcome()
+wait(1.5)
+win.grab().save(str(OUT / "00-chao-mung.png"))
+win._welcome._finish()
+wait(0.8)
+
 p = Project.load(str(ROOT / "Mau-Test" / "Du-an-mau - Loop 70 lan.lsproj"))
 p.music.ambient = [AmbientLayer("builtin:rain_light", volume=60)]
 win.load_project(p)
@@ -79,6 +89,7 @@ win.grab().save(str(OUT / "03-nhac-bang-tron-am.png"))
 win.go_to(2)
 wait(1.5)
 win.grab().save(str(OUT / "04-xuat.png"))
+
 
 from loopstation.ui.batch_dialog import BatchDialog  # noqa: E402
 st = QSettings(ini, QSettings.Format.IniFormat)

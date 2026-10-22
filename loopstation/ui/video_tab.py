@@ -15,7 +15,7 @@ from PySide6.QtWidgets import (
 
 from ..core.probe import MediaInfo
 from ..core.project import ClipItem, VideoSettings, format_hms, parse_hms
-from . import icons, motion
+from . import effects, icons, motion, theme
 from . import widgets as w
 from .timeline_bar import TimelineBar
 from .interleave_dialog import InterleaveDialog, has_base_candidate
@@ -56,7 +56,7 @@ def hms_edit() -> QWidget:
 def quick_buttons(target: QWidget, presets) -> QVBoxLayout:
     """Ô thời lượng (giờ / phút / giây) + hàng nút đặt nhanh bên dưới."""
     box = QVBoxLayout()
-    box.setSpacing(5)
+    box.setSpacing(theme.SP['sm'])
     box.addWidget(target)
     row = QHBoxLayout()
     row.setSpacing(4)
@@ -289,13 +289,13 @@ class VideoTab(QWidget):
         quick_bar = QWidget()
         quick_bar.setObjectName("quickBar")
         gl = QVBoxLayout(quick_bar)
-        gl.setContentsMargins(12, 8, 12, 8)
+        gl.setContentsMargins(theme.SP['lg'], theme.SP['md'], theme.SP['lg'], theme.SP['md'])
         gl.setSpacing(6)
 
         r1 = QHBoxLayout()
         r1.setSpacing(6)
         fast_ic = QLabel()
-        fast_ic.setPixmap(icons.pixmap("sliders", 14, "#a5b4fc"))
+        fast_ic.setPixmap(icons.pixmap("sliders", 14, theme.C["mid"]))
         lbl_fast = QLabel("Đặt nhanh (dòng chọn):")
         lbl_fast.setStyleSheet("font-weight: 700; color: #eef1f8;")
         r1.addWidget(fast_ic)
@@ -362,7 +362,7 @@ class VideoTab(QWidget):
         r_cut = QHBoxLayout()
         r_cut.setSpacing(6)
         cut_ic = QLabel()
-        cut_ic.setPixmap(icons.pixmap("scissors", 14, "#a5b4fc"))
+        cut_ic.setPixmap(icons.pixmap("scissors", 14, theme.C["mid"]))
         r_cut.addWidget(cut_ic)
         r_cut.addWidget(QLabel("Cắt đoạn:  Bỏ đầu"))
         r_cut.addWidget(self.bulk_cut_start)
@@ -393,7 +393,10 @@ class VideoTab(QWidget):
 
         def show_more(on: bool) -> None:
             for box in self._extra_rows:
-                box.setVisible(on)
+                if box.isVisible() != on and self.isVisible():
+                    motion.slide_visible(box, on, 200)  # mở / gấp mượt
+                else:
+                    box.setVisible(on)
             self.more_tools.setText("Cắt đoạn && hoà hình ▴" if on else "Cắt đoạn && hoà hình ▾")
             self.settings.setValue("ui/video_more_tools", "true" if on else "false")
 
@@ -454,11 +457,12 @@ class VideoTab(QWidget):
         # gợi ý khi vừa thêm file có clip nền (loop…) cùng các cảnh khác
         self.suggest = QFrame()
         self.suggest.setObjectName("suggestBar")
-        self.suggest.setStyleSheet("#suggestBar { background: #1e1b3a; border: 1px solid #4c3fa8; border-radius: 8px; }")
+        self.suggest.setStyleSheet(f"#suggestBar {{ background: {theme.rgba(theme.C['accent'], 0.14)}; "
+                                   f"border: 1px solid {theme.rgba(theme.C['accent'], 0.55)}; border-radius: 8px; }}")
         sg = QHBoxLayout(self.suggest)
         sg.setContentsMargins(10, 6, 6, 6)
         sg_ic = QLabel()
-        sg_ic.setPixmap(icons.pixmap("repeat", 14, "#a78bfa"))
+        sg_ic.setPixmap(icons.pixmap("repeat", 14, theme.C["mid"]))
         sg.addWidget(sg_ic)
         self.suggest_text = QLabel()
         self.suggest_text.setWordWrap(True)
@@ -622,7 +626,8 @@ class VideoTab(QWidget):
 
         self.next_btn = QPushButton("Tiếp theo: Chọn nhạc")
         self.next_btn.setObjectName("nextStepBtn")
-        self.next_btn.setIcon(icons.icon("arrow_right", 14, "#c7d2fe"))
+        self.next_btn.setIcon(icons.icon("arrow_right", 14, "#ffffff"))
+        effects.Glow(self.next_btn, idle=0.25, blur=24, offset_y=4, alpha=140)  # nút bước tiếp sáng nhẹ
         self.next_btn.setIconSize(QSize(14, 14))
         self.next_btn.setLayoutDirection(Qt.LayoutDirection.RightToLeft)
         self.next_btn.clicked.connect(lambda: self.nextStepRequested.emit())  # clicked(bool) → tín hiệu không đối số
@@ -663,8 +668,7 @@ class VideoTab(QWidget):
         self.mode_banner.hide()
 
         lay = QVBoxLayout(self)
-        lay.setContentsMargins(16, 10, 16, 12)
-        lay.setSpacing(8)
+        theme.page_layout(lay)
         lay.addWidget(self.mode_banner)
         lay.addWidget(split, 1)
 
@@ -869,7 +873,7 @@ class VideoTab(QWidget):
         it.setData(0, w.ROLE_DATA, c)
         skipped = not c.enabled or (c.plays_mode == "fixed" and c.count == 0)
         it.setForeground(COL_NAME, QColor("#646c80") if skipped else QColor("#eef1f8"))
-        it.setForeground(COL_PLAYS, QColor("#646c80") if skipped else QColor("#c4b5fd"))
+        it.setForeground(COL_PLAYS, QColor("#646c80") if skipped else QColor(theme.C["soft"]))
 
         if not info.ok:
             it.setText(COL_INFO, f"LỖI: {info.error}")

@@ -1,4 +1,6 @@
-"""Chuyển động giao diện: cuộn mượt, hộp thoại hiện dần, thông báo nổi (toast), thanh trượt, vạch chọn thanh bên.
+"""Chuyển động giao diện: cuộn mượt, hộp thoại hiện dần, thông báo nổi (toast), thanh trượt, vạch chọn thanh bên,
+bộ chọn có khối sáng trượt (SegmentBox), chữ hiện dần khi đổi, gợn sóng khi bấm + viền sáng ô đang gõ
+(effects.py).
 
 Tất cả hiệu ứng đều ngắn (150–260 ms) và dùng đường cong OutCubic để cảm giác nhanh mà không giật.
 """
@@ -8,10 +10,12 @@ from PySide6.QtCore import (
     QAbstractAnimation, QEasingCurve, QEvent, QObject, QPoint, QPropertyAnimation, QRect, Qt, QTimer,
     QVariantAnimation,
 )
+from PySide6.QtGui import QColor
 from PySide6.QtWidgets import (
-    QAbstractItemView, QAbstractScrollArea, QApplication, QDialog, QGraphicsOpacityEffect, QHBoxLayout, QLabel,
-    QPlainTextEdit, QScrollBar, QWidget,
+    QAbstractButton, QAbstractItemView, QAbstractScrollArea, QApplication, QDialog, QGraphicsOpacityEffect, QHBoxLayout, QLabel, QPlainTextEdit, QScrollBar, QWidget,
 )
+
+from .effects import Ripple, on_focus, wants_focus_glow
 
 EASE = QEasingCurve.Type.OutCubic
 
@@ -39,6 +43,15 @@ class UiMotion(QObject):
             return False
         if t == QEvent.Type.Wheel:
             return self._wheel(obj, event)
+        if t == QEvent.Type.MouseButtonPress:
+            from PySide6.QtWidgets import QPushButton
+            if isinstance(obj, QPushButton) and obj.isEnabled() and event.button() == Qt.MouseButton.LeftButton:
+                Ripple(obj, event.position().toPoint())  # gợn sóng từ chỗ bấm
+            return False
+        if t in (QEvent.Type.FocusIn, QEvent.Type.FocusOut):
+            if isinstance(obj, QWidget) and wants_focus_glow(obj):
+                on_focus(obj, t == QEvent.Type.FocusIn)  # viền sáng ô đang gõ
+            return False
         return False
 
     def _wheel(self, obj, ev) -> bool:
@@ -195,7 +208,9 @@ class Toast(QWidget):
         return QPoint(h.width() - self.width() - 22, h.height() - self.height() - 78)  # trên nút "Tiếp theo"
 
     def show_message(self, text: str, kind: str = "ok", ms: int = 2800) -> None:
-        self.dot.setStyleSheet(f"color: {self.COLORS.get(kind, self.COLORS['info'])}; font-size: 11pt;")
+        from . import theme
+        col = theme.C["mid"] if kind == "info" else self.COLORS.get(kind, theme.C["mid"])
+        self.dot.setStyleSheet(f"color: {col}; font-size: 11pt;")
         self.text.setText(text)
         self.text.setWordWrap(len(text) > 70)  # câu ngắn nằm trên một dòng
         self.adjustSize()
@@ -233,3 +248,84 @@ class Toast(QWidget):
     def reposition(self) -> None:
         if self.isVisible() and self._slide.state() != QAbstractAnimation.State.Running:
             self.move(self._home())
+
+
+class SegmentBox(QWidget):
+    """Bộ chọn nhiều lựa chọn (kiểu sản phẩm, Đơn giản / Đầy đủ…): một khối sáng trượt mượt sang nút được chọn.
+
+    Nút truyền vào phải là nút bật / tắt (checkable) nằm trong một QButtonGroup loại trừ."""
+
+    def __init__(self, buttons: list[QAbstractButton], parent=None):
+        super().__init__(parent)
+        self.setObjectName("segBox")
+        self.setAttribute(Qt.WidgetAttribute.WA_StyledBackground, True)
+        self.pill = QWidget(self)
+        self.pill.setObjectName("segPill")
+        self.pill.setAttribute(Qt.WidgetAttribute.WA_StyledBackground, True)
+        self.pill.setAttribute(Qt.WidgetAttribute.WA_TransparentForMouseEvents, True)
+        self.pill.hide()
+        self._anim = QPropertyAnimation(self.pill, b"geometry", self)
+        self._anim.setDuration(220)
+        self._anim.setEasingCurve(EASE)
+        lay = QHBoxLayout(self)
+        lay.setContentsMargins(3, 3, 3, 3)
+        lay.setSpacing(2)
+        self.buttons = list(buttons)
+        for b in self.buttons:
+            b.setObjectName("segBtn")
+            b.setCursor(Qt.CursorShape.PointingHandCursor)
+            lay.addWidget(b)
+            b.toggled.connect(lambda on, bb=b: on and self._follow(bb, True))
+            b.installEventFilter(self)
+
+    def _current(self) -> QAbstractButton | None:
+        return next((b for b in self.buttons if b.isChecked()), None)
+
+    def _follow(self, b: QAbstractButton, animate: bool) -> None:
+        if not b.isVisible() or b.width() <= 0:
+            return
+        rect = b.geometry()
+        self._anim.stop()
+        if not animate or not self.pill.isVisible() or not self.isVisible():
+            self.pill.setGeometry(rect)
+            self.pill.show()
+            self.pill.lower()
+            return
+        self._anim.setStartValue(self.pill.geometry())
+        self._anim.setEndValue(rect)
+        self._anim.start()
+
+    def eventFilter(self, obj, ev):  # noqa: N802
+        if ev.type() in (QEvent.Type.Resize, QEvent.Type.Move, QEvent.Type.Show) and obj is self._current()                 and self._anim.state() != QAbstractAnimation.State.Running:
+            QTimer.singleShot(0, lambda: (cur := self._current()) is not None and self._follow(cur, False))
+        return False
+
+    def showEvent(self, e) -> None:  # noqa: N802
+        super().showEvent(e)
+        QTimer.singleShot(0, lambda: (cur := self._current()) is not None and self._follow(cur, False))
+
+
+def fade_in(widget: QWidget, ms: int = 180, start: float = 0.25) -> None:
+    """Widget (chữ hướng dẫn, chip…) hiện dần khi nội dung đổi — mắt nhận ra có thay đổi mà không bị giật."""
+    if not widget.isVisible():
+        return
+    eff = widget.graphicsEffect()
+    if eff is not None and not isinstance(eff, QGraphicsOpacityEffect):
+        return  # widget đang có quầng sáng: không đè
+    if eff is None:
+        eff = QGraphicsOpacityEffect(widget)
+        widget.setGraphicsEffect(eff)
+    anim = widget.property("_fade_anim")
+    if anim is None:
+        anim = QPropertyAnimation(eff, b"opacity", widget)
+        anim.setEasingCurve(EASE)
+        # xong thì bỏ hiệu ứng: chữ vẽ thẳng, sắc nét như thường
+        anim.finished.connect(lambda: widget.setGraphicsEffect(None))
+        widget.setProperty("_fade_anim", anim)
+    else:
+        anim.stop()
+        anim.setTargetObject(eff)
+    anim.setDuration(ms)
+    anim.setStartValue(start)
+    anim.setEndValue(1.0)
+    anim.start()

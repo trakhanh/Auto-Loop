@@ -14,7 +14,7 @@ from PySide6.QtWidgets import (
 )
 
 from ..core import ffmpeg_tools as ft
-from . import icons
+from . import icons, theme
 from . import widgets as w
 
 try:  # trình phát video tích hợp (Qt Multimedia, dùng bộ giải mã FFmpeg đi kèm PySide6)
@@ -77,14 +77,14 @@ class RangeBar(QWidget):
         keep = QRectF(self._x(self.start), 12, self._x(self.end) - self._x(self.start), 22)
         kp = QPainterPath()
         kp.addRoundedRect(keep, 6, 6)
-        p.fillPath(kp, QColor("#7c5cff"))
+        p.fillPath(kp, theme.qcolor("accent"))
         p.setPen(QColor("white"))
         if keep.width() > 80:
             p.drawText(keep, Qt.AlignmentFlag.AlignCenter, f"lấy {self.end - self.start:.1f}s")
         for t in (self.start, self.end):
             hx = self._x(t)
             p.setPen(QPen(QColor("#ffffff"), 2))
-            p.setBrush(QColor("#c4b5fd"))
+            p.setBrush(theme.qcolor("soft"))
             p.drawRoundedRect(QRectF(hx - 6, 6, 12, 34), 4, 4)
         # vị trí đang phát
         px = self._x(self.playhead)

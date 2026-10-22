@@ -6,6 +6,7 @@ import shutil
 import threading
 
 from PySide6.QtCore import QObject, QSettings, QSize, Qt, Signal
+from PySide6.QtGui import QColor
 from PySide6.QtWidgets import (
     QCheckBox, QComboBox, QFileDialog, QFormLayout, QGridLayout, QGroupBox, QHBoxLayout, QLabel,
     QLineEdit, QMessageBox, QProgressBar, QPushButton, QVBoxLayout, QWidget,
@@ -13,7 +14,7 @@ from PySide6.QtWidgets import (
 
 from ..core import encoders, sysinfo
 from ..core import ffmpeg_tools as ft
-from . import icons
+from . import icons, theme
 from . import widgets as w
 
 FONT_SIZES = [("Nhỏ", 9), ("Vừa (mặc định)", 10), ("Lớn", 11), ("Rất lớn", 12)]
@@ -36,6 +37,24 @@ def _short(enc: str) -> str:
     return CODEC_SHORT.get(enc) or CODEC_SHORT.get(enc.split("_")[0], enc)
 
 
+def _swatch(a: str, b: str):
+    """Ô màu nhỏ (dải chuyển màu a → b) cạnh tên bộ màu."""
+    from PySide6.QtGui import QIcon, QLinearGradient, QPainter, QPainterPath, QPixmap
+    pm = QPixmap(68, 28)
+    pm.fill(Qt.GlobalColor.transparent)
+    p = QPainter(pm)
+    p.setRenderHint(QPainter.RenderHint.Antialiasing)
+    g = QLinearGradient(0, 0, 68, 0)
+    g.setColorAt(0, QColor(a))
+    g.setColorAt(1, QColor(b))
+    path = QPainterPath()
+    path.addRoundedRect(1, 1, 66, 26, 9, 9)
+    p.fillPath(path, g)
+    p.end()
+    pm.setDevicePixelRatio(2)
+    return QIcon(pm)
+
+
 class _Bridge(QObject):
     bench = Signal(str, float)
     bench_done = Signal()
@@ -45,6 +64,7 @@ class _Bridge(QObject):
 class SettingsPage(QWidget):
     prefsChanged = Signal()
     recheckRequested = Signal()
+    welcomeRequested = Signal()  # xem lại màn hình chào
 
     def __init__(self, settings: QSettings, parent=None):
         super().__init__(parent)
@@ -194,6 +214,24 @@ class SettingsPage(QWidget):
         f = QFormLayout(g_ui)
         f.setVerticalSpacing(8)
         f.addRow("Cỡ chữ ứng dụng", self.font_combo)
+        self.palette_combo = QComboBox()
+        for key, (label, a1, a2, _mid, _soft) in theme.PALETTES.items():
+            self.palette_combo.addItem(_swatch(a1, a2), label, key)
+        self.palette_combo.setIconSize(QSize(34, 14))
+        self.palette_combo.setCurrentIndex(max(0, self.palette_combo.findData(
+            settings.value("pref/palette", theme.PALETTE))))
+        self.palette_combo.setToolTip("Màu của nút chính, thanh chọn, quầng sáng… Đổi là thấy ngay.")
+        f.addRow("Màu chủ đạo", self.palette_combo)
+        welcome = QPushButton("Xem lại màn hình chào")
+        welcome.setObjectName("pill")
+        welcome.setIcon(icons.icon("home", 13))
+        welcome.setIconSize(QSize(13, 13))
+        welcome.clicked.connect(self.welcomeRequested.emit)
+        wrow = QHBoxLayout()
+        wrow.setContentsMargins(0, 0, 0, 0)
+        wrow.addWidget(welcome)
+        wrow.addStretch(1)
+        f.addRow(wrow)
 
         right = QVBoxLayout()
         right.setSpacing(10)
@@ -201,7 +239,7 @@ class SettingsPage(QWidget):
         from .theme import APP_NAME, APP_VERSION, AUTHOR
         g_about = QGroupBox("Giới thiệu")
         fa = QFormLayout(g_about)
-        fa.setVerticalSpacing(6)
+        fa.setVerticalSpacing(theme.FORM_GAP)
         ver = QLabel(f"<b>{APP_VERSION}</b>")
         ver.setTextInteractionFlags(Qt.TextInteractionFlag.TextSelectableByMouse)
         fa.addRow("Ứng dụng", QLabel(f"<b>{APP_NAME}</b>"))
@@ -213,7 +251,7 @@ class SettingsPage(QWidget):
         right.addStretch(1)
 
         cols = QHBoxLayout()
-        cols.setSpacing(14)
+        cols.setSpacing(theme.SP['lg'])
         lw, rw = QWidget(), QWidget()
         lw.setLayout(left)
         rw.setLayout(right)
@@ -225,8 +263,7 @@ class SettingsPage(QWidget):
         cols.addWidget(rw, 2)
         self._cols = cols
         lay = QVBoxLayout(self)
-        lay.setContentsMargins(16, 12, 16, 12)
-        lay.setSpacing(10)
+        theme.page_layout(lay)
         lay.addLayout(head)
         lay.addLayout(cols, 1)
 
@@ -237,6 +274,8 @@ class SettingsPage(QWidget):
         self.shutdown.toggled.connect(lambda _: self.prefsChanged.emit())
         self.out_dir.editingFinished.connect(lambda: self._save("pref/output_dir", self.out_dir.text().strip()))
         self.font_combo.currentIndexChanged.connect(lambda _: self._save("pref/font_pt", self.font_combo.currentData()))
+        self.palette_combo.currentIndexChanged.connect(
+            lambda _: self._save("pref/palette", self.palette_combo.currentData()))
         self.refresh_cache()
 
     # ---------- dữ liệu từ cửa sổ chính ----------

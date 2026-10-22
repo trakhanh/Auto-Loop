@@ -16,7 +16,7 @@ from PySide6.QtWidgets import (
 from ..core import encoders
 from ..core.project import ExportSettings, MusicSettings, format_hms, parse_hms
 from ..core.render_queue import KIND_LABELS, STATUS_LABELS, QueueItem
-from . import icons
+from . import effects, icons, theme
 from . import widgets as w
 from .video_tab import combo, hms_edit, quick_buttons, set_combo
 
@@ -96,7 +96,7 @@ class ExportTab(QWidget):
 
         g_fmt = QGroupBox("Định dạng && Chất lượng Video")
         f = QFormLayout(g_fmt)
-        f.setVerticalSpacing(6)
+        f.setVerticalSpacing(theme.FORM_GAP)
         f.addRow("Chuẩn nén (Codec)", self.preset)
         f.addRow("Độ phân giải", self.resolution)
         f.addRow("Khung hình/giây", self.fps)
@@ -136,7 +136,7 @@ class ExportTab(QWidget):
         self.exp_info.setWordWrap(True)
         self.g_audio = QGroupBox("Định dạng File nhạc")
         f_aud = QFormLayout(self.g_audio)
-        f_aud.setVerticalSpacing(6)
+        f_aud.setVerticalSpacing(theme.FORM_GAP)
         f_aud.addRow("Định dạng xuất", self.exp_format)
         f_aud.addRow(self.exp_info)
         f_aud.addRow(w.muted("Độ dài file nhạc (ví dụ 10 bài → 1 giờ) chỉnh ở trang <b>2. Nhạc</b>, "
@@ -183,8 +183,8 @@ class ExportTab(QWidget):
         render_card = QWidget()
         render_card.setObjectName("quickBar")
         rc_lay = QVBoxLayout(render_card)
-        rc_lay.setContentsMargins(14, 9, 14, 9)
-        rc_lay.setSpacing(7)
+        rc_lay.setContentsMargins(theme.SP['lg'], theme.SP['md'], theme.SP['lg'], theme.SP['md'])
+        rc_lay.setSpacing(theme.SP['md'])
 
         self.summary = QLabel("")
         self.summary.setObjectName("info")
@@ -196,6 +196,8 @@ class ExportTab(QWidget):
         self.start_btn.setIconSize(QSize(15, 15))
         self.start_btn.setMinimumHeight(40)
         self.start_btn.clicked.connect(lambda: self.startRequested.emit())
+        # nút chính luôn sáng nhẹ; sẵn sàng xuất thì quầng sáng "thở" chậm mời bấm
+        self._start_glow = effects.Glow(self.start_btn, idle=0.55, blur=34, offset_y=5, alpha=170)
 
         self.queue_add_btn = QPushButton("Thêm vào hàng đợi")
         self.queue_add_btn.setObjectName("accentBtn")
@@ -234,6 +236,7 @@ class ExportTab(QWidget):
         self._prog_anim = QPropertyAnimation(self.progress, b"value", self)
         self._prog_anim.setDuration(140)
         self._prog_anim.setEasingCurve(QEasingCurve.Type.OutCubic)
+        self._shimmer = effects.Shimmer(self.progress)  # vệt sáng chạy trên thanh tiến trình lúc đang xuất
         self.status = QLabel("Sẵn sàng xuất.")
         self.status.setObjectName("muted")
 
@@ -347,8 +350,7 @@ class ExportTab(QWidget):
         self.log.setMinimumHeight(105)
 
         lay = QVBoxLayout(self)
-        lay.setContentsMargins(16, 8, 16, 10)
-        lay.setSpacing(8)
+        theme.page_layout(lay)
         lay.addLayout(top)
         lay.addWidget(render_card)
         lay.addWidget(bottom, 1)
@@ -473,6 +475,7 @@ class ExportTab(QWidget):
         self._can_export = ok
         self.start_btn.setEnabled(ok and not self._running)
         self.queue_add_btn.setEnabled(ok)
+        self._start_glow.breathe(ok and not self._running)
 
     def set_running(self, running: bool, clear_log: bool = True) -> None:
         self._running = running
@@ -481,6 +484,11 @@ class ExportTab(QWidget):
         pending = sum(1 for i in self.items if i.status == "pending")
         self.queue_run_btn.setEnabled(not running and pending > 0)
         self.cancel_btn.setEnabled(running)
+        self._start_glow.breathe(self._can_export and not running)
+        if running:
+            self._shimmer.start()
+        else:
+            self._shimmer.stop()
         if running:
             self.open_out_btn.setEnabled(False)
             self._prog_anim.stop()

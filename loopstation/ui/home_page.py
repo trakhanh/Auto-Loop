@@ -7,7 +7,7 @@ from PySide6.QtCore import QSize, Qt, Signal
 from PySide6.QtWidgets import QGridLayout, QHBoxLayout, QLabel, QPushButton, QSizePolicy, QVBoxLayout, QWidget
 
 from ..core import ffmpeg_tools as ft
-from . import branding, icons
+from . import branding, effects, icons, theme
 from .theme import APP_NAME, AUTHOR
 from .widgets import sample_label
 
@@ -42,7 +42,7 @@ class HomeCard(QPushButton):
         self.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Preferred)
         self.setMinimumHeight(138)
         lay = QVBoxLayout(self)
-        lay.setContentsMargins(18, 16, 18, 14)
+        lay.setContentsMargins(theme.SP['xl'], theme.SP['xl'], theme.SP['xl'], theme.SP['lg'])
         lay.setSpacing(6)
         top = QHBoxLayout()
         top.setSpacing(10)
@@ -68,6 +68,18 @@ class HomeCard(QPushButton):
         lay.addStretch(1)
         lay.addWidget(ex)
 
+    def tint(self, color: str) -> None:
+        """Mỗi thẻ ánh một màu riêng (màu biểu tượng) ở góc trên trái, rê chuột thì đậm hơn."""
+        c = theme.rgba
+        self.setStyleSheet(
+            f"QPushButton#homeCard {{ background: qlineargradient(x1:0, y1:0, x2:1, y2:1, stop:0 {c(color, 0.20)}, "
+            f"stop:0.55 {c(theme.C['surface'], 0.92)}, stop:1 {c(theme.C['surface'], 0.92)}); "
+            f"border: 1px solid {c(color, 0.30)}; border-radius: 14px; text-align: left; padding: 0; }}"
+            f"QPushButton#homeCard:hover {{ background: qlineargradient(x1:0, y1:0, x2:1, y2:1, stop:0 {c(color, 0.32)}, "
+            f"stop:0.6 {c(theme.C['surface2'], 0.95)}, stop:1 {c(theme.C['surface2'], 0.95)}); border-color: {color}; }}"
+            f"QPushButton#homeCard:pressed {{ background: {c(color, 0.28)}; }}"
+            f"QLabel#homeBadge {{ background: {c(color, 0.18)}; border-radius: 10px; }}")
+
 
 class HomePage(QWidget):
     chosen = Signal(str)  # khoá trong CARDS
@@ -78,14 +90,13 @@ class HomePage(QWidget):
         super().__init__(parent)
         logo = QLabel()
         logo.setPixmap(branding.pixmap(56, self.devicePixelRatioF()))
-        title = QLabel("Bạn muốn làm gì hôm nay?")
-        title.setObjectName("homeHero")
+        title = effects.GradientLabel("Bạn muốn làm gì hôm nay?")  # chữ chuyển màu theo màu chủ đạo
         sub = QLabel(f"{APP_NAME} · {AUTHOR} — chọn một việc bên dưới, app tự mở đúng bước. "
                      "Có thể đổi kiểu sản phẩm bất cứ lúc nào ở thanh trên cùng.")
         sub.setObjectName("muted")
         sub.setWordWrap(True)
         head = QHBoxLayout()
-        head.setSpacing(14)
+        head.setSpacing(theme.SP['lg'])
         head.addWidget(logo)
         texts = QVBoxLayout()
         texts.setSpacing(2)
@@ -102,11 +113,13 @@ class HomePage(QWidget):
         self.resume.hide()
 
         grid = QGridLayout()
-        grid.setSpacing(14)
+        grid.setSpacing(theme.SP['lg'])
         self.cards: dict[str, HomeCard] = {}
         for k, (key, ic, color, t, d, ex) in enumerate(CARDS):
             card = HomeCard(ic, color, t, d, ex)
             card.clicked.connect(lambda _=False, kk=key: self.chosen.emit(kk))
+            effects.Glow(card, color, blur=34, alpha=120)  # rê chuột: thẻ sáng lên theo màu biểu tượng
+            card.tint(color)
             grid.addWidget(card, k // 3, k % 3)
             self.cards[key] = card
 
@@ -134,7 +147,7 @@ class HomePage(QWidget):
         steps.setWordWrap(True)
 
         lay = QVBoxLayout(self)
-        lay.setContentsMargins(28, 22, 28, 22)
+        lay.setContentsMargins(theme.SP['xxl'], theme.SP['xl'] + theme.SP['xs'], theme.SP['xxl'], theme.SP['xl'])
         lay.setSpacing(16)
         lay.addLayout(head)
         lay.addWidget(self.resume, 0, Qt.AlignmentFlag.AlignLeft)

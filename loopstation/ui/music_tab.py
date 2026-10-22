@@ -17,7 +17,7 @@ from ..core import ambient_lib, audio_build
 from ..core.planner import MusicItem
 from ..core.probe import MediaInfo
 from ..core.project import AmbientLayer, MusicSettings, MusicTrack, format_hms, parse_hms
-from . import icons
+from . import effects, icons, motion, theme
 from . import widgets as w
 from .mixer_panel import MixerPanel
 from .video_tab import combo, hms_edit, quick_buttons, set_combo
@@ -358,7 +358,10 @@ class MusicTab(QWidget):
 
         def show_adv(on: bool) -> None:
             for g in self._adv_cards:
-                g.setVisible(on)
+                if g.isVisible() != on and self.isVisible():
+                    motion.slide_visible(g, on, 220)  # mở / gấp mượt
+                else:
+                    g.setVisible(on)
             self.adv_btn.setText("Ẩn tuỳ chọn nâng cao ▴" if on else
                                  "Nâng cao ▾  (chuyển bài, chuẩn hoá âm lượng)")
             self.settings.setValue("ui/music_advanced", "true" if on else "false")
@@ -375,7 +378,8 @@ class MusicTab(QWidget):
 
         self.next_btn = QPushButton("Tiếp theo: Xuất thành phẩm")
         self.next_btn.setObjectName("nextStepBtn")
-        self.next_btn.setIcon(icons.icon("arrow_right", 14, "#c7d2fe"))
+        self.next_btn.setIcon(icons.icon("arrow_right", 14, "#ffffff"))
+        effects.Glow(self.next_btn, idle=0.25, blur=24, offset_y=4, alpha=140)  # nút bước tiếp sáng nhẹ
         self.next_btn.setIconSize(QSize(14, 14))
         self.next_btn.setLayoutDirection(Qt.LayoutDirection.RightToLeft)
         self.next_btn.clicked.connect(self.nextStepRequested.emit)
@@ -399,7 +403,7 @@ class MusicTab(QWidget):
         split.setSizes([980, 460])
         self.split = split
         lay = QVBoxLayout(self)
-        lay.setContentsMargins(16, 10, 16, 12)
+        theme.page_layout(lay)
         lay.addWidget(split)
 
         self.order.currentIndexChanged.connect(self._emit)
@@ -468,7 +472,7 @@ class MusicTab(QWidget):
                 active += 1
             col_main = QColor("#eef1f8") if on else QColor("#646c80")
             col_sub = QColor("#8c96b0") if on else QColor("#525a70")
-            col_Acc = QColor("#c4b5fd") if on else QColor("#525a70")
+            col_Acc = QColor(theme.C["soft"]) if on else QColor("#525a70")
             it.setForeground(COL_NAME, col_main)
             it.setForeground(COL_DUR, col_sub)
             it.setForeground(COL_PLAYS, col_Acc)

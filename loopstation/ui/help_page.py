@@ -18,7 +18,7 @@ from PySide6.QtWidgets import (
 )
 
 from ..core import ffmpeg_tools as ft
-from . import branding, icons
+from . import branding, icons, theme
 from .widgets import FlowLayout, sample_label
 from .theme import APP_NAME, APP_VERSION, AUTHOR, C
 
@@ -139,6 +139,10 @@ topic("batdau", "Bắt đầu", "home", "Bắt đầu trong 3 bước", hero(
     ("Xuất", "Chọn thư mục lưu → bấm Bắt đầu xuất. Xong là có file .mp4.")]) + """
 <p>Thanh bên trái có đúng 3 bước này. Ngay dưới thanh trên cùng luôn có <b>thanh hướng dẫn</b> cho biết đang ở
 bước mấy và <b>việc cần làm tiếp</b> (bấm vào số bước để chuyển nhanh).</p>
+<h2>Màn hình chào</h2>""" + img("welcome", "Hiện một lần khi mới cài app. Xem lại ở Cài đặt → Giao diện hiển thị.") + legend([
+    ("Cách làm 3 bước", "Video → Nhạc → Xuất — giống thanh hướng dẫn trên mỗi trang."),
+    ("Mở dự án mẫu", "có sẵn clip và nhạc để bấm thử."),
+    ("Bắt đầu", "đóng màn hình chào (hoặc bấm Esc / Enter).")]) + """
 <h2>Màn hình Bắt đầu</h2>""" + img("home", "Dự án mới tự mở màn hình này. Bấm một thẻ là app chuyển đúng kiểu, đúng bước.") + legend([
     ("Video có nhạc", "clip loop + playlist nhạc → video YouTube dài (dùng nhiều nhất)."),
     ("Chỉ video", "chỉ loop clip, giữ tiếng gốc hoặc thêm tiếng mưa / sóng."),
@@ -514,6 +518,9 @@ topic("caidat", "Khác", "settings", "Cài đặt & card đồ hoạ", hero(
 <li><b>Kiểm tra lại phần cứng</b>: đọc lại thông số sau khi cắm / cập nhật driver card đồ hoạ.</li>
 <li><b>Đo tốc độ mã hoá</b> (khoảng 30 giây): mã hoá thử bằng từng bộ mã hoá (×10 = nhanh gấp 10 lần thời gian thực).</li>
 <li>Thư mục xuất mặc định, <b>mở thư mục</b> / <b>âm báo</b> khi xuất xong, cỡ chữ.</li>
+<li><b>Màu chủ đạo</b> (Giao diện hiển thị): <i>Neon tím hồng</i> (mặc định), <i>Đại dương</i>, <i>Hoàng hôn</i>,
+<i>Tím xanh</i> (như bản cũ) — đổi là thấy ngay. Vài biểu tượng nhỏ đổi màu hẳn sau khi mở lại app.
+<b>Xem lại màn hình chào</b> cũng ở đây.</li>
 <li><b>Tắt máy khi chạy xong hàng đợi</b> (có 2 phút để huỷ) — chỉ có tác dụng tới khi tắt app, lần mở sau phải tick lại.</li>
 <li><b>Đường dẫn FFmpeg</b>: để <i>Tự động</i> (dùng bản kèm theo app); chỉ đổi khi được hướng dẫn.</li>
 <li><b>Xoá bộ nhớ đệm</b>, <b>Mở thư mục dữ liệu</b> (dự án tự lưu, hàng đợi, nhật ký, file lỗi).</li>
@@ -564,7 +571,8 @@ topic("hoi", "Khác", "help", "Câu hỏi thường gặp", hero(
 
 topic("phim", "Khác", "zap", "Phím tắt", hero("Phím tắt", "Thao tác nhanh bằng bàn phím.") + examples([
     ("F1", "Mở trang Hướng dẫn"), ("Ctrl+N / Ctrl+O", "Dự án mới / Mở dự án"), ("Ctrl+S / Ctrl+Shift+S", "Lưu / Lưu thành…"),
-    ("Ctrl+F", "Tìm tên file trong bảng (trang Video / Nhạc) · tìm trong trang Hướng dẫn"), ("Esc", "Xoá ô tìm"),
+    ("Ctrl+F", "Tìm tên file trong bảng (trang Video / Nhạc) · tìm trong trang Hướng dẫn"),
+    ("Esc", "Xoá ô tìm · đóng màn hình chào (Enter cũng được)"),
     ("Ctrl+Z", "Hoàn tác (trang Video)"), ("Ctrl+D", "Nhân bản dòng đang chọn (bảng clip và playlist nhạc)"),
     ("Ctrl+C / Ctrl+V", "Chép các dòng đang chọn / dán ngay bên dưới dòng đang chọn (bảng clip và playlist nhạc)"),
     ("Space", "Phát / dừng trình phát (mọi chỗ, trừ khi đang gõ chữ) · trong hộp thoại Đoạn lấy: phát / dừng đoạn cắt"),
@@ -704,8 +712,8 @@ class HelpPage(QWidget):
         split.setSizes([270, 1000])
 
         lay = QVBoxLayout(self)
-        lay.setContentsMargins(24, 16, 24, 16)
-        lay.setSpacing(12)
+        theme.page_layout(lay)
+        lay.setSpacing(theme.SP['lg'])
         lay.addLayout(head)
         lay.addWidget(split, 1)
 

@@ -4,7 +4,7 @@ from __future__ import annotations
 from PySide6.QtCore import Qt, Signal
 from PySide6.QtWidgets import QHBoxLayout, QLabel, QPushButton, QSizePolicy, QWidget
 
-from . import icons
+from . import icons, motion, theme
 
 
 class StepGuide(QWidget):
@@ -34,6 +34,13 @@ class StepGuide(QWidget):
 
     def set_state(self, steps: list[tuple[str, int, bool]], current: int, hint: str, ok: bool = False) -> None:
         """steps: (tên, chỉ số trang, đã xong) theo thứ tự; current: trang đang mở; hint: việc cần làm (HTML)."""
+        key = (tuple(steps), current)
+        if key != getattr(self, "_key", None):  # chỉ dựng lại các nút bước khi bước / trạng thái thật sự đổi
+            self._key = key
+            self._rebuild(steps, current)
+        self._set_hint(hint, ok)
+
+    def _rebuild(self, steps: list[tuple[str, int, bool]], current: int) -> None:
         for b in self._buttons:  # ẩn + tách ngay: nút cũ không được vẽ chồng trong lúc chờ xoá
             b.hide()
             b.setParent(None)
@@ -56,5 +63,11 @@ class StepGuide(QWidget):
             b.clicked.connect(lambda _=False, p=page: self.goTo.emit(p))
             self._steps_box.addWidget(b)
             self._buttons.append(b)
-        self.icon.setPixmap(icons.pixmap("check" if ok else "arrow_right", 15, "#34d399" if ok else "#a78bfa"))
-        self.hint.setText(hint)
+
+    def _set_hint(self, hint: str, ok: bool) -> None:
+        if ok != getattr(self, "_ok", None):
+            self._ok = ok
+            self.icon.setPixmap(icons.pixmap("check" if ok else "arrow_right", 15, "#34d399" if ok else theme.C["mid"]))
+        if hint != self.hint.text():
+            self.hint.setText(hint)
+            motion.fade_in(self.hint, 200, 0.2)  # việc cần làm vừa đổi: chữ hiện dần

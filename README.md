@@ -33,7 +33,41 @@
 
 <br>
 
-## Có gì mới ở 1.5
+## Có gì mới ở 1.6
+
+<table>
+<tr>
+<td width="50%" valign="top">
+<img src="docs/icons/palette.png" width="36"><br>
+<b>Màu sắc nổi bật, chọn được màu chủ đạo</b><br>
+Giao diện mới <b>Neon tím hồng</b>: nền có quầng sáng, thanh bên / thanh trên cùng chuyển màu, mỗi thẻ ở màn hình Bắt đầu ánh một màu riêng. Thích tông khác? <i>Cài đặt → Giao diện hiển thị → Màu chủ đạo</i>: <b>Đại dương</b>, <b>Hoàng hôn</b>, <b>Tím xanh</b> (như bản cũ) — đổi là thấy ngay.
+</td>
+<td width="50%" valign="top">
+<img src="docs/icons/eye.png" width="36"><br>
+<b>Hiệu ứng sống động</b><br>
+Gợn sóng khi bấm nút, viền sáng ô đang gõ, nút <b>Bắt đầu xuất</b> phát sáng nhẹ khi đã sẵn sàng. Lúc đang xuất, vạch màu dưới thanh trên cùng chạy liên tục và thanh tiến trình có vệt sáng — ở trang nào cũng biết app đang làm việc.
+</td>
+</tr>
+<tr>
+<td valign="top">
+<img src="docs/icons/play.png" width="36"><br>
+<b>Mượt hơn</b><br>
+Chuyển trang bằng ảnh chụp trang nên luôn trượt mượt, kể cả bảng clip dài nhiều ảnh thu nhỏ. Bộ chọn kiểu xuất có khối sáng trượt theo lựa chọn; hiệu ứng tự dừng khi không cần để máy không phải vẽ thừa.
+</td>
+<td valign="top">
+<img src="docs/icons/home.png" width="36"><br>
+<b>Màn hình chào lần đầu</b><br>
+Mới cài app là có hướng dẫn 3 bước <i>Video → Nhạc → Xuất</i> và nút mở dự án mẫu để tập. Xem lại bất cứ lúc nào ở <i>Cài đặt → Giao diện hiển thị</i>.
+</td>
+</tr>
+</table>
+
+<p align="center"><img src="docs/screenshots/00-chao-mung.png" width="760" alt="Màn hình chào lần đầu mở app"></p>
+
+<details>
+<summary><b>Có gì ở 1.5</b> (trình phát trong app, xếp lần lượt, xuất hàng loạt dễ hơn, chung bộ từ ngữ)</summary>
+
+<br>
 
 <table>
 <tr>
@@ -61,6 +95,8 @@ Mỗi việc chỉ một tên ở mọi trang (Nối loop · Sang clip · Dài b
 </td>
 </tr>
 </table>
+
+</details>
 
 <br>
 
@@ -186,6 +222,7 @@ Chọn **kiểu xuất** ở thanh trên cùng: **Video có nhạc** (`.mp4`) ·
 | <kbd>Ctrl</kbd>+<kbd>C</kbd> / <kbd>Ctrl</kbd>+<kbd>V</kbd> / <kbd>Ctrl</kbd>+<kbd>D</kbd> | Chép / dán / nhân bản dòng (bảng clip và playlist) |
 | <kbd>Ctrl</kbd>+<kbd>Space</kbd> · <kbd>Delete</kbd> | Bật / tắt dòng · xoá dòng |
 | <kbd>Ctrl</kbd>+<kbd>Z</kbd> · <kbd>Ctrl</kbd>+<kbd>S</kbd> · <kbd>F1</kbd> | Hoàn tác · lưu dự án · mở Hướng dẫn |
+| <kbd>Esc</kbd> / <kbd>Enter</kbd> | Đóng màn hình chào |
 
 </details>
 
@@ -245,6 +282,7 @@ Các script khác (đều dùng thư mục dữ liệu riêng, không đụng d�
 | `python tests/sequence_check.py <thư_mục>` | Xếp lần lượt, fps theo clip chính, Ctrl+C / V / D |
 | `python tests/batch_kinds_check.py <thư_mục>` · `batch_volume_check.py` | Xuất hàng loạt: 3 kiểu, độ dài, âm lượng, trình phát |
 | `python tests/help_check.py <thư_mục>` · `input_check.py` | Trang Hướng dẫn · ô nhập giờ / phút / giây |
+| `python tests/look_check.py <thư_mục>` | Màu chủ đạo, hiệu ứng, chuyển trang, màn hình chào |
 | `python tests/make_help_images.py` · `make_screenshots.py` · `make_readme_icons.py` | Ảnh cho Hướng dẫn / README |
 | `python tests/make_test_pack.py` · `make_samples.py` | Tạo lại media mẫu `Mau-Test/`, `samples/` |
 
@@ -254,7 +292,8 @@ Các script khác (đều dùng thư mục dữ liệu riêng, không đụng d�
 app.py                  khởi động (màn hình chờ, chỉ mở 1 cửa sổ, ghi lỗi bất ngờ)
 loopstation/core/       xử lý: lập kế hoạch phát, dựng khối video / âm thanh, xuất, hàng đợi, hàng loạt,
                         bộ máy xem trước (preview_engine: dựng khung hình thô, không mã hoá)
-loopstation/ui/         giao diện PySide6 (các trang, Trình phát, Bảng trộn âm, Hướng dẫn, hộp thoại)
+loopstation/ui/         giao diện PySide6 (các trang, Trình phát, Bảng trộn âm, Hướng dẫn, hộp thoại);
+                        theme.py = bộ màu + QSS, effects.py / motion.py = hiệu ứng & chuyển động
 tests/                  kiểm thử + script kiểm tra / tạo ảnh / tạo mẫu
 Mau-Test/, samples/     media mẫu do script tự tạo (đi kèm bộ cài)
 docs/                   ảnh README, sổ tay nhân viên (So-tay-KT-Loop-Station.html)

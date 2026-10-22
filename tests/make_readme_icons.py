@@ -19,7 +19,7 @@ from loopstation.ui import icons  # noqa: E402
 
 ICONS = {"film": "#a78bfa", "repeat": "#f472b6", "music": "#c4b5fd", "waves": "#22d3ee", "sliders": "#fbbf24",
          "zap": "#34d399", "queue": "#60a5fa", "folder": "#fbbf24", "file_plus": "#93c5fd", "eye": "#f9a8d4",
-         "play": "#a78bfa", "sort": "#fb923c"}
+         "play": "#a78bfa", "sort": "#fb923c", "palette": "#f472b6", "home": "#a78bfa"}
 for name, color in ICONS.items():
     icons.icon(name, 96, color).pixmap(96, 96).save(str(OUT / f"{name}.png"))
 print("Đã lưu", len(ICONS), "biểu tượng vào", OUT)

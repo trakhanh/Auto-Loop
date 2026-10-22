@@ -70,6 +70,9 @@ for k, f in enumerate(("Video 01 - Mua dem/loop_mua-dem.mp4", "Video 02 - Rung x
     shutil.copy(os.path.join(src, f), os.path.join(folder, f"Loop{k}.mp4"))
 files = sorted(os.path.join(folder, f) for f in os.listdir(folder))
 
+from PySide6.QtCore import QSettings as _QS  # noqa: E402
+from loopstation.ui.theme import APP_NAME as _APP, SETTINGS_ORG as _ORG  # noqa: E402
+_QS(_ORG, _APP).setValue("ui/welcome_done", "1")  # màn hình chào: kiểm tra riêng ở look_check
 win = mw.MainWindow()
 win.resize(1440, 900)
 win.show()

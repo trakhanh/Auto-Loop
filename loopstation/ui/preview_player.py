@@ -25,7 +25,7 @@ from PySide6.QtWidgets import (
 
 from ..core import audio_preview, preview_engine, timeline
 from ..core import ffmpeg_tools as ft
-from . import icons
+from . import icons, theme
 from .live_mix import BUFFER_MS, CHUNK, FRAME, LIMIT, RATE, WIDTH, read_pcm, retire
 
 BPS = RATE * FRAME  # byte âm thanh mỗi giây
@@ -759,7 +759,6 @@ class PreviewPlayer(QObject):
 
 # ======================= giao diện =======================
 
-ACCENT, ACCENT2 = QColor("#7c5cff"), QColor("#3b82f6")
 
 
 def fmt_tc(sec: float, fps: float) -> str:
@@ -864,8 +863,8 @@ class SeekBar(QWidget):
                 p.drawRoundedRect(QRectF(r.left(), r.top(), max(0.0, hx - r.left()), r.height()), rad, rad)
             x = self._x_at(self.pos)
             g = QLinearGradient(r.left(), 0, r.right(), 0)
-            g.setColorAt(0, ACCENT)
-            g.setColorAt(1, ACCENT2)
+            g.setColorAt(0, theme.qcolor("accent"))
+            g.setColorAt(1, theme.qcolor("accent2"))
             p.setBrush(g)
             p.drawRoundedRect(QRectF(r.left(), r.top(), max(0.0, x - r.left()), r.height()), rad, rad)
             p.setBrush(QColor(255, 255, 255, 55 if not hot else 90))  # mốc đổi bài nhạc (mờ, chỉ rõ khi rê chuột)
@@ -1011,7 +1010,7 @@ class VideoView(QWidget):
         if self._busy_shown:  # vòng xoay chờ
             p.setPen(QPen(QColor(255, 255, 255, 40), 4))
             p.drawEllipse(c, 18, 18)
-            pen = QPen(ACCENT, 4)
+            pen = QPen(theme.qcolor("accent"), 4)
             pen.setCapStyle(Qt.PenCapStyle.RoundCap)
             p.setPen(pen)
             p.drawArc(QRectF(c.x() - 18, c.y() - 18, 36, 36), -self._angle * 16, 100 * 16)
@@ -1127,8 +1126,8 @@ class FullscreenView(VideoView):
         if pl.total:
             x = b.left() + b.width() * min(1.0, self.panel.shown_pos / pl.total)
             gr = QLinearGradient(b.left(), 0, b.right(), 0)
-            gr.setColorAt(0, ACCENT)
-            gr.setColorAt(1, ACCENT2)
+            gr.setColorAt(0, theme.qcolor("accent"))
+            gr.setColorAt(1, theme.qcolor("accent2"))
             p.setBrush(gr)
             p.drawRoundedRect(QRectF(b.left(), b.top(), x - b.left(), b.height()), 3, 3)
             p.setBrush(QColor("#ffffff"))
@@ -1183,6 +1182,8 @@ class SpaceToggle(QObject):
             return None
         if obj.window() is not self.window or is_typing(obj):
             return None
+        if getattr(self.window, "_welcome", None) is not None:
+            return None  # màn hình chào đang mở: Space bấm nút đang chọn như thường
         return panel
 
     def eventFilter(self, obj, ev) -> bool:  # noqa: N802
@@ -1257,6 +1258,8 @@ class PreviewPanel(QFrame):
         self.home_btn = self._btn("to_start", "", "Về đầu video (Home)", lambda: self.player.seek(0))
         self.back_btn = self._btn("replay10", "10", "Lùi 10 giây (←: 5 giây)", lambda: self.player.step(-10))
         self.play_btn = self._btn("play", "", "Phát (Space)", self.player.toggle, big=True)
+        from . import effects
+        self._play_glow = effects.Glow(self.play_btn, idle=0.35, blur=26, offset_y=3, alpha=160)
         self.fwd_btn = self._btn("forward10", "10", "Tới 10 giây (→: 5 giây)", lambda: self.player.step(10))
         self.mute_btn = self._btn("volume", "", "Tắt tiếng trình phát (không đổi âm lượng của dự án)", self._toggle_mute)
         self.full_btn = self._btn("fullscreen", "", "Toàn màn hình (nhấp đúp vào hình) — Esc để thoát",

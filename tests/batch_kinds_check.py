@@ -181,6 +181,9 @@ check("MO: dự án gốc không đổi", tpl.music.export_mode == "target")
 from loopstation.ui import batch_dialog as bdm  # noqa: E402
 from loopstation.ui import main_window as mw  # noqa: E402
 
+from PySide6.QtCore import QSettings as _QS  # noqa: E402
+from loopstation.ui.theme import APP_NAME as _APP, SETTINGS_ORG as _ORG  # noqa: E402
+_QS(_ORG, _APP).setValue("ui/welcome_done", "1")  # màn hình chào: kiểm tra riêng ở look_check
 win = mw.MainWindow()
 win.resize(1440, 900)
 win.show()

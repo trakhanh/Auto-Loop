@@ -22,7 +22,7 @@ from PySide6.QtWidgets import (
 
 from ..core import ffmpeg_tools as ft
 from ..core import probe
-from . import icons
+from . import icons, theme
 
 VIDEO_EXTS = {".mp4", ".mov", ".mkv", ".avi", ".webm", ".m4v", ".mpg", ".mpeg", ".ts", ".mts",
               ".m2ts", ".wmv", ".flv", ".3gp"}
@@ -416,10 +416,10 @@ def paint_placeholder(tree: QTreeWidget, text: str, hovered: bool = False, click
         if r.width() > 120 and r.height() > 54:
             path = QPainterPath()
             path.addRoundedRect(r, 10, 10)
-            border_col = QColor("#6c63ff") if (hovered and clickable) else QColor("#263046")
+            border_col = theme.qcolor("accent") if (hovered and clickable) else QColor(theme.C["border"])
             pen = QPen(border_col, 1.5, Qt.PenStyle.DashLine)
             p.setPen(pen)
-            bg_col = QColor(108, 99, 255, 18) if (hovered and clickable) else QColor(13, 16, 24, 120)
+            bg_col = theme.qcolor("accent", 22) if (hovered and clickable) else QColor(13, 16, 24, 120)
             p.fillPath(path, bg_col)
             p.drawPath(path)
 
@@ -433,10 +433,10 @@ def paint_placeholder(tree: QTreeWidget, text: str, hovered: bool = False, click
             circle_y = cy - 28.0
             circle_path = QPainterPath()
             circle_path.addEllipse(QRectF(cx - circle_r, circle_y - circle_r, circle_r * 2, circle_r * 2))
-            p.fillPath(circle_path, QColor(108, 99, 255, 36 if hovered else 22))
-            p.setPen(QPen(QColor("#6c63ff" if hovered else "#3b4766"), 1.2))
+            p.fillPath(circle_path, theme.qcolor("accent", 40 if hovered else 24))
+            p.setPen(QPen(theme.qcolor("accent") if hovered else QColor("#3b4766"), 1.2))
             p.drawPath(circle_path)
-            pm = icons.pixmap("file_plus", 20, "#a5b4fc" if hovered else "#8b95b0")
+            pm = icons.pixmap("file_plus", 20, theme.C["mid"] if hovered else "#8b95b0")
             p.drawPixmap(int(cx - 10), int(circle_y - 10), pm)
 
             f_title = QFont(tree.font())
@@ -830,7 +830,7 @@ class ListToolbar(QWidget):
 
     def _on_filter(self, shown: int, total: int) -> None:
         self.match.setText(f"{shown}/{total} khớp" if self.lst.filtering() else "")
-        color = "#f87171" if self.lst.filtering() and not shown else "#a78bfa"
+        color = "#f87171" if self.lst.filtering() and not shown else theme.C["mid"]
         self.match.setStyleSheet(f"color: {color}; font-weight: 600;")
 
     def _focus_search(self) -> None:
@@ -839,14 +839,48 @@ class ListToolbar(QWidget):
             self.search.selectAll()
 
 
-class AnimatedStackedWidget(QStackedWidget):
-    """QStackedWidget có hiệu ứng chuyển trang: trang mới hiện dần và trượt nhẹ theo hướng chuyển (240 ms)."""
+class _PageTransition(QWidget):
+    """Lớp vẽ tạm khi chuyển trang: chỉ vẽ 2 ảnh chụp (trang cũ mờ dần, trang mới trượt vào + hiện dần).
+    Vẽ ảnh chụp rất nhẹ nên chuyển trang luôn mượt, kể cả trang có bảng dài và nhiều ảnh thu nhỏ."""
 
-    SLIDE = 26
+    def __init__(self, stack, old_pm, new_pm, dx: int):
+        super().__init__(stack)
+        self.setAttribute(Qt.WidgetAttribute.WA_TransparentForMouseEvents, True)
+        self.setAttribute(Qt.WidgetAttribute.WA_NoSystemBackground, True)
+        self.setGeometry(stack.rect())
+        self.old_pm, self.new_pm, self.dx = old_pm, new_pm, dx
+        self.t = 0.0
+        self.show()
+        self.raise_()
+
+    def set_t(self, v) -> None:
+        self.t = float(v)
+        self.update()
+
+    def paintEvent(self, e) -> None:  # noqa: N802
+        p = QPainter(self)
+        p.setRenderHint(QPainter.RenderHint.SmoothPixmapTransform)
+        t = self.t
+        if self.old_pm is not None and t < 1:
+            p.setOpacity(max(0.0, 1 - t * 2.4))  # trang cũ tắt nhanh, hai trang không chồng chữ lên nhau lâu
+            p.drawPixmap(int(-self.dx * 0.35 * t), 0, self.old_pm)
+        p.setOpacity(t)
+        p.drawPixmap(int(self.dx * (1 - t)), 0, self.new_pm)
+
+
+class AnimatedStackedWidget(QStackedWidget):
+    """QStackedWidget có hiệu ứng chuyển trang: trang mới trượt nhẹ theo hướng chuyển + hiện dần (260 ms).
+
+    Chụp ảnh trang cũ / trang mới một lần rồi chỉ vẽ ảnh trong lúc chạy hiệu ứng (không vẽ lại cả trang mỗi khung
+    hình như dùng QGraphicsOpacityEffect) → mượt hơn hẳn. Xong hiệu ứng thì trang thật hiện lại đúng chỗ."""
+
+    SLIDE = 34
+    MS = 260
 
     def __init__(self, parent=None):
         super().__init__(parent)
         self._anim = None
+        self._overlay: _PageTransition | None = None
         self._anim_widget: QWidget | None = None
 
     def _cleanup_anim(self) -> None:
@@ -857,49 +891,56 @@ class AnimatedStackedWidget(QStackedWidget):
             except RuntimeError:
                 pass
             self._anim = None
+        if self._overlay is not None:
+            try:
+                self._overlay.hide()
+                self._overlay.deleteLater()
+            except RuntimeError:
+                pass
+            self._overlay = None
         if self._anim_widget is not None:
             try:
-                self._anim_widget.setGraphicsEffect(None)
                 self._anim_widget.move(0, 0)
             except RuntimeError:
                 pass
             self._anim_widget = None
 
+    def resizeEvent(self, e) -> None:  # noqa: N802
+        super().resizeEvent(e)
+        if self._overlay is not None:
+            self._cleanup_anim()  # đổi cỡ giữa chừng: bỏ hiệu ứng, hiện trang thật ngay
+
     def setCurrentIndex(self, index: int) -> None:  # noqa: N802
-        from PySide6.QtCore import QParallelAnimationGroup, QPoint
+        from PySide6.QtCore import QVariantAnimation
         old = self.currentIndex()
         if old == index or not (0 <= index < self.count()):
             super().setCurrentIndex(index)
             return
         self._cleanup_anim()
+        old_w = self.currentWidget()
+        visible = self.isVisible() and self.width() > 0
+        old_pm = old_w.grab() if (visible and old_w is not None) else None
         super().setCurrentIndex(index)
-        if not self.isVisible():
-            return
         w = self.widget(index)
-        if w is None:
+        if not visible or w is None:
             return
-        eff = QGraphicsOpacityEffect(w)
-        eff.setOpacity(0.0)
-        w.setGraphicsEffect(eff)
-        fade = QPropertyAnimation(eff, b"opacity")
-        fade.setDuration(220)
-        fade.setStartValue(0.0)
-        fade.setEndValue(1.0)
-        fade.setEasingCurve(QEasingCurve.Type.OutCubic)
+        w.setGeometry(self.rect())
+        if w.layout() is not None:
+            w.layout().activate()
+        new_pm = w.grab()
         dx = self.SLIDE if index > old else -self.SLIDE
-        slide = QPropertyAnimation(w, b"pos")
-        slide.setDuration(260)
-        slide.setStartValue(QPoint(dx, 0))
-        slide.setEndValue(QPoint(0, 0))
-        slide.setEasingCurve(QEasingCurve.Type.OutCubic)
-        group = QParallelAnimationGroup(self)
-        group.addAnimation(fade)
-        group.addAnimation(slide)
-        w.move(dx, 0)
-        self._anim = group
+        self._overlay = _PageTransition(self, old_pm, new_pm, dx)
+        w.move(self.width() * 3, 0)  # trang thật nằm ngoài khung trong lúc chạy hiệu ứng (vẫn nhận dữ liệu như thường)
         self._anim_widget = w
-        group.finished.connect(self._cleanup_anim)
-        group.start()
+        anim = QVariantAnimation(self)
+        anim.setDuration(self.MS)
+        anim.setStartValue(0.0)
+        anim.setEndValue(1.0)
+        anim.setEasingCurve(QEasingCurve.Type.OutCubic)
+        anim.valueChanged.connect(self._overlay.set_t)
+        anim.finished.connect(self._cleanup_anim)
+        self._anim = anim
+        anim.start()
 
 
 def adapt_split(split, width: int, threshold: int, side_min: int = 440, page=None,

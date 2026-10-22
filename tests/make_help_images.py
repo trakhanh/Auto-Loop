@@ -32,6 +32,9 @@ import loopstation.ui.main_window as mw  # noqa: E402
 from loopstation.core.project import AmbientLayer, Project  # noqa: E402
 
 ini = str(tmp / "s.ini")
+_st = QSettings(ini, QSettings.Format.IniFormat)
+_st.setValue("ui/welcome_done", "1")  # màn hình chào chụp riêng bên dưới
+_st.sync()
 mw.QSettings = lambda org, name: QSettings(ini, QSettings.Format.IniFormat)
 BADGE = QColor("#f59e0b")
 MAX_W = 1200
@@ -89,6 +92,19 @@ wait(1)
 home = win.home
 shoot(win, [(home.cards["video_music"], 1), (home.cards["video_only"], 2), (home.cards["music_only"], 3),
             (home.cards["ambient"], 4), (home.cards["batch"], 5), (home.cards["open"], 6)], "home")
+
+# 1b) màn hình chào: cách làm 3 bước + dự án mẫu
+from loopstation.ui.welcome import StepCard  # noqa: E402
+win.show_welcome()
+wait(1.5)
+ov = win._welcome
+cards_ = [ov.steps_box.itemAt(i).widget() for i in range(ov.steps_box.count())
+          if isinstance(ov.steps_box.itemAt(i).widget(), StepCard)]
+steps_r = rect_in(cards_[0], win).united(rect_in(cards_[-1], win))
+sample_btn = next(b for b in ov.findChildren(type(ov.start_btn)) if b.text().startswith("Mở dự án mẫu"))
+shoot(win, [(steps_r, 1), (sample_btn, 2), (ov.start_btn, 3)], "welcome")
+ov._finish()
+wait(0.8)
 
 # 2) trang Video
 p = Project.load(str(ROOT / "Mau-Test" / "Du-an-mau - Loop 70 lan.lsproj"))

@@ -21,7 +21,7 @@ from ..core import encoders, ffmpeg_tools, planner, power, render, render_queue 
 from ..core.ffmpeg_tools import CancelledError
 from ..core.project import PROJECT_EXT, ClipItem, Project
 from ..core.render import RenderJob, clean_filename, default_output_name, output_path, strip_ext
-from . import branding, icons, motion, widgets as w
+from . import branding, effects, icons, motion, theme, widgets as w
 from .export_tab import ExportTab
 from .help_page import HelpPage
 from .settings_page import SettingsPage
@@ -89,6 +89,7 @@ class MainWindow(QMainWindow):
         self.music_tab = MusicTab(self.settings)
         self.export_tab = ExportTab(self.settings)
         self.stack = w.AnimatedStackedWidget()
+        self.stack.setObjectName("pageStack")  # nền có quầng sáng màu chủ đạo (theme)
         for t in (self.video_tab, self.music_tab, self.export_tab):
             # mỗi trang nằm trong vùng cuộn: cửa sổ nhỏ hơn nội dung thì hiện thanh cuộn thay vì bị kẹt
             sa = QScrollArea()
@@ -173,6 +174,8 @@ class MainWindow(QMainWindow):
         self.export_tab.set_queue(self.queue)
 
         self.setCentralWidget(self._build_shell())
+        self.settings_page.welcomeRequested.connect(self.show_welcome)
+        self._welcome = None
         self.viewer.positionChanged.connect(self.video_tab.timeline.set_playhead)
         from .preview_player import SpaceToggle
         self._space = SpaceToggle(self, lambda: self.viewer)  # Space = Phát / Dừng ở mọi chỗ (trừ khi đang gõ chữ)
@@ -203,7 +206,24 @@ class MainWindow(QMainWindow):
         self._update_title()
         branding.apply_window_frame(self)
         QTimer.singleShot(20, self._load_initial_project)
+        QTimer.singleShot(450, self._maybe_welcome)  # lần đầu mở app: màn hình chào (sau khi cửa sổ đã hiện)
         QTimer.singleShot(250, self._detect_encoders)
+
+    def show_welcome(self) -> None:
+        """Màn hình chào: cách làm 3 bước + chọn Đơn giản / Đầy đủ (tự mở lần đầu; mở lại ở Cài đặt)."""
+        if self._welcome is not None:
+            return
+        from .welcome import show_welcome
+
+        def done() -> None:
+            self._welcome = None
+            self.settings.setValue("ui/welcome_done", "1")
+
+        self._welcome = show_welcome(self, done, self.open_project_path)
+
+    def _maybe_welcome(self) -> None:
+        if not self._closing and not self.settings.value("ui/welcome_done"):
+            self.show_welcome()
 
     def _on_video_next(self) -> None:
         playlist = self.mode == "video_music" and self.video_tab.source.currentData() != "only"
@@ -237,7 +257,7 @@ class MainWindow(QMainWindow):
         self._top_proj_buttons: list[tuple[QPushButton, str, str]] = []
         sv = QVBoxLayout(side)
         sv.setContentsMargins(14, 18, 14, 14)
-        sv.setSpacing(5)
+        sv.setSpacing(theme.SP['xs'])
 
         logo = QLabel()
         logo.setPixmap(branding.pixmap(40, self.devicePixelRatioF()))
@@ -327,7 +347,7 @@ class MainWindow(QMainWindow):
         hw_lay.setContentsMargins(10, 8, 10, 8)
         hw_lay.setSpacing(6)
         hw_ic = QLabel()
-        hw_ic.setPixmap(icons.pixmap("chip", 14, "#a5b4fc"))
+        hw_ic.setPixmap(icons.pixmap("chip", 14, theme.C["mid"]))
         hw_ic.setFixedSize(14, 14)
         self.gpu_label = QLabel("Đang kiểm tra card đồ hoạ…")
         self.gpu_label.setObjectName("muted")
@@ -376,36 +396,34 @@ class MainWindow(QMainWindow):
         # Chọn kiểu sản phẩm: quyết định trang nào được dùng và nút Xuất ra file gì
         self.mode = "video_music"
         self.mode_group = QButtonGroup(self)
-        seg = QHBoxLayout()
-        seg.setSpacing(0)
-        modes = (("video_music", "video_music", "Video có nhạc", "segL",
+        modes = (("video_music", "video_music", "Video có nhạc",
                   "Clip loop + nhạc tự lặp theo độ dài video → file .mp4"),
-                 ("video_only", "film", "Chỉ video", "segM",
+                 ("video_only", "film", "Chỉ video",
                   "Chỉ loop clip, bỏ qua trang Nhạc → file .mp4"),
-                 ("music_only", "music", "Chỉ nhạc", "segR",
+                 ("music_only", "music", "Chỉ nhạc",
                   "Chỉ loop playlist nhạc cho đủ thời lượng → file .mp3/.m4a/.flac/.wav, bỏ qua trang Video"))
         self.mode_buttons = {}
-        for key, ic_name, text, name, tip in modes:
+        for key, ic_name, text, tip in modes:
             b = QPushButton(text)
-            b.setObjectName(name)
             b.setIcon(icons.icon(ic_name, 14))
             b.setIconSize(QSize(14, 14))
             b.setCheckable(True)
             b.setToolTip(tip)
             bold = b.font()
             bold.setBold(True)
-            b.setMinimumWidth(QFontMetrics(bold).horizontalAdvance(text) + 52)
+            b.setMinimumWidth(QFontMetrics(bold).horizontalAdvance(text) + 46)
             b.setProperty("full_text", text)
             self.mode_group.addButton(b)
             self.mode_buttons[key] = b
             b.clicked.connect(lambda _=False, k=key: self.set_mode(k))
-            seg.addWidget(b)
         self.mode_buttons["video_music"].setChecked(True)
-        hv.addLayout(seg)
+        self.mode_box = motion.SegmentBox(list(self.mode_buttons.values()))  # khối sáng trượt theo kiểu đang chọn
+        hv.addWidget(self.mode_box)
 
         self.chip_seq = chip()
         self.chip_rounds = chip()
         self.chip_total = chip("", "chipAccent")
+        effects.Glow(self.chip_total, idle=0.45, blur=22, offset_y=2, alpha=150)  # tổng thời lượng sáng nổi
         self.chip_warn = chip("", "chipWarn")
         self.chip_size = chip()
         self.chip_size.hide()
@@ -470,6 +488,8 @@ class MainWindow(QMainWindow):
         mv.setContentsMargins(0, 0, 0, 0)
         mv.setSpacing(0)
         mv.addWidget(header)
+        self.accent_line = effects.AccentLine()  # vạch dải màu; đang xuất thì chạy liên tục
+        mv.addWidget(self.accent_line)
         mv.addWidget(self.guide)
         mv.addWidget(self.work, 1)
         mv.addWidget(self.timeline_wrap)
@@ -524,7 +544,9 @@ class MainWindow(QMainWindow):
         for b in self.mode_buttons.values():
             full = b.property("full_text") or ""
             b.setText("" if narrow else full)
-            b.setMinimumWidth(44 if narrow else QFontMetrics(b.font()).horizontalAdvance(full) + 52)
+            bold = b.font()
+            bold.setBold(True)
+            b.setMinimumWidth(40 if narrow else QFontMetrics(bold).horizontalAdvance(full) + 46)
         self._fit_chips()
         QTimer.singleShot(0, self._fit_chips)  # đo lại sau khi thanh tiêu đề sắp xếp xong
 
@@ -1157,7 +1179,10 @@ class MainWindow(QMainWindow):
             self.export_tab.set_size("—")
         else:
             self.chip_total.setObjectName("chipAccent")
-            self.chip_total.setText(f"Tổng  {fmt_dur(total)}")
+            new_total = f"Tổng  {fmt_dur(total)}"
+            if self.chip_total.text() != new_total and self.chip_total.text().startswith("Tổng"):
+                motion.fade_in(self.chip_total, 320, 0.35)  # tổng thời lượng vừa đổi: nháy nhẹ cho dễ thấy
+            self.chip_total.setText(new_total)
             self.chip_total.setToolTip(
                 (f"Thời lượng file nhạc: {fmt_dur(total)}\n1 lượt playlist: {fmt_dur(seq)} · {plays} lượt bài")
                 if music_only else
@@ -1235,6 +1260,13 @@ class MainWindow(QMainWindow):
             pt = 10
         app = QApplication.instance()
         from . import theme
+        pal = str(self.settings.value("pref/palette", theme.PALETTE) or theme.PALETTE)
+        if pal in theme.PALETTES and pal != theme.PALETTE:  # đổi bộ màu: dựng lại QSS, vẽ lại phần tự vẽ
+            theme.apply(app, theme.FONT_PT, pal)
+            for wd in QApplication.allWidgets():
+                wd.update()
+            branding.apply_window_frame(self)
+            self.notify(f"Đã đổi màu chủ đạo: {theme.PALETTES[pal][0]}", "ok", 2500)
         if theme.FONT_PT != pt:  # áp ngay: dựng lại QSS với cỡ chữ mới (chỉ setFont thì QSS lấn át, không đổi gì)
             theme.apply(app, pt)
             self.help_page.refresh_font()
@@ -1448,6 +1480,7 @@ class MainWindow(QMainWindow):
             self._queue_item = None
             self._queue_only = None
             self.export_tab.set_running(False)
+            self.accent_line.set_running(False)
             ok = self._queue_results.count("done")
             bad = len(self._queue_results) - ok
             QApplication.alert(self)
@@ -1533,6 +1566,8 @@ class MainWindow(QMainWindow):
         elif act == "mode_music":
             self.set_mode("music_only")
             self.go_to(1)
+        elif act == "welcome":
+            self.show_welcome()
 
     def _open_mixer(self) -> None:
         self.go_to(1)
@@ -1629,6 +1664,7 @@ class MainWindow(QMainWindow):
             self._size_redo = True
         self.go_to(2)
         self.export_tab.set_running(True, clear_log=clear_log)
+        self.accent_line.set_running(True)
 
         def work():
             try:
@@ -1675,6 +1711,7 @@ class MainWindow(QMainWindow):
             self._schedule()
         continuing = kind == "queue" and error != "cancel"
         self.export_tab.set_running(continuing, clear_log=False)
+        self.accent_line.set_running(continuing)
         self.export_tab.done(output or None)
         self._update_title()
         self.music_tab.refresh_loudness()
