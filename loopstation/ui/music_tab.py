@@ -48,6 +48,7 @@ class MusicTab(QWidget):
         self.banner.setWordWrap(True)
 
         self.list = w.MediaList(["Tên bài nhạc", "Thời lượng", "Số lần/lượt", "Âm lượng %", "Độ to gốc"])
+        theme.on_change(self.list, lambda _wd: (self._refresh_track_styles(), self._update_pin_info()))
         self.list.placeholder = (
             "Chưa có bài nhạc nào trong playlist\n"
             "Kéo thả file hoặc thư mục nhạc vào đây, hoặc bấm nút bên dưới"
@@ -160,7 +161,7 @@ class MusicTab(QWidget):
         lv.setSpacing(8)
         lv.addWidget(self.banner)
         lv.addWidget(left_split, 1)
-        self.next_btn = QPushButton("Tiếp theo: Xuất thành phẩm")
+        self.next_btn = w.ShrinkButton("Tiếp theo: Xuất thành phẩm")
         self.next_btn.setObjectName("nextStepBtn")
         self.next_btn.setIcon(icons.icon("arrow_right", 14, "text_on_accent"))
         self.next_btn.setIconSize(QSize(14, 14))
@@ -169,12 +170,12 @@ class MusicTab(QWidget):
 
         foot = QHBoxLayout()
         foot.setSpacing(8)
-        self.settings_btn = QPushButton("Cài đặt nhạc")
+        self.settings_btn = w.ShrinkButton("Cài đặt nhạc")
         self.settings_btn.setObjectName("ghost")
         self.settings_btn.setIcon(icons.icon("down", 14, "text_2"))
         self.settings_btn.setIconSize(QSize(14, 14))
         self.settings_btn.setToolTip("Cuộn xuống phần cài đặt: độ dài file nhạc, bảng trộn âm, tiếng nền, thứ tự phát")
-        self.settings_btn.clicked.connect(self._scroll_to_settings)
+        self.settings_btn.clicked.connect(lambda: w.scroll_page_to_bottom(self))
         self.settings_btn.setVisible(False)
         foot.addStretch(1)
         foot.addWidget(self.settings_btn)
@@ -270,7 +271,7 @@ class MusicTab(QWidget):
         self.ambient.openRequested.connect(lambda p: w.open_with_default_app(ambient_lib.resolve(p)))
         a_add = QPushButton("Thêm tiếng nền")
         a_add.setObjectName("accentBtn")
-        a_add.setIcon(icons.icon("plus", 13, "accent_text"))
+        icons.bind(a_add, "plus", 13, "accent_text")
         a_add.setIconSize(QSize(13, 13))
         a_add.clicked.connect(self._pick_ambient)
         a_lib = QPushButton("Thư viện có sẵn…")
@@ -636,17 +637,7 @@ class MusicTab(QWidget):
 
     def adapt(self, width: int, height: int = 0) -> None:
         """Gọi từ cửa sổ chính khi đổi kích thước: hẹp thì xếp phần cài đặt xuống dưới (bảng cao vừa một màn hình)."""
-        first = max(430, height - 4) if height > 200 else 0
-        w.adapt_split(self.split, width, 940, side_min=440, page=self, stacked_height=(first or 900) + 500,
-                      first_height=first)
-        self.settings_btn.setVisible(self.split.orientation() == Qt.Orientation.Vertical)
-
-    def _scroll_to_settings(self) -> None:
-        area = self.parentWidget()
-        while area is not None and not isinstance(area, QScrollArea):
-            area = area.parentWidget()
-        if area is not None:
-            area.verticalScrollBar().setValue(area.verticalScrollBar().maximum())
+        w.adapt_tab(self, width, height, 440, 900, 500)
 
     def set_playlist_enabled(self, enabled: bool) -> None:
         for wdg in (self.toolbar, self.list, *self.playlist_cards):

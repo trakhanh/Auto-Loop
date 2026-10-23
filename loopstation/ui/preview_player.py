@@ -899,6 +899,7 @@ class VideoView(QWidget):
         self.setFocusPolicy(Qt.FocusPolicy.ClickFocus)  # bấm vào khung xem → phím Space điều khiển trình phát
         self.setMouseTracking(True)
         self.bg = QColor(theme.T.get(bg, bg))
+        theme.on_change(self, lambda wd: (setattr(wd, "bg", QColor(theme.T.get(bg, bg))), wd.update()))
         self.rounded = rounded
         self.image: QImage | None = None
         self.text = ""

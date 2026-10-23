@@ -1,6 +1,7 @@
 """Trang Xuất: codec, độ phân giải, fps, encoder, nơi lưu, nút xuất, hàng đợi, tiến trình, nhật ký."""
 from __future__ import annotations
 
+import html
 import os
 import re
 import shutil
@@ -25,6 +26,9 @@ AUDIO_LENGTH = [("target", "Theo thời lượng đích"), ("rounds", "Theo số
 
 
 class ExportTab(QWidget):
+    SIZE_TIP = ("Mã hoá thử vài giây của từng clip với đúng cấu hình đang chọn rồi nhân theo "
+                "độ dài video — sai số thường dưới 10%.")
+
     changed = Signal()
     startRequested = Signal()
     cancelRequested = Signal()
@@ -90,8 +94,7 @@ class ExportTab(QWidget):
         self.size_label = QLabel("—")
         self.size_label.setObjectName("sizeEst")
         self.size_label.setProperty("busy", False)
-        self.size_label.setToolTip("Mã hoá thử vài giây của từng clip với đúng cấu hình đang chọn rồi nhân theo "
-                                   "độ dài video — sai số thường dưới 10%.")
+        self.size_label.setToolTip(self.SIZE_TIP)
 
         label_w = int(150 * max(1.0, theme.scale()))  # cột nhãn cố định: ô nhập ở mọi thẻ bắt đầu cùng một mép trái
 
@@ -209,6 +212,12 @@ class ExportTab(QWidget):
         self.size_label.setAlignment(Qt.AlignmentFlag.AlignRight)
         size_box.addWidget(size_cap)
         size_box.addWidget(self.size_label)
+        self.size_warn = QLabel("")  # cảnh báo ổ đĩa không đủ chỗ (chỉ hiện khi có)
+        self.size_warn.setProperty("role", "match")
+        self.size_warn.setProperty("tone", "danger")
+        self.size_warn.setAlignment(Qt.AlignmentFlag.AlignRight)
+        self.size_warn.setVisible(False)
+        size_box.addWidget(self.size_warn)
         sc.addLayout(size_box)
         self.summary_card = summary_card
 
@@ -221,7 +230,7 @@ class ExportTab(QWidget):
         tile = QLabel()
         tile.setObjectName("homeBadge")
         tile.setProperty("tone", "accent")
-        tile.setPixmap(icons.pixmap("export", 22, theme.T["accent_text"]))
+        icons.bind(tile, "export", 22, "accent_text")
         tile.setAlignment(Qt.AlignmentFlag.AlignCenter)
         tile.setFixedSize(48, 48)
         self.empty_title = QLabel("Chưa có gì để xuất")
@@ -331,7 +340,7 @@ class ExportTab(QWidget):
 
         self.queue_run_btn = QPushButton("Chạy hàng đợi")
         self.queue_run_btn.setObjectName("accentBtn")
-        self.queue_run_btn.setIcon(icons.icon("play", 13, "accent_text"))
+        icons.bind(self.queue_run_btn, "play", 13, "accent_text")
         self.queue_run_btn.setIconSize(QSize(13, 13))
         self.queue_run_btn.setEnabled(False)
         self.queue_run_btn.clicked.connect(lambda: self.queueRunRequested.emit())
@@ -492,14 +501,15 @@ class ExportTab(QWidget):
         self.cap_mbps.setVisible(mode == "mbps")
         self.cap_gb.setVisible(mode == "size")
 
-    def set_size(self, text: str, tip: str = "", busy: bool = False) -> None:
-        """Dòng dự đoán dung lượng (busy: đang đo lại → chữ mờ đi)."""
+    def set_size(self, text: str, tip: str = "", busy: bool = False, warn: str = "") -> None:
+        """Dòng dự đoán dung lượng (busy: đang đo lại → chữ mờ đi; warn: cảnh báo hiện thẳng, vd ổ đĩa đầy)."""
         self.size_label.setText(text)
+        self.size_warn.setText(warn)
+        self.size_warn.setVisible(bool(warn))
         self.size_label.setProperty("busy", busy)  # màu theo QSS (QLabel#sizeEst[busy=…])
         self.size_label.style().unpolish(self.size_label)
         self.size_label.style().polish(self.size_label)
-        if tip:
-            self.size_label.setToolTip(tip)
+        self.size_label.setToolTip(tip or self.SIZE_TIP)
 
     def set_available(self, available: dict[str, list[str]]) -> None:
         self.available = available
@@ -528,7 +538,7 @@ class ExportTab(QWidget):
     def set_summary(self, text: str) -> None:
         self.summary.setText(text)
         plain = re.sub(r"<br\s*/?>", " · ", text)
-        plain = re.sub(r"<[^>]+>", "", plain)
+        plain = html.unescape(re.sub(r"<[^>]+>", "", plain))
         self.footer_info.set_full_text(plain)
 
     def free_bytes(self) -> int | None:

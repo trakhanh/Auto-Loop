@@ -7,6 +7,7 @@ thuộc tính động (`variant`, `tone`, `role`) rồi để QSS ở đây tô 
 from __future__ import annotations
 
 import os
+import weakref
 
 from PySide6.QtCore import QRectF, Qt
 from PySide6.QtGui import QColor, QFont, QPainter, QPalette, QPen
@@ -115,6 +116,24 @@ def set_palette(key: str) -> None:
 
 
 set_palette(PALETTE)
+
+
+_LISTENERS: list[tuple[weakref.ref, object]] = []
+
+
+def on_change(widget, fn) -> None:
+    """Đăng ký `fn(widget)` chạy lại mỗi khi `apply` đổi bộ màu / cỡ chữ (cho thứ chỉ đọc màu một lần lúc khởi tạo)."""
+    _LISTENERS.append((weakref.ref(widget), fn))
+
+
+def notify_change() -> None:
+    alive = []
+    for ref, fn in _LISTENERS:
+        wd = ref()
+        if wd is not None:
+            alive.append((ref, fn))
+            fn(wd)
+    _LISTENERS[:] = alive
 
 
 def qcolor(key: str, alpha: int = 255) -> QColor:
@@ -607,3 +626,4 @@ def apply(app: QApplication, font_pt: int = 10, palette: str | None = None) -> N
         pal.setColor(role, QColor(color))
     app.setPalette(pal)
     app.setStyleSheet(qss(font_pt))
+    notify_change()

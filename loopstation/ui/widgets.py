@@ -15,7 +15,7 @@ from PySide6.QtGui import (QFontMetrics, QColor, QFont, QImage, QKeyEvent, QKeyS
                            QRegularExpressionValidator, QShortcut)
 from PySide6.QtWidgets import (
     QApplication, QAbstractScrollArea, QAbstractSpinBox, QComboBox, QFrame, QGraphicsOpacityEffect,
-    QLayout, QMenu, QSizePolicy, QStackedWidget,
+    QLayout, QMenu, QScrollArea, QSizePolicy, QStackedWidget,
     QAbstractItemView, QCheckBox, QFileDialog, QHBoxLayout, QLineEdit, QPushButton,
     QDoubleSpinBox, QLabel, QSpinBox, QStyledItemDelegate, QTreeWidget, QTreeWidgetItem, QWidget,
 )
@@ -809,7 +809,7 @@ class ListToolbar(QWidget):
 
         add_btn = QPushButton("Thêm file")
         add_btn.setObjectName("accentBtn")
-        add_btn.setIcon(icons.icon("plus", 14, "accent_text"))
+        icons.bind(add_btn, "plus", 14, "accent_text")
         add_btn.setIconSize(QSize(14, 14))
         add_btn.setToolTip("Thêm file lẻ (hoặc bấm vào bảng trống / kéo thả file vào bảng)")
         add_btn.clicked.connect(add_files)
@@ -1002,6 +1002,23 @@ class AnimatedStackedWidget(QStackedWidget):
         anim.start()
 
 
+def adapt_tab(tab, width: int, height: int, side_min: int, stacked_base: int, stacked_extra: int) -> None:
+    """`adapt` chung của trang Video / Nhạc: hẹp thì xếp cài đặt xuống dưới, hiện nút "Cài đặt…" ở thanh chân."""
+    first = max(430, height - 4) if height > 200 else 0
+    adapt_split(tab.split, width, 940, side_min=side_min, page=tab, stacked_height=(first or stacked_base) + stacked_extra,
+                first_height=first)
+    tab.settings_btn.setVisible(tab.split.orientation() == Qt.Orientation.Vertical)
+
+
+def scroll_page_to_bottom(page) -> None:
+    """Cuộn khung cuộn chứa trang xuống cuối (tới phần cài đặt đang xếp bên dưới)."""
+    area = page.parentWidget()
+    while area is not None and not isinstance(area, QScrollArea):
+        area = area.parentWidget()
+    if area is not None:
+        area.verticalScrollBar().setValue(area.verticalScrollBar().maximum())
+
+
 def adapt_split(split, width: int, threshold: int, side_min: int = 440, page=None,
                 stacked_height: int = 1450, first_height: int = 0) -> None:
     """Cửa sổ hẹp: xếp phần cài đặt xuống dưới thay vì bên phải; trang cao hơn và cuộn dọc.
@@ -1036,6 +1053,17 @@ def adapt_split(split, width: int, threshold: int, side_min: int = 440, page=Non
         if page is not None:
             page.setMinimumHeight(0)
         split.setSizes([max(1, width - side_min), side_min])
+
+
+class ShrinkButton(QPushButton):
+    """Nút ở thanh chân trang: được thu hẹp (chữ bị cắt) thay vì ép cột trái rộng ra khi cỡ chữ lớn."""
+
+    def __init__(self, text: str = "", parent=None):
+        super().__init__(text, parent)
+        self.setSizePolicy(QSizePolicy.Policy.Preferred, QSizePolicy.Policy.Fixed)  # Preferred cho phép co lại
+
+    def minimumSizeHint(self) -> QSize:  # noqa: N802
+        return QSize(56, super().minimumSizeHint().height())
 
 
 class ElidedLabel(QLabel):

@@ -56,7 +56,7 @@ class HomeCard(QPushButton):
         badge.setFixedSize(38, 38)
         badge.setAlignment(Qt.AlignmentFlag.AlignCenter)
         badge.setProperty("tone", tone)  # chỉ ô biểu tượng mang màu; viền thẻ luôn trung tính
-        badge.setPixmap(icons.pixmap(ic, 20, {"accent": "accent_text", "neutral": "text_2"}.get(tone, tone + "_text")))
+        icons.bind(badge, ic, 20, {"accent": "accent_text", "neutral": "text_2"}.get(tone, tone + "_text"))
         t = QLabel(title)
         t.setObjectName("homeTitle")
         top.addWidget(badge)

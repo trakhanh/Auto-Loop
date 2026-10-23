@@ -61,6 +61,13 @@ for key in theme.PALETTES:
 theme.apply(app, 10, "neon")
 check("mặc định: Neon tím hồng", theme.PALETTE == "neon" and theme.T["accent"] == theme.PALETTES["neon"][1])
 
+def looping_anims(widget):
+    """Hoạt ảnh đang chạy lặp vô hạn trong widget (hiệu ứng "thở"): thiết kế hiện tại không có cái nào."""
+    from PySide6.QtCore import QAbstractAnimation
+    return [a for a in widget.findChildren(QAbstractAnimation)
+            if a.state() == QAbstractAnimation.State.Running and a.loopCount() != 1]
+
+
 # 2) màn hình chào lần đầu: chỉ còn 3 bước + Bắt đầu (không còn chọn Đơn giản / Đầy đủ)
 win = mw.MainWindow()
 win.resize(1440, 900)
@@ -69,7 +76,7 @@ wait(1.5)
 ov = win._welcome
 check("màn hình chào tự mở lần đầu", ov is not None and ov.isVisible())
 check("màn hình chào không còn chọn giao diện", not hasattr(ov, "options"))
-check("nút Bắt đầu có quầng sáng thở", ov._start_glow.breathing())
+check("nút Bắt đầu: không có hiệu ứng chạy liên tục (đã bỏ quầng sáng)", not looping_anims(ov) and ov.start_btn.graphicsEffect() is None)
 was_playing = win.viewer.is_playing()
 ov.start_btn.setFocus()
 QTest.keyClick(ov.start_btn, Qt.Key.Key_Space)
@@ -104,24 +111,21 @@ check("đổi cỡ giữa lúc chuyển trang: trang hiện đúng chỗ", win.s
 # 4) nút chính: sáng nhẹ + thở khi sẵn sàng xuất, dừng khi đang xuất
 et = win.export_tab
 wait(0.5)
-check("nút Bắt đầu xuất có quầng sáng", et._start_glow.fx.isEnabled())
-check("sẵn sàng xuất → quầng sáng thở", et._start_glow.breathing())
+check("sẵn sàng xuất: nút Bắt đầu phẳng, không hiệu ứng chạy liên tục", not looping_anims(et) and et.start_btn.graphicsEffect() is None)
 et.set_running(True)
 win.accent_line.set_running(True)
 wait(0.2)
 check("đang xuất: thanh tiến trình có vệt sáng chạy", et._shimmer.running() and et._shimmer.isVisible())
 check("đang xuất: vạch màu dưới thanh trên cùng chạy", win.accent_line.running())
-check("đang xuất: nút Bắt đầu thôi thở", not et._start_glow.breathing())
 et.set_running(False)
 win.accent_line.set_running(False)
 wait(0.2)
 check("xuất xong: tắt vệt sáng + vạch chạy", not et._shimmer.running() and not win.accent_line.running())
 win.go_to(0)
 wait(0.6)
-check("sang trang khác: nút Bắt đầu thôi thở (không tốn công vẽ)", not et._start_glow.breathing())
 win.go_to(2)
 wait(0.6)
-check("quay lại trang Xuất: thở lại", et._start_glow.breathing())
+check("quay lại trang Xuất: vẫn không có hiệu ứng chạy liên tục khi rảnh", not looping_anims(et))
 
 # 5) gợn sóng khi bấm nút; viền sáng ô đang gõ
 btn = et.open_out_btn if et.open_out_btn.isEnabled() else win.tl_toggle
@@ -146,7 +150,7 @@ sp.palette_combo.setCurrentIndex(sp.palette_combo.findData("ocean"))
 wait(0.4)
 check("Cài đặt → Đại dương: áp ngay", theme.PALETTE == "ocean" and theme.T["accent"] == theme.PALETTES["ocean"][1])
 check("đã lưu màu chủ đạo", QSettings(ini, QSettings.Format.IniFormat).value("pref/palette") == "ocean")
-check("QSS toàn app đổi theo", "#06b6d4" in app.styleSheet())
+check("QSS toàn app đổi theo", theme.PALETTES["ocean"][1] in app.styleSheet())
 win.go_to(0)
 wait(0.6)
 win.grab()  # vẽ lại mọi phần tự vẽ với màu mới: không lỗi

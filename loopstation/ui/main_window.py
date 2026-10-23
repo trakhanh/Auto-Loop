@@ -264,7 +264,6 @@ class MainWindow(QMainWindow):
         self.side = side
         self._compact = None
         self._side_buttons: list[tuple[QPushButton, str, str]] = []
-        self._top_proj_buttons: list[tuple[QPushButton, str, str]] = []
         sv = QVBoxLayout(side)
         sv.setContentsMargins(14, 18, 14, 14)
         sv.setSpacing(theme.SP['xs'])
@@ -357,7 +356,7 @@ class MainWindow(QMainWindow):
         hw_lay.setContentsMargins(10, 8, 10, 8)
         hw_lay.setSpacing(6)
         hw_ic = QLabel()
-        hw_ic.setPixmap(icons.pixmap("chip", 14, theme.T['accent_text']))
+        icons.bind(hw_ic, "chip", 14, "accent_text")
         hw_ic.setFixedSize(14, 14)
         self.gpu_label = QLabel("Đang kiểm tra card đồ hoạ…")
         self.gpu_label.setObjectName("muted")
@@ -403,7 +402,6 @@ class MainWindow(QMainWindow):
             tb.setToolTip(tip)
             tb.setAccessibleName(text)
             tb.clicked.connect(fn)
-            self._top_proj_buttons.append((tb, ic_name, text))
             proj_bar.addWidget(tb)
         hv.addLayout(proj_bar)
         hv.addSpacing(4)
@@ -1144,9 +1142,11 @@ class MainWindow(QMainWindow):
         self._size_text = f"≈ {size}"
         text = f"≈ {size}   ·   hình {est.video_bps / 1e6:.1f} Mbps"
         tips = []
+        warn = ""
         free = self.export_tab.free_bytes()
         if free is not None and free < est.bytes * 1.05:
-            tips.append(f"<span style='color:{theme.T['danger_text']}'>Ổ đĩa chỉ còn {size_estimate.fmt_size(free)} — không đủ chỗ.</span>")
+            warn = f"Ổ đĩa chỉ còn {size_estimate.fmt_size(free)} — không đủ chỗ."
+            tips.append(warn)
         if est.maxrate_kbps:
             tips.append(f"Đang chặn bitrate hình tối đa {est.maxrate_kbps / 1000:.1f} Mbps.")
         if ex.bitrate_cap == "size" and est.bytes < ex.cap_gb * 1024 ** 3 * 0.8:
@@ -1158,7 +1158,8 @@ class MainWindow(QMainWindow):
         if ex.quality in ("high", "very_high") and ex.bitrate_cap == "off":
             tips.append("Mẹo: chất lượng <b>Tiết kiệm dung lượng</b> hoặc <b>Giới hạn dung lượng</b> cho file nhẹ hơn.")
         tips.append(f"Đo thử bằng {est.encoder} trên {est.measured} clip · sai số thường dưới 10%.")
-        self.export_tab.set_size(text, "<br>".join(tips[:3] + tips[-1:] if len(tips) > 4 else tips))
+        self.export_tab.set_size(text, "<br>".join(tips[:3] + tips[-1:] if len(tips) > 4 else tips),
+                                 warn=warn)
         self._set_size_chip(self._size_text)
 
     def _set_size_chip(self, text: str) -> None:

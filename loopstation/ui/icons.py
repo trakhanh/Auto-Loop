@@ -241,3 +241,16 @@ def btn(button, name: str, color: str = "text_2", size: int = 15):
     button.setIcon(icon(name, size=size, color=color))
     button.setIconSize(QSize(size, size))
     return button
+
+
+def bind(target, name: str, size: int, color: str = "text_2") -> None:
+    """Gắn biểu tượng theo token màu vào QLabel (pixmap) hoặc nút (icon) và vẽ lại khi đổi bộ màu."""
+    from . import theme
+
+    def put(wd) -> None:
+        if hasattr(wd, "setPixmap"):
+            wd.setPixmap(pixmap(name, size, color))
+        else:
+            wd.setIcon(icon(name, size, color))
+    put(target)
+    theme.on_change(target, put)

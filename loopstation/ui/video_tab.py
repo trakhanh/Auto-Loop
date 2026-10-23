@@ -186,6 +186,7 @@ class VideoTab(QWidget):
         # ----- bảng clip -----
         self.list = w.MediaList(["Clip", "Thông tin nguồn", "Đoạn lấy", "Số lần phát", "Tự giãn",
                                  "Nối loop", "Sang clip", "Thời lượng"])
+        theme.on_change(self.list, lambda _wd: self._refresh_rows())  # cột có màu nhấn (số lần phát…) đổi theo bộ màu
         self.list.setObjectName("clips")
         self.list.setIconSize(QSize(w.ThumbLoader.W, w.ThumbLoader.H))
         self.list.placeholder = (
@@ -287,7 +288,7 @@ class VideoTab(QWidget):
         self._hist_timer.timeout.connect(self._push_history)
         preview_btn = QPushButton("Xem thử nối")
         preview_btn.setObjectName("accentBtn")
-        preview_btn.setIcon(icons.icon("play", 13, "accent_text"))
+        icons.bind(preview_btn, "play", 13, "accent_text")
         preview_btn.setIconSize(QSize(13, 13))
         preview_btn.setToolTip("Xuất nhanh đoạn ngắn (clip đang chọn phát 2 lần rồi chuyển sang clip kế) để kiểm tra crossfade")
         preview_btn.clicked.connect(self._preview_seam)
@@ -301,7 +302,7 @@ class VideoTab(QWidget):
         r1 = QHBoxLayout()
         r1.setSpacing(6)
         fast_ic = QLabel()
-        fast_ic.setPixmap(icons.pixmap("sliders", 14, theme.T['accent_text']))
+        icons.bind(fast_ic, "sliders", 14, "accent_text")
         lbl_fast = QLabel("Đặt nhanh")
         lbl_fast.setProperty("role", "strong")
         lbl_fast.setToolTip("Đặt số lần phát cho các dòng đang chọn trong bảng (bôi đen nhiều dòng để đặt cùng lúc)")
@@ -376,7 +377,7 @@ class VideoTab(QWidget):
         r_cut = QHBoxLayout()
         r_cut.setSpacing(6)
         cut_ic = QLabel()
-        cut_ic.setPixmap(icons.pixmap("scissors", 14, theme.T['accent_text']))
+        icons.bind(cut_ic, "scissors", 14, "accent_text")
         r_cut.addWidget(cut_ic)
         r_cut.addWidget(QLabel("Cắt đoạn:  Bỏ đầu"))
         r_cut.addWidget(self.bulk_cut_start)
@@ -441,7 +442,7 @@ class VideoTab(QWidget):
         self.preview.setMaximumBlockCount(500)
         self.preview.setVisible(False)
 
-        self.preview_toggle = QPushButton("Chi tiết lượt phát")
+        self.preview_toggle = w.ShrinkButton("Chi tiết lượt phát")
         self.preview_toggle.setObjectName("ghost")
         self.preview_toggle.setIcon(icons.icon("eye", 14))
         self.preview_toggle.setIconSize(QSize(14, 14))
@@ -483,7 +484,7 @@ class VideoTab(QWidget):
         sg = QHBoxLayout(self.suggest)
         sg.setContentsMargins(10, 6, 6, 6)
         sg_ic = QLabel()
-        sg_ic.setPixmap(icons.pixmap("repeat", 14, theme.T['accent_text']))
+        icons.bind(sg_ic, "repeat", 14, "accent_text")
         sg.addWidget(sg_ic)
         self.suggest_text = QLabel()
         self.suggest_text.setWordWrap(True)
@@ -503,7 +504,7 @@ class VideoTab(QWidget):
         self.list.setMinimumHeight(210)
         lv.addWidget(self.list, 1)
         lv.addWidget(quick_bar)
-        self.next_btn = QPushButton("Tiếp theo: Chọn nhạc")
+        self.next_btn = w.ShrinkButton("Tiếp theo: Chọn nhạc")
         self.next_btn.setObjectName("nextStepBtn")
         self.next_btn.setIcon(icons.icon("arrow_right", 14, "text_on_accent"))
         self.next_btn.setIconSize(QSize(14, 14))
@@ -514,12 +515,12 @@ class VideoTab(QWidget):
         foot.setSpacing(8)
         foot.addWidget(hint, 1)
         # xếp dọc (cửa sổ vừa): phần cài đặt nằm dưới bảng → nút này cuộn xuống đó
-        self.settings_btn = QPushButton("Cài đặt video")
+        self.settings_btn = w.ShrinkButton("Cài đặt video")
         self.settings_btn.setObjectName("ghost")
         self.settings_btn.setIcon(icons.icon("down", 14, "text_2"))
         self.settings_btn.setIconSize(QSize(14, 14))
         self.settings_btn.setToolTip("Cuộn xuống phần cài đặt: độ dài video, thứ tự, khung hình, âm thanh, màu & logo")
-        self.settings_btn.clicked.connect(self._scroll_to_settings)
+        self.settings_btn.clicked.connect(lambda: w.scroll_page_to_bottom(self))
         self.settings_btn.setVisible(False)
         foot.addWidget(self.settings_btn)
         foot.addWidget(self.preview_toggle)
@@ -995,17 +996,7 @@ class VideoTab(QWidget):
 
     def adapt(self, width: int, height: int = 0) -> None:
         """Gọi từ cửa sổ chính khi đổi kích thước: hẹp thì xếp phần cài đặt xuống dưới (bảng cao vừa một màn hình)."""
-        first = max(430, height - 4) if height > 200 else 0
-        w.adapt_split(self.split, width, 940, side_min=390, page=self, stacked_height=(first or 880) + 470,
-                      first_height=first)
-        self.settings_btn.setVisible(self.split.orientation() == Qt.Orientation.Vertical)
-
-    def _scroll_to_settings(self) -> None:
-        area = self.parentWidget()
-        while area is not None and not isinstance(area, QScrollArea):
-            area = area.parentWidget()
-        if area is not None:
-            area.verticalScrollBar().setValue(area.verticalScrollBar().maximum())
+        w.adapt_tab(self, width, height, 390, 880, 470)
 
     # ---------- cắt đoạn lấy ----------
     def _on_double_click(self, it: QTreeWidgetItem, column: int) -> None:

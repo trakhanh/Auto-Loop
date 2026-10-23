@@ -122,7 +122,7 @@ class SettingsPage(QWidget):
         # ----- đo tốc độ -----
         self.bench_btn = QPushButton("Đo tốc độ mã hoá (khoảng 30 giây)")
         self.bench_btn.setObjectName("accentBtn")
-        self.bench_btn.setIcon(icons.icon("play", 13, "accent_text"))
+        icons.bind(self.bench_btn, "play", 13, "accent_text")
         self.bench_btn.setIconSize(QSize(13, 13))
         self.bench_btn.clicked.connect(self._run_bench)
         self.bench_rows = QFormLayout()
