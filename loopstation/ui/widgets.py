@@ -11,7 +11,7 @@ import hashlib
 from concurrent.futures import ThreadPoolExecutor
 
 from PySide6.QtCore import QEasingCurve, QEvent, QObject, QPoint, QPropertyAnimation, QRect, QRectF, QSize, Qt, QTimer, Signal
-from PySide6.QtGui import (QFontMetrics, QColor, QFont, QKeyEvent, QKeySequence, QPainter, QPainterPath, QPen,
+from PySide6.QtGui import (QFontMetrics, QColor, QFont, QImage, QKeyEvent, QKeySequence, QPainter, QPainterPath, QPen,
                            QRegularExpressionValidator, QShortcut)
 from PySide6.QtWidgets import (
     QApplication, QAbstractScrollArea, QAbstractSpinBox, QComboBox, QFrame, QGraphicsOpacityEffect,
@@ -84,6 +84,26 @@ class Prober(QObject):
                 self.progress.emit(i, len(paths))
             self.finished.emit(results)
         threading.Thread(target=work, daemon=True).start()
+
+
+class ProbeWarmer(QObject):
+    """Đọc trước (ffprobe) các file chưa có trong bộ nhớ đệm, ở luồng nền của pool dùng chung. Kết quả vào
+    bộ nhớ đệm của probe; `done(keys)` báo về giao diện để tính lại (bộ nhớ đệm khoá theo đường dẫn + cỡ + giờ sửa,
+    nên kết quả của file đã bị sửa / bỏ khỏi dự án không bao giờ dùng nhầm)."""
+    done = Signal(object)  # tập key đã đọc xong (kể cả file lỗi)
+
+    def warm(self, cold: dict) -> None:
+        from PySide6.QtCore import QThreadPool
+
+        def work():
+            try:
+                list(_iter_probe(list(cold.values())))
+            finally:
+                try:
+                    self.done.emit(frozenset(cold))
+                except RuntimeError:  # cửa sổ đã đóng
+                    pass
+        QThreadPool.globalInstance().start(work)
 
 
 def _iter_probe(paths):
@@ -1051,6 +1071,7 @@ class FlowLayout(QLayout):
 class ThumbLoader(QObject):
     """Tạo ảnh nhỏ (frame giây thứ 1) cho clip ở luồng nền, có cache trên đĩa."""
     ready = Signal(str, str)  # (đường dẫn clip, file ảnh nhỏ)
+    image = Signal(str, QImage)  # (đường dẫn clip, ảnh đã giải mã ở luồng nền; QPixmap chỉ được tạo ở luồng giao diện)
     W, H = 72, 40
 
     def __init__(self, parent=None):
@@ -1098,6 +1119,9 @@ class ThumbLoader(QObject):
                 return
         if out.is_file() and not self._closed:
             try:
+                img = QImage(str(out))
+                if not img.isNull():
+                    self.image.emit(path, img)
                 self.ready.emit(path, str(out))
             except RuntimeError:
                 pass

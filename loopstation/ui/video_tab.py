@@ -5,6 +5,7 @@ import os
 import random
 from pathlib import Path
 
+import shiboken6
 from PySide6.QtCore import QTimer, QRegularExpression, QSettings, QSize, Qt, Signal
 from PySide6.QtGui import QColor, QIcon, QKeySequence, QPixmap, QRegularExpressionValidator, QShortcut
 from PySide6.QtWidgets import (
@@ -192,7 +193,8 @@ class VideoTab(QWidget):
             "Bấm trực tiếp vào khung này hoặc kéo thả file / thư mục vào đây để bắt đầu"
         )
         self.thumbs = w.ThumbLoader(self)
-        self.thumbs.ready.connect(self._on_thumb)
+        self._thumb_waiting: dict[str, list] = {}  # đường dẫn → các dòng đang chờ ảnh nhỏ
+        self.thumbs.image.connect(self._on_thumb)
         self.list.setItemDelegateForColumn(COL_PLAYS, w.PlaysDelegate(self.list))
         self.list.setItemDelegateForColumn(COL_LOOPXF, w.XfadeDelegate(self.list))
         self.list.setItemDelegateForColumn(COL_NEXTXF, w.XfadeDelegate(self.list))
@@ -809,6 +811,7 @@ class VideoTab(QWidget):
         it.setData(0, w.ROLE_DATA, c)
         it.setData(0, w.ROLE_INFO, info)
         it.setToolTip(COL_NAME, c.path)
+        self._thumb_waiting.setdefault(c.path, []).append(it)
         self.thumbs.request([c.path])
         for col in (COL_TRIM, COL_PLAYS, COL_LOOPXF, COL_NEXTXF):
             it.setTextAlignment(col, Qt.AlignmentFlag.AlignCenter)
@@ -943,14 +946,14 @@ class VideoTab(QWidget):
             it.setText(COL_DUR, f"{w.fmt_dur(lo)}–{w.fmt_dur(hi)}")
         it.setForeground(COL_DUR, QColor("#646c80") if skipped else QColor("#eef1f8"))
 
-    def _on_thumb(self, path: str, thumb: str) -> None:
-        pix = QPixmap(thumb)
-        if pix.isNull():
+    def _on_thumb(self, path: str, img) -> None:
+        items = self._thumb_waiting.pop(path, None)
+        if not items:
             return
-        icon = QIcon(pix)
+        icon = QIcon(QPixmap.fromImage(img))  # giải mã đã làm ở luồng nền; ở đây chỉ đổi sang QPixmap
         self.list.blockSignals(True)
-        for it in self.list.items():
-            if it.data(0, w.ROLE_DATA).path == path:
+        for it in items:
+            if shiboken6.isValid(it):  # dòng đã bị xoá khỏi bảng thì bỏ qua
                 it.setIcon(COL_NAME, icon)
         self.list.blockSignals(False)
 

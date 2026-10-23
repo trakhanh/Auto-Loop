@@ -17,7 +17,7 @@ from PySide6.QtWidgets import (
     QMessageBox, QPushButton, QVBoxLayout, QWidget,
 )
 
-from ..core import encoders, ffmpeg_tools, planner, power, render, render_queue as rq, size_estimate, sysinfo, timeline
+from ..core import encoders, ffmpeg_tools, planner, power, probe, render, render_queue as rq, size_estimate, sysinfo, timeline
 from ..core.ffmpeg_tools import CancelledError
 from ..core.project import PROJECT_EXT, ClipItem, Project
 from ..core.render import RenderJob, clean_filename, default_output_name, output_path, strip_ext
@@ -194,6 +194,10 @@ class MainWindow(QMainWindow):
         self._timer.setSingleShot(True)
         self._timer.setInterval(250)
         self._timer.timeout.connect(self.recompute)
+        self._probe_tried: set = set()
+        self._probe_inflight: set = set()
+        self._prober = w.ProbeWarmer(self)
+        self._prober.done.connect(self._probes_done)
 
         self.resize(1480, 900)
         geo = self.settings.value("window/geometry")
@@ -873,7 +877,27 @@ class MainWindow(QMainWindow):
     def _schedule(self, *_) -> None:
         self._timer.start()
 
+    def _cold_media(self) -> dict:
+        """File của dự án chưa được probe (chưa trong bộ nhớ đệm, chưa thử): đọc ở luồng nền thay vì chặn giao diện."""
+        proj = self.collect_project()
+        v, ms = proj.video, proj.music
+        paths = [c.path for c in v.clips if c.enabled] + [p for p in (v.intro, v.outro) if p]             + [t.path for t in ms.tracks if t.enabled]
+        return {k: p for k, p in probe.cold_keys(paths).items()
+                if k not in self._probe_tried and k not in self._probe_inflight}
+
+    def _probes_done(self, keys) -> None:
+        self._probe_inflight -= keys
+        self._probe_tried |= keys  # file lỗi không vào bộ nhớ đệm: đừng đọc lại mãi
+        if not self._closing and not self._probe_inflight:
+            self.recompute()
+
     def recompute(self) -> None:
+        cold = self._cold_media()
+        if cold:
+            self._probe_inflight |= set(cold)
+            self._prober.warm(cold)
+        if self._probe_inflight:
+            return  # chờ đọc xong rồi tính lại (kết quả cũ / thừa không ảnh hưởng: tính lại luôn từ dự án hiện tại)
         self._recompute_core()
         self._update_guide()
         if hasattr(self, "viewer") and self.viewer.isVisible():

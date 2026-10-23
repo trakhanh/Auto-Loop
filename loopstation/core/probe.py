@@ -51,6 +51,21 @@ def _key(path: str) -> tuple:
     return (os.path.normcase(os.path.abspath(path)), st.st_size, st.st_mtime_ns)
 
 
+def cold_keys(paths) -> dict[tuple, str]:
+    """Các file chưa có trong bộ nhớ đệm probe (key → path). File không tồn tại không tính: probe() trả lỗi ngay."""
+    out: dict[tuple, str] = {}
+    for p in paths:
+        try:
+            k = _key(p)
+        except OSError:
+            continue
+        with _lock:
+            hit = k in _cache
+        if not hit:
+            out[k] = p
+    return out
+
+
 def _parse_rate(text: str | None) -> Fraction:
     if not text or text in ("0/0", "0"):
         return Fraction(0)
