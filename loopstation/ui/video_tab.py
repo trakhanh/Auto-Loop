@@ -706,6 +706,7 @@ class VideoTab(QWidget):
         self._load_gen = getattr(self, "_load_gen", 0) + 1  # file đang đọc dở của dự án cũ: bỏ
         self.list.blockSignals(True)
         self.list.clear()
+        self._thumb_waiting.clear()
         infos = w.probe.probe_many([c.path for c in vs.clips])
         for c, info in zip(vs.clips, infos):
             self.list.addTopLevelItem(self._make_item(c, info))
@@ -811,7 +812,9 @@ class VideoTab(QWidget):
         it.setData(0, w.ROLE_DATA, c)
         it.setData(0, w.ROLE_INFO, info)
         it.setToolTip(COL_NAME, c.path)
-        self._thumb_waiting.setdefault(c.path, []).append(it)
+        waiting = self._thumb_waiting.setdefault(c.path, [])
+        waiting[:] = [i for i in waiting if shiboken6.isValid(i)]  # dòng đã xoá khỏi bảng: bỏ
+        waiting.append(it)
         self.thumbs.request([c.path])
         for col in (COL_TRIM, COL_PLAYS, COL_LOOPXF, COL_NEXTXF):
             it.setTextAlignment(col, Qt.AlignmentFlag.AlignCenter)
@@ -948,7 +951,7 @@ class VideoTab(QWidget):
 
     def _on_thumb(self, path: str, img) -> None:
         items = self._thumb_waiting.pop(path, None)
-        if not items:
+        if not items or img.isNull():
             return
         icon = QIcon(QPixmap.fromImage(img))  # giải mã đã làm ở luồng nền; ở đây chỉ đổi sang QPixmap
         self.list.blockSignals(True)
@@ -1266,6 +1269,7 @@ class VideoTab(QWidget):
         self._push_history()  # để Hoàn tác quay lại đúng bảng trước khi xen kẽ
         self.list.blockSignals(True)
         self.list.clear()
+        self._thumb_waiting.clear()
         for c in dlg_result:
             self.list.addTopLevelItem(self._make_item(ClipItem(**c.__dict__), infos[os.path.normcase(c.path)]))
         self._refresh_rows()
@@ -1358,6 +1362,7 @@ class VideoTab(QWidget):
         self._restoring = True
         self.list.blockSignals(True)
         self.list.clear()
+        self._thumb_waiting.clear()
         for c, info in zip(clips, w.probe.probe_many([c.path for c in clips])):
             self.list.addTopLevelItem(self._make_item(ClipItem(**c.__dict__), info))
         self._refresh_rows()

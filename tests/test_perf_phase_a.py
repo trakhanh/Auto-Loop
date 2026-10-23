@@ -138,3 +138,105 @@ def test_help_page_hidden_does_not_rerender(win):
     from PySide6.QtGui import QResizeEvent
     hp.resizeEvent(QResizeEvent(QSize(900, 600), QSize(800, 600)))
     assert not hp._resize_timer.isActive() and hp._stale
+
+
+def _wait_signal(sig, trigger, ms=5000):
+    from PySide6.QtCore import QEventLoop, QTimer
+    got = []
+    loop = QEventLoop()
+    sig.connect(lambda *a: (got.append(a), loop.quit()))
+    QTimer.singleShot(ms, loop.quit)
+    trigger()
+    if not got:
+        loop.exec()
+    return got
+
+
+def test_prober_real_path_emits_done_even_when_probe_raises(win, monkeypatch, tmp_path):
+    from loopstation.core import probe
+    seen = []
+
+    def fake(p):
+        seen.append(p)
+        if p.endswith("bad.mp4"):
+            raise RuntimeError("boom")
+    monkeypatch.setattr(probe, "probe", fake)
+    cold = {("k1", 1, 1): str(tmp_path / "ok.mp4"), ("k2", 1, 1): str(tmp_path / "bad.mp4")}
+    got = _wait_signal(win._prober.done, lambda: win._prober.warm(cold))
+    assert got and got[0][0] == frozenset(cold) and sorted(seen) == sorted(cold.values())
+
+
+def test_broken_file_probed_once_then_cached(monkeypatch, tmp_path):
+    from loopstation.core import ffmpeg_tools as ft, probe
+    f = tmp_path / "broken.mp4"
+    f.write_bytes(b"junk")
+    calls = []
+
+    class R:
+        returncode, stdout, stderr = 1, "", "Invalid data"
+    monkeypatch.setattr(ft, "run", lambda *a, **k: calls.append(1) or R())
+    monkeypatch.setattr(ft, "ffprobe", lambda: "ffprobe")
+    try:
+        assert not probe.probe(str(f)).ok and not probe.probe(str(f)).ok
+        assert len(calls) == 1 and probe.cold_keys([str(f)]) == {}
+    finally:
+        probe._cache.pop(probe._key(str(f)), None)
+
+
+def test_tool_failure_is_not_cached(monkeypatch, tmp_path):
+    from loopstation.core import ffmpeg_tools as ft, probe
+    f = tmp_path / "x.mp4"
+    f.write_bytes(b"junk")
+
+    def boom(*a, **k):
+        raise OSError("ffprobe missing")
+    monkeypatch.setattr(ft, "run", boom)
+    monkeypatch.setattr(ft, "ffprobe", lambda: "ffprobe")
+    assert not probe.probe(str(f)).ok
+    assert len(probe.cold_keys([str(f)])) == 1  # fixing the tool path later must allow a retry
+
+
+def test_export_disabled_while_probing_and_watchdog_clears(win, monkeypatch, tmp_path):
+    import loopstation.ui.main_window as mw
+    key = ("fake2", 1, 1)
+    runs = []
+    monkeypatch.setattr(win, "_recompute_core", lambda: runs.append(1))
+    monkeypatch.setattr(win._prober, "warm", lambda cold: None)  # task never reports back
+    monkeypatch.setattr(mw.probe, "cold_keys", lambda paths: {key: "C:/x/y.mp4"})
+    win._probe_tried.clear()
+    win._probe_inflight.clear()
+    win.export_tab.set_can_export(True)
+    win.recompute()
+    assert not win.export_tab._can_export and win._probe_watchdog.isActive() and runs == []
+    win._probes_stuck()  # watchdog fires: flag cleared, recompute runs
+    assert not win._probe_inflight and runs == [1] and not win._probe_watchdog.isActive()
+
+
+def test_failed_thumbnail_cleans_waiting(win):
+    from PySide6.QtGui import QImage
+    from loopstation.core.probe import MediaInfo
+    from loopstation.core.project import ClipItem
+    vt = win.video_tab
+    c = ClipItem(path="C:/nope/c.mp4")
+    vt._make_item(c, MediaInfo(path=c.path))
+    assert c.path in vt._thumb_waiting
+    vt._on_thumb(c.path, QImage())
+    assert c.path not in vt._thumb_waiting
+
+
+def test_help_page_rerenders_on_show_after_hidden_resize(win, monkeypatch):
+    from PySide6.QtCore import QSize
+    from PySide6.QtGui import QResizeEvent
+    from PySide6.QtWidgets import QApplication
+    hp = win.help_page
+    win.stack.setCurrentIndex(0)
+    QApplication.processEvents()
+    hp._last_w = -1000
+    hp.resizeEvent(QResizeEvent(QSize(900, 600), QSize(800, 600)))
+    assert hp._stale
+    renders = []
+    monkeypatch.setattr(hp, "_render", lambda keep_pos=False: renders.append(keep_pos))
+    win.go_to(4)
+    QApplication.processEvents()
+    hp._resize_timer.timeout.emit()  # the debounce timer firing (interval 150 ms)
+    assert not hp._stale and renders == [True]

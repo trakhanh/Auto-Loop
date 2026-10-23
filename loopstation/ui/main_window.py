@@ -196,6 +196,11 @@ class MainWindow(QMainWindow):
         self._timer.timeout.connect(self.recompute)
         self._probe_tried: set = set()
         self._probe_inflight: set = set()
+        self._probe_warm: set = set()  # đường dẫn đã chắc chắn có trong bộ nhớ đệm probe
+        self._probe_watchdog = QTimer(self)  # ffprobe treo / luồng chết: gỡ cờ "đang đọc" để không kẹt mãi
+        self._probe_watchdog.setSingleShot(True)
+        self._probe_watchdog.setInterval(120_000)
+        self._probe_watchdog.timeout.connect(self._probes_stuck)
         self._prober = w.ProbeWarmer(self)
         self._prober.done.connect(self._probes_done)
 
@@ -878,26 +883,39 @@ class MainWindow(QMainWindow):
         self._timer.start()
 
     def _cold_media(self) -> dict:
-        """File của dự án chưa được probe (chưa trong bộ nhớ đệm, chưa thử): đọc ở luồng nền thay vì chặn giao diện."""
+        """File của dự án chưa được probe (chưa trong bộ nhớ đệm, chưa thử): đọc ở luồng nền thay vì chặn giao diện.
+        Đường dẫn đã biết là nóng thì khỏi os.stat lại mỗi lần tính."""
         proj = self.collect_project()
         v, ms = proj.video, proj.music
         paths = [c.path for c in v.clips if c.enabled] + [p for p in (v.intro, v.outro) if p]             + [t.path for t in ms.tracks if t.enabled]
-        return {k: p for k, p in probe.cold_keys(paths).items()
-                if k not in self._probe_tried and k not in self._probe_inflight}
+        paths = [p for p in dict.fromkeys(paths) if p not in self._probe_warm]
+        cold = probe.cold_keys(paths)
+        self._probe_warm.update(set(paths) - set(cold.values()))
+        return {k: p for k, p in cold.items() if k not in self._probe_tried and k not in self._probe_inflight}
 
     def _probes_done(self, keys) -> None:
         self._probe_inflight -= keys
-        self._probe_tried |= keys  # file lỗi không vào bộ nhớ đệm: đừng đọc lại mãi
-        if not self._closing and not self._probe_inflight:
-            self.recompute()
+        self._probe_tried |= keys  # lỗi không ghi nhớ được (thiếu ffprobe / quá giờ): đừng đọc lại mãi
+        if not self._probe_inflight:
+            self._probe_watchdog.stop()
+            if not self._closing:
+                self.recompute()
+
+    def _probes_stuck(self) -> None:
+        if self._probe_inflight:
+            self._probes_done(frozenset(self._probe_inflight))
 
     def recompute(self) -> None:
         cold = self._cold_media()
         if cold:
             self._probe_inflight |= set(cold)
+            self._probe_watchdog.start()
             self._prober.warm(cold)
         if self._probe_inflight:
-            return  # chờ đọc xong rồi tính lại (kết quả cũ / thừa không ảnh hưởng: tính lại luôn từ dự án hiện tại)
+            # chờ đọc xong rồi tính lại; trong lúc đó không cho xuất theo số liệu cũ
+            self.export_tab.set_can_export(False)
+            self.export_tab.set_summary("Đang đọc file…")
+            return
         self._recompute_core()
         self._update_guide()
         if hasattr(self, "viewer") and self.viewer.isVisible():
@@ -1799,6 +1817,7 @@ class MainWindow(QMainWindow):
         if self._size_runner:
             self._size_runner.cancel()
         self.video_tab.thumbs.shutdown()
+        self._prober.shutdown()
         self._save_queue()
         ffmpeg_tools.clean_previews()  # bản xem thử nối là file tạm (file còn mở trong trình xem: lần mở app sau xoá)
         if self._initial_loaded:

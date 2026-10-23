@@ -92,18 +92,41 @@ class ProbeWarmer(QObject):
     nên kết quả của file đã bị sửa / bỏ khỏi dự án không bao giờ dùng nhầm)."""
     done = Signal(object)  # tập key đã đọc xong (kể cả file lỗi)
 
+    def __init__(self, parent=None):
+        super().__init__(parent)
+        self._closed = False
+
+    def shutdown(self) -> None:
+        self._closed = True
+
     def warm(self, cold: dict) -> None:
-        from PySide6.QtCore import QThreadPool
+        # luồng daemon (không phải QThreadPool/Executor): đóng app không phải chờ ffprobe treo tới 60 giây
+        todo = iter(list(cold.values()))
+        lock = threading.Lock()
+        alive = [min(4, len(cold))]
 
         def work():
             try:
-                list(_iter_probe(list(cold.values())))
+                while not self._closed:
+                    with lock:
+                        p = next(todo, None)
+                    if p is None:
+                        break
+                    try:
+                        probe.probe(p)
+                    except Exception:  # noqa: BLE001
+                        pass
             finally:
-                try:
-                    self.done.emit(frozenset(cold))
-                except RuntimeError:  # cửa sổ đã đóng
-                    pass
-        QThreadPool.globalInstance().start(work)
+                with lock:
+                    alive[0] -= 1
+                    last = alive[0] == 0
+                if last:
+                    try:
+                        self.done.emit(frozenset(cold))
+                    except RuntimeError:  # cửa sổ đã đóng
+                        pass
+        for _ in range(alive[0]):
+            threading.Thread(target=work, daemon=True).start()
 
 
 def _iter_probe(paths):
@@ -1070,8 +1093,7 @@ class FlowLayout(QLayout):
 
 class ThumbLoader(QObject):
     """Tạo ảnh nhỏ (frame giây thứ 1) cho clip ở luồng nền, có cache trên đĩa."""
-    ready = Signal(str, str)  # (đường dẫn clip, file ảnh nhỏ)
-    image = Signal(str, QImage)  # (đường dẫn clip, ảnh đã giải mã ở luồng nền; QPixmap chỉ được tạo ở luồng giao diện)
+    image = Signal(str, QImage)  # (đường dẫn clip, ảnh đã giải mã ở luồng nền — rỗng nếu lỗi; QPixmap chỉ tạo ở luồng giao diện)
     W, H = 72, 40
 
     def __init__(self, parent=None):
@@ -1098,6 +1120,14 @@ class ThumbLoader(QObject):
     def _work(self, path: str) -> None:
         if self._closed:
             return
+        img = self._render(path) or QImage()
+        if not self._closed:
+            try:
+                self.image.emit(path, img)  # ảnh rỗng = lỗi: giao diện dọn dòng đang chờ
+            except RuntimeError:
+                pass
+
+    def _render(self, path: str):
         try:
             st = os.stat(path)
         except OSError:
@@ -1117,14 +1147,10 @@ class ThumbLoader(QObject):
                             str(out)], timeout=30)
             except Exception:  # noqa: BLE001
                 return
-        if out.is_file() and not self._closed:
-            try:
-                img = QImage(str(out))
-                if not img.isNull():
-                    self.image.emit(path, img)
-                self.ready.emit(path, str(out))
-            except RuntimeError:
-                pass
+        if out.is_file():
+            img = QImage(str(out))
+            return None if img.isNull() else img
+        return None
 
 
 class WheelGuard(QObject):

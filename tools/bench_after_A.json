@@ -3,66 +3,66 @@
   "psutil": false,
   "platform": "win32",
   "a_add_files": {
-    "total_s": 0.952,
+    "total_s": 1.009,
     "rows_added": 50,
-    "on_probed_ui_ms": 22.8,
+    "on_probed_ui_ms": 22.6,
     "completed": true,
-    "max_stall_ms": 38.4,
-    "p95_gap_ms": 30.1,
-    "ticks": 58
+    "max_stall_ms": 38.3,
+    "p95_gap_ms": 28.9,
+    "ticks": 65
   },
   "c_thumbnails_async": {
-    "total_s": 5.771,
+    "total_s": 5.536,
     "thumbs_received": 50,
     "rows_with_icon": 50,
     "completed": true,
-    "max_stall_ms": 90.5,
-    "p95_gap_ms": 20.2,
-    "ticks": 349
+    "max_stall_ms": 75.0,
+    "p95_gap_ms": 20.8,
+    "ticks": 343
   },
   "c2_on_thumb_sync": {
     "calls": 50,
     "total_ms": 3.1,
     "mean_ms": 0.06,
-    "max_call_ms": 0.7,
-    "max_stall_ms": 23.1,
-    "p95_gap_ms": 23.1,
+    "max_call_ms": 1.0,
+    "max_stall_ms": 28.6,
+    "p95_gap_ms": 28.6,
     "ticks": 1
   },
   "b_recompute": {
     "project": "50 clips",
     "recompute_ms_runs": [
-      25.3,
-      10.1,
-      9.6,
-      10.0,
-      9.5
+      20.7,
+      7.2,
+      10.3,
+      8.5,
+      11.9
     ],
-    "recompute_ms_median": 10.0,
-    "recompute_ms_max": 25.3,
-    "recompute_core_ms": 7.9,
+    "recompute_ms_median": 10.3,
+    "recompute_ms_max": 20.7,
+    "recompute_core_ms": 7.7,
     "collect_project_ms": 0.7,
-    "max_stall_ms_incl_pumps": 26.5
+    "max_stall_ms_incl_pumps": 26.9
   },
   "b2_recompute_loop70_project": {
     "recompute_ms_runs": [
-      15.0,
-      10.6,
-      9.9,
-      7.2,
-      10.6
+      14.6,
+      9.5,
+      9.6,
+      11.9,
+      7.6
     ],
-    "recompute_ms_median": 10.6,
-    "recompute_ms_max": 15.0
+    "recompute_ms_median": 9.6,
+    "recompute_ms_max": 14.6
   },
   "d_idle": {
     "seconds": 5.0,
-    "cpu_percent_of_one_core": 8.43,
+    "cpu_percent_of_one_core": 8.44,
     "cpu_percent_of_machine": 0.7,
     "method": "time.process_time (all threads of this process; child ffmpeg not counted)",
-    "max_stall_ms": 27.5,
-    "p95_gap_ms": 16.4,
-    "ticks": 324
+    "max_stall_ms": 91.2,
+    "p95_gap_ms": 16.9,
+    "ticks": 315
   },
   "errors": [],
   "python": "3.12.0"

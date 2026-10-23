@@ -25,6 +25,7 @@ class MediaInfo:
     has_audio: bool = False
     is_image: bool = False  # ảnh tĩnh: thời lượng lấy từ cài đặt, không từ file
     error: str | None = None
+    retry: bool = False  # lỗi do không chạy được ffprobe (thiếu file / quá giờ): đừng ghi nhớ, lần sau thử lại
     # hệ màu ghi trong file ("" = không ghi) — clip HD không ghi thì coi là bt709, không để ffmpeg tự đổi
     color_space: str = ""
     color_primaries: str = ""
@@ -84,7 +85,7 @@ def probe(path: str) -> MediaInfo:
         if key in _cache:
             return _cache[key]
     info = _probe_uncached(path)
-    if info.ok:
+    if info.ok or not info.retry:  # file hỏng cũng ghi nhớ (theo đường dẫn + cỡ + giờ sửa): không chạy ffprobe lại mỗi lần
         with _lock:
             _cache[key] = info
     return info
@@ -114,7 +115,7 @@ def _probe_uncached(path: str) -> MediaInfo:
         r = ft.run([ft.ffprobe(), "-v", "error", "-print_format", "json",
                     "-show_format", "-show_streams", path], timeout=60)
     except Exception as e:  # noqa: BLE001
-        info.error = str(e)
+        info.error, info.retry = str(e), True
         return info
     if r.returncode != 0:
         info.error = (r.stderr.strip().splitlines() or ["ffprobe lỗi"])[-1]

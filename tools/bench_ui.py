@@ -147,7 +147,7 @@ for i in range(args.n):
     paths.append(dst)
 
 thumb_times: list[float] = []
-vt.thumbs.ready.connect(lambda *_: thumb_times.append(now()))
+vt.thumbs.image.connect(lambda *_: thumb_times.append(now()))
 
 # ---------- (a) add files ----------
 probed = {"t": None, "ui_ms": 0.0}
