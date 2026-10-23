@@ -1053,6 +1053,9 @@ class ElidedLabel(QLabel):
     def full_text(self) -> str:
         return self._full
 
+    def setText(self, text: str) -> None:  # noqa: N802
+        self.set_full_text(text)
+
     def set_full_text(self, text: str, tip: str = "") -> None:
         self._full, self._tip = text, tip
         self._refit()

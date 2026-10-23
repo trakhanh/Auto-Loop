@@ -418,7 +418,13 @@ QPushButton#stepPill[state="done"] {{ color: {t['success_text']}; border-color: 
 QPushButton#stepPill:hover {{ border-color: {t['line_strong']}; }}
 QLabel#stepArrow {{ color: {t['text_muted']}; font-size: {f['title']}; background: transparent; }}
 QLabel#stepHint {{ color: {t['text_2']}; background: transparent; }}
-QLabel#sizeEst {{ font-size: {f['subtitle']}; font-weight: 600; color: {t['accent_text']}; background: transparent; }}
+QLabel#sizeEst {{ font-size: {f['title']}; font-weight: 700; color: {t['text']}; background: transparent;
+                 font-family: Consolas, 'Cascadia Mono', monospace; }}
+QWidget#exportFooter {{ background: {t['panel']}; border-top: 1px solid {t['line']}; }}
+QWidget#exportFooter QLabel {{ background: transparent; }}
+QLabel#info[plain="true"] {{ background: transparent; border: none; padding: 0; }}
+QLabel[role="fieldlabel"] {{ color: {t['text_2']}; background: transparent; }}
+QPushButton[align="left"] {{ text-align: left; }}
 QLabel#sizeEst[busy="true"] {{ color: {t['text_muted']}; }}
 QWidget#toast {{ background: {t['overlay']}; border: 1px solid {t['line']}; border-radius: {R['xl']}px; }}
 QWidget#toast QLabel {{ background: transparent; color: {t['text']}; font-weight: 600; }}

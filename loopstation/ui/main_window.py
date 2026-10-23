@@ -150,6 +150,7 @@ class MainWindow(QMainWindow):
         self.stack.addWidget(hm)  # chỉ số HOME_PAGE
         self.guide = StepGuide()
         self.guide.goTo.connect(self.go_to)
+        self.export_tab.emptyActionRequested.connect(self.go_to)
         self.export_tab.startRequested.connect(self.start_render)
         self.export_tab.cancelRequested.connect(self.cancel_render)
         self.video_tab.previewSeamRequested.connect(self.preview_seam)
@@ -1020,6 +1021,7 @@ class MainWindow(QMainWindow):
                                              [Path(t).stem for t in track_paths])
         if not proj.video.clips:
             self.export_tab.set_can_export(False)
+            self.export_tab.set_empty("video")
             self._set_chips(error="Chưa có clip", neutral=True)
             self.video_tab.set_preview("Kéo thả video, ảnh hoặc thư mục vào bảng phía trên để bắt đầu.")
             self.music_tab.set_schedule([], track_paths, 0, "Kiểu “Chỉ video”: trang Nhạc đã được bỏ qua."
@@ -1196,6 +1198,8 @@ class MainWindow(QMainWindow):
         if not tl.ok:
             self.export_tab.set_can_export(False)
             empty = not (proj.music.tracks or proj.music.ambient)
+            if empty:
+                self.export_tab.set_empty("music")
             self._set_chips(error="Chưa có nhạc" if empty else " · ".join(tl.errors), neutral=empty)
             self.music_tab.set_schedule([], track_paths, 0, "Chế độ <b>Chỉ nhạc</b>: thêm bài nhạc vào bảng bên dưới "
                                                            "(hoặc chỉ thêm <b>tiếng nền</b> ở cột phải). Độ dài file chỉnh ở "

@@ -2,14 +2,15 @@
 from __future__ import annotations
 
 import os
+import re
 import shutil
 from pathlib import Path
 
 from PySide6.QtCore import QEasingCurve, QPropertyAnimation, QSettings, QSize, Qt, Signal
 from PySide6.QtGui import QColor
 from PySide6.QtWidgets import (
-    QCheckBox, QComboBox, QDoubleSpinBox, QFileDialog, QFormLayout, QGroupBox, QHBoxLayout, QHeaderView, QLabel,
-    QLineEdit, QMenu, QPlainTextEdit, QProgressBar, QPushButton, QSplitter, QTreeWidget, QTreeWidgetItem,
+    QCheckBox, QComboBox, QDoubleSpinBox, QFileDialog, QFormLayout, QFrame, QGroupBox, QHBoxLayout, QHeaderView, QLabel,
+    QLineEdit, QMenu, QPlainTextEdit, QProgressBar, QPushButton, QScrollArea, QSplitter, QTreeWidget, QTreeWidgetItem,
     QVBoxLayout, QWidget,
 )
 
@@ -30,6 +31,7 @@ class ExportTab(QWidget):
     queueAddRequested = Signal()
     queueRunRequested = Signal()
     queueEdited = Signal()
+    emptyActionRequested = Signal(int)  # nút ở màn hình trống: chuyển tới trang (0 = Video, 1 = Nhạc)
     batchRequested = Signal()  # thêm hàng loạt từ thư mục  # xoá/đổi thứ tự mục trong hàng đợi
 
     def __init__(self, settings: QSettings, parent=None):
@@ -90,29 +92,41 @@ class ExportTab(QWidget):
         self.size_label.setProperty("busy", False)
         self.size_label.setToolTip("Mã hoá thử vài giây của từng clip với đúng cấu hình đang chọn rồi nhân theo "
                                    "độ dài video — sai số thường dưới 10%.")
-        self.size_tip = QLabel("")
-        self.size_tip.setObjectName("muted")
-        self.size_tip.setWordWrap(True)
+
+        label_w = int(150 * max(1.0, theme.scale()))  # cột nhãn cố định: ô nhập ở mọi thẻ bắt đầu cùng một mép trái
+
+        def lab(text: str) -> QLabel:
+            lb = QLabel(text)
+            lb.setMinimumWidth(label_w)
+            lb.setProperty("role", "fieldlabel")
+            return lb
+
+        def form(box: QGroupBox) -> QFormLayout:
+            fl = QFormLayout(box)
+            fl.setVerticalSpacing(theme.FORM_GAP)
+            fl.setLabelAlignment(Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignVCenter)
+            fl.setFieldGrowthPolicy(QFormLayout.FieldGrowthPolicy.AllNonFixedFieldsGrow)
+            return fl
 
         g_fmt = QGroupBox("Định dạng && Chất lượng Video")
-        f = QFormLayout(g_fmt)
-        f.setVerticalSpacing(theme.FORM_GAP)
-        f.addRow("Chuẩn nén (Codec)", self.preset)
-        f.addRow("Độ phân giải", self.resolution)
-        f.addRow("Khung hình/giây", self.fps)
-        f.addRow("Bộ mã hoá (GPU/CPU)", self.encoder)
+        f = form(g_fmt)
+        f.addRow(lab("Chuẩn nén (Codec)"), self.preset)
+        f.addRow(lab("Độ phân giải"), self.resolution)
+        f.addRow(lab("Khung hình/giây"), self.fps)
+        f.addRow(lab("Bộ mã hoá (GPU/CPU)"), self.encoder)
         self.quality.setToolTip("Độ nét phần HÌNH ẢNH của video. Không ảnh hưởng tới âm thanh.\n"
                                 "Đây là thứ quyết định gần như toàn bộ dung lượng file.")
         self.audio.setToolTip("Chất lượng ÂM THANH của video (nhạc + tiếng gốc + tiếng nền), độc lập với hình ảnh.\n"
                               "192 kbps đã đủ cho YouTube; 320 kbps chỉ thêm khoảng 60 MB mỗi giờ nhưng xuất chậm hơn.")
-        f.addRow("Chất lượng hình ảnh", self.quality)
-        f.addRow("Chất lượng âm thanh", self.audio)
-        f.addRow("Giới hạn dung lượng", cap_box)
-        f.addRow("Dự đoán dung lượng", self.size_label)
-        f.addRow(self.size_tip)
+        f.addRow(lab("Chất lượng hình ảnh"), self.quality)
+        f.addRow(lab("Chất lượng âm thanh"), self.audio)
+        f.addRow(lab("Giới hạn dung lượng"), cap_box)
         # tuỳ chọn ít khi cần đổi: gấp lại cho gọn (app tự chọn tốt nhất)
-        self.adv_btn = QPushButton("Tuỳ chọn nâng cao ▾  (chuẩn nén, khung hình/giây, bộ mã hoá, âm thanh)")
+        self.adv_btn = QPushButton("Tuỳ chọn nâng cao")
         self.adv_btn.setObjectName("ghost")
+        self.adv_btn.setProperty("align", "left")
+        self.adv_btn.setIconSize(QSize(12, 12))
+        self.adv_btn.setToolTip("Chuẩn nén (codec), khung hình/giây, bộ mã hoá, chất lượng âm thanh. App tự chọn mức tốt nhất.")
         self.adv_btn.setCheckable(True)
         f.addRow(self.adv_btn)
         self._fmt_form = f
@@ -121,8 +135,7 @@ class ExportTab(QWidget):
         def show_adv(on: bool) -> None:
             for wd in self._adv_widgets:
                 f.setRowVisible(wd, on)
-            self.adv_btn.setText(("Ẩn tuỳ chọn nâng cao ▴" if on else
-                                  "Tuỳ chọn nâng cao ▾  (chuẩn nén, khung hình/giây, bộ mã hoá, âm thanh)"))
+            self.adv_btn.setIcon(icons.icon("up" if on else "down", 12, "text_2"))
             self.settings.setValue("ui/export_advanced", "true" if on else "false")
 
         self.adv_btn.toggled.connect(show_adv)
@@ -135,9 +148,8 @@ class ExportTab(QWidget):
         self.exp_info.setObjectName("muted")
         self.exp_info.setWordWrap(True)
         self.g_audio = QGroupBox("Định dạng File nhạc")
-        f_aud = QFormLayout(self.g_audio)
-        f_aud.setVerticalSpacing(theme.FORM_GAP)
-        f_aud.addRow("Định dạng xuất", self.exp_format)
+        f_aud = form(self.g_audio)
+        f_aud.addRow(lab("Định dạng xuất"), self.exp_format)
         f_aud.addRow(self.exp_info)
         f_aud.addRow(w.muted("Độ dài file nhạc (ví dụ 10 bài → 1 giờ) chỉnh ở trang <b>2. Nhạc</b>, "
                              "thẻ <b>Độ dài file nhạc</b> trên cùng bên phải."))
@@ -170,25 +182,70 @@ class ExportTab(QWidget):
                                 "thành track chữ trên timeline, .edl nhập marker vào DaVinci Resolve. "
                                 "Đoạn THƯỜNG là cảnh chèn — chỗ editor thêm sound effect.")
         g_out = QGroupBox("Nơi lưu && File xuất kèm")
-        f_out = QFormLayout(g_out)
-        f_out.setVerticalSpacing(8)
-        f_out.addRow("Thư mục lưu", row)
-        f_out.addRow("Tên file", self.filename)
+        f_out = form(g_out)
+        f_out.addRow(lab("Thư mục lưu"), row)
+        f_out.addRow(lab("Tên file"), self.filename)
         f_out.addRow(self.own_folder)
         f_out.addRow(self.markers)
         f_out.addRow(self.tracklist)
         f_out.addRow(self.project_copy)
 
-        # ----- Bảng điều khiển Render & Kiểm tra trước khi xuất -----
-        render_card = QWidget()
-        render_card.setObjectName("quickBar")
-        rc_lay = QVBoxLayout(render_card)
-        rc_lay.setContentsMargins(theme.SP['lg'], theme.SP['md'], theme.SP['lg'], theme.SP['md'])
-        rc_lay.setSpacing(theme.SP['md'])
-
+        # ----- thẻ tóm tắt (đầu trang) -----
+        summary_card = QWidget()
+        summary_card.setObjectName("quickBar")
+        sc = QHBoxLayout(summary_card)
+        sc.setContentsMargins(theme.SP['xl'], theme.SP['lg'], theme.SP['xl'], theme.SP['lg'])
+        sc.setSpacing(theme.SP['xl'])
         self.summary = QLabel("")
         self.summary.setObjectName("info")
         self.summary.setWordWrap(True)
+        self.summary.setProperty("plain", True)  # trong thẻ: không khung riêng
+        sc.addWidget(self.summary, 1)
+        size_box = QVBoxLayout()
+        size_box.setSpacing(2)
+        size_cap = QLabel("Dung lượng dự đoán")
+        size_cap.setObjectName("muted")
+        size_cap.setAlignment(Qt.AlignmentFlag.AlignRight)
+        self.size_label.setAlignment(Qt.AlignmentFlag.AlignRight)
+        size_box.addWidget(size_cap)
+        size_box.addWidget(self.size_label)
+        sc.addLayout(size_box)
+        self.summary_card = summary_card
+
+        # ----- màn hình trống: chưa có gì để xuất -----
+        self.empty_card = QWidget()
+        ev = QVBoxLayout(self.empty_card)
+        ev.setContentsMargins(0, 32, 0, 24)
+        ev.setSpacing(10)
+        ev.setAlignment(Qt.AlignmentFlag.AlignHCenter)
+        tile = QLabel()
+        tile.setObjectName("homeBadge")
+        tile.setProperty("tone", "accent")
+        tile.setPixmap(icons.pixmap("export", 22, theme.T["accent_text"]))
+        tile.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        tile.setFixedSize(48, 48)
+        self.empty_title = QLabel("Chưa có gì để xuất")
+        self.empty_title.setObjectName("h2")
+        self.empty_text = QLabel("")
+        self.empty_text.setObjectName("muted")
+        self.empty_text.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        self.empty_btn = QPushButton("Thêm clip")
+        self.empty_btn.setObjectName("primary")
+        self.empty_btn.setIcon(icons.icon("plus", 15, "text_on_accent"))
+        self.empty_btn.setIconSize(QSize(15, 15))
+        self.empty_btn.clicked.connect(lambda: self.emptyActionRequested.emit(self._empty_target))
+        self._empty_target = 0
+        for wd, al in ((tile, Qt.AlignmentFlag.AlignHCenter), (self.empty_title, Qt.AlignmentFlag.AlignHCenter),
+                       (self.empty_text, Qt.AlignmentFlag.AlignHCenter), (self.empty_btn, Qt.AlignmentFlag.AlignHCenter)):
+            ev.addWidget(wd, 0, al)
+        self.empty_card.setVisible(False)
+
+        # ----- thanh hành động dính đáy (luôn hiện, không bị cắt): một nút chính "Xuất" -----
+        footer = self.footer = QWidget()
+        footer.setObjectName("exportFooter")
+        fv = QVBoxLayout(footer)
+        fv.setContentsMargins(theme.SP['xl'], theme.SP['md'], theme.SP['xl'], theme.SP['md'])
+        fv.setSpacing(theme.SP['md'])
 
         self.start_btn = QPushButton("Bắt đầu xuất video")
         self.start_btn.setObjectName("primary")
@@ -198,35 +255,30 @@ class ExportTab(QWidget):
         self.start_btn.clicked.connect(lambda: self.startRequested.emit())
 
         self.queue_add_btn = QPushButton("Thêm vào hàng đợi")
-        self.queue_add_btn.setObjectName("accentBtn")
-        self.queue_add_btn.setIcon(icons.icon("plus", 15, "accent_text"))
+        self.queue_add_btn.setIcon(icons.icon("plus", 15, "text_2"))
         self.queue_add_btn.setIconSize(QSize(15, 15))
         self.queue_add_btn.setMinimumHeight(40)
         self.queue_add_btn.setToolTip("Lưu cấu hình hiện tại thành một mục chờ xuất. Thêm nhiều dự án rồi chạy "
                                       "lần lượt qua đêm.")
         self.queue_add_btn.clicked.connect(lambda: self.queueAddRequested.emit())
 
+        # chỉ hiện khi dùng được: đang xuất mới có Huỷ, xuất xong mới có Hiện file
         self.cancel_btn = QPushButton("Huỷ xuất")
         self.cancel_btn.setObjectName("danger")
         self.cancel_btn.setIcon(icons.icon("stop", 14, "danger_text"))
         self.cancel_btn.setIconSize(QSize(14, 14))
         self.cancel_btn.setMinimumHeight(40)
         self.cancel_btn.setEnabled(False)
+        self.cancel_btn.setVisible(False)
         self.cancel_btn.clicked.connect(lambda: self.cancelRequested.emit())
 
         self.open_out_btn = QPushButton("Hiện file vừa xuất")
-        self.open_out_btn.setIcon(icons.icon("folder", 14))
+        self.open_out_btn.setIcon(icons.icon("folder", 14, "text_2"))
         self.open_out_btn.setIconSize(QSize(14, 14))
         self.open_out_btn.setMinimumHeight(40)
         self.open_out_btn.setEnabled(False)
+        self.open_out_btn.setVisible(False)
         self.open_out_btn.clicked.connect(self._open_output)
-
-        btns = QHBoxLayout()
-        btns.setSpacing(8)
-        btns.addWidget(self.start_btn, 2)
-        btns.addWidget(self.queue_add_btn, 1)
-        btns.addWidget(self.cancel_btn)
-        btns.addWidget(self.open_out_btn)
 
         self.progress = QProgressBar()
         self.progress.setRange(0, 1000)
@@ -235,17 +287,26 @@ class ExportTab(QWidget):
         self._prog_anim.setDuration(140)
         self._prog_anim.setEasingCurve(QEasingCurve.Type.OutCubic)
         self._shimmer = effects.Shimmer(self.progress)  # vệt sáng chạy trên thanh tiến trình lúc đang xuất
-        self.status = QLabel("Sẵn sàng xuất.")
+        self.status = w.ElidedLabel("Sẵn sàng xuất.")
         self.status.setObjectName("muted")
 
-        prog_row = QHBoxLayout()
+        self.prog_row = QWidget()
+        prog_row = QHBoxLayout(self.prog_row)
+        prog_row.setContentsMargins(0, 0, 0, 0)
         prog_row.setSpacing(12)
         prog_row.addWidget(self.progress, 2)
         prog_row.addWidget(self.status, 3)
+        self.prog_row.setVisible(False)
 
-        rc_lay.addWidget(self.summary)
-        rc_lay.addLayout(btns)
-        rc_lay.addLayout(prog_row)
+        self.footer_info = w.ElidedLabel("")
+        self.footer_info.setObjectName("muted")
+        act_row = QHBoxLayout()
+        act_row.setSpacing(8)
+        act_row.addWidget(self.footer_info, 1)
+        for b in (self.open_out_btn, self.cancel_btn, self.queue_add_btn, self.start_btn):
+            act_row.addWidget(b)
+        fv.addWidget(self.prog_row)
+        fv.addLayout(act_row)
 
         self.log = QPlainTextEdit()
         self.log.setReadOnly(True)
@@ -324,8 +385,9 @@ class ExportTab(QWidget):
         lv_log.setSpacing(6)
         lv_log.addWidget(self.log, 1)
         log_bar = QHBoxLayout()
-        log_bar.addWidget(w.muted("Chi tiết từng bước chuẩn hoá, ghép khối và dựng âm thanh."))
-        log_bar.addStretch(1)
+        log_hint = w.ElidedLabel("Chi tiết từng bước chuẩn hoá, ghép khối và dựng âm thanh.")
+        log_hint.setObjectName("muted")
+        log_bar.addWidget(log_hint, 1)
         btn_clear_log = QPushButton("Xoá nhật ký")
         btn_clear_log.setObjectName("ghost")
         btn_clear_log.clicked.connect(self.log.clear)
@@ -344,14 +406,31 @@ class ExportTab(QWidget):
         top.addWidget(self.g_audio, 1)
         top.addWidget(g_out, 1)
         self.top_layout, self.bottom_split = top, bottom
+        self._top_widgets = (g_fmt, self.g_audio, g_out)
+        self._empty = None
         self.queue.setMinimumHeight(105)
         self.log.setMinimumHeight(105)
 
+        # nội dung cuộn được; thanh hành động nằm ngoài vùng cuộn nên không bao giờ bị cắt
+        content = QWidget()
+        cl = QVBoxLayout(content)
+        theme.page_layout(cl)
+        cl.addWidget(self.empty_card)
+        cl.addWidget(summary_card)
+        cl.addLayout(top)
+        cl.addWidget(bottom, 1)
+        bottom.setMinimumHeight(560)
+        scroll = QScrollArea()
+        scroll.setWidget(content)
+        scroll.setWidgetResizable(True)
+        scroll.setFrameShape(QFrame.Shape.NoFrame)
+        scroll.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
+        self.content_scroll = scroll
         lay = QVBoxLayout(self)
-        theme.page_layout(lay)
-        lay.addLayout(top)
-        lay.addWidget(render_card)
-        lay.addWidget(bottom, 1)
+        lay.setContentsMargins(0, 0, 0, 0)
+        lay.setSpacing(0)
+        lay.addWidget(scroll, 1)
+        lay.addWidget(footer)
 
         for cb in (self.preset, self.resolution, self.fps, self.encoder, self.quality, self.audio, self.cap):
             cb.currentIndexChanged.connect(self._emit)
@@ -419,8 +498,8 @@ class ExportTab(QWidget):
         self.size_label.setProperty("busy", busy)  # màu theo QSS (QLabel#sizeEst[busy=…])
         self.size_label.style().unpolish(self.size_label)
         self.size_label.style().polish(self.size_label)
-        self.size_tip.setText(tip)
-        self.size_tip.setVisible(bool(tip))
+        if tip:
+            self.size_label.setToolTip(tip)
 
     def set_available(self, available: dict[str, list[str]]) -> None:
         self.available = available
@@ -448,6 +527,9 @@ class ExportTab(QWidget):
 
     def set_summary(self, text: str) -> None:
         self.summary.setText(text)
+        plain = re.sub(r"<br\s*/?>", " · ", text)
+        plain = re.sub(r"<[^>]+>", "", plain)
+        self.footer_info.set_full_text(plain)
 
     def free_bytes(self) -> int | None:
         d = self.out_dir.text().strip()
@@ -469,24 +551,56 @@ class ExportTab(QWidget):
         return f"{free / 1024 ** 3:.1f} GB trống" if d else ""
 
     # ---------- trạng thái render ----------
+    def set_empty(self, kind: str | None) -> None:
+        """Màn hình trống ("video" | "music" | None): thay thẻ tóm tắt + cài đặt bằng một lời nhắc và một nút việc cần làm."""
+        if kind == self._empty:
+            return
+        self._empty = kind
+        on = kind is not None
+        if on:
+            music = kind == "music"
+            self._empty_target = 1 if music else 0
+            self.empty_text.setText("Thêm bài nhạc hoặc tiếng nền, rồi quay lại đây để xuất file nhạc." if music
+                                    else "Thêm clip vào dự án, rồi quay lại đây để xuất video.")
+            self.empty_btn.setText("Thêm nhạc" if music else "Thêm clip")
+        self.empty_card.setVisible(on)
+        self.summary_card.setVisible(not on)
+        self._apply_mode_visibility()
+        self._sync_footer()
+
+    def _apply_mode_visibility(self) -> None:
+        music = self.mode == "music_only"
+        on = self._empty is not None
+        self.g_video.setVisible(not on and not music)
+        self.g_audio.setVisible(not on and music)
+        self._top_widgets[2].setVisible(not on)
+
+    def _sync_footer(self) -> None:
+        self.footer.setVisible(self._empty is None or self._running)
+
     def set_can_export(self, ok: bool) -> None:
+        self.set_empty(None)
         self._can_export = ok
         self.start_btn.setEnabled(ok and not self._running)
         self.queue_add_btn.setEnabled(ok)
 
     def set_running(self, running: bool, clear_log: bool = True) -> None:
         self._running = running
+        self._sync_footer()
         self.start_btn.setEnabled(self._can_export and not running)
         self.queue_add_btn.setEnabled(self._can_export)
         pending = sum(1 for i in self.items if i.status == "pending")
         self.queue_run_btn.setEnabled(not running and pending > 0)
         self.cancel_btn.setEnabled(running)
+        self.cancel_btn.setVisible(running)
         if running:
+            self.prog_row.setVisible(True)
             self._shimmer.start()
         else:
             self._shimmer.stop()
         if running:
             self.open_out_btn.setEnabled(False)
+            self.open_out_btn.setVisible(False)
             self._prog_anim.stop()
             self.progress.setValue(0)
             if clear_log:
@@ -506,6 +620,7 @@ class ExportTab(QWidget):
     def done(self, output: str | None) -> None:
         self.last_output = output
         self.open_out_btn.setEnabled(bool(output))
+        self.open_out_btn.setVisible(bool(output))
 
     def adapt(self, width: int, height: int = 0) -> None:
         narrow = width < 1100
@@ -514,14 +629,14 @@ class ExportTab(QWidget):
         want = Qt.Orientation.Vertical if narrow else Qt.Orientation.Horizontal
         if self.bottom_split.orientation() != want:
             self.bottom_split.setOrientation(want)
+        self.bottom_split.setMinimumHeight(560 if narrow else 280)
 
     # ---------- kiểu sản phẩm ----------
     def set_mode(self, mode: str) -> None:
         self.mode = mode
         music = mode == "music_only"
         video_only = mode == "video_only"
-        self.g_video.setVisible(not music)
-        self.g_audio.setVisible(music)
+        self._apply_mode_visibility()
         self.tracklist.setEnabled(not video_only)
         self.project_copy.setVisible(True)
         self.start_btn.setText("Bắt đầu xuất file nhạc" if music else "Bắt đầu xuất video")
