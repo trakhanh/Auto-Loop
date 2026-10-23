@@ -593,7 +593,24 @@ def _plain(html: str) -> str:
 GUIDE = "".join(h for _i, _g, _c, _t, h in TOPICS)
 
 
+class _CachedBrowser(QTextBrowser):
+    """QTextBrowser giữ ảnh đã nạp: dựng lại trang (đổi cỡ khung / cỡ chữ) không phải giải mã lại file PNG."""
+
+    def __init__(self, parent=None):
+        super().__init__(parent)
+        self._res: dict[str, object] = {}
+
+    def loadResource(self, rtype, url):  # noqa: N802
+        if int(getattr(rtype, "value", rtype)) != 2:  # chỉ ảnh
+            return super().loadResource(rtype, url)
+        key = url.toString()
+        if key not in self._res:
+            self._res[key] = super().loadResource(rtype, url)
+        return self._res[key]
+
+
 class HelpPage(QWidget):
+    _stale = False
     openProjectRequested = Signal(str)
     actionRequested = Signal(str)  # "video" | "music" | "export" | "mixer" | "batch" | … → cửa sổ chính chuyển tới
 
@@ -689,7 +706,7 @@ class HelpPage(QWidget):
         left.setMinimumWidth(240)
         left.setMaximumWidth(330)
 
-        self.view = QTextBrowser()
+        self.view = _CachedBrowser()
         self.view.setOpenLinks(False)
         self.view.anchorClicked.connect(self._on_link)
         self.view.setSearchPaths([str(HELP_DIR)])
@@ -724,6 +741,7 @@ class HelpPage(QWidget):
         self._resize_timer.setInterval(150)
         self._resize_timer.timeout.connect(lambda: self._render(keep_pos=True))
         self._last_w = 0
+        self._stale = False
         self.toc.setCurrentItem(self._items[self._current])
 
     # ---------- hiển thị ----------
@@ -768,7 +786,16 @@ class HelpPage(QWidget):
     def resizeEvent(self, e) -> None:  # noqa: N802
         super().resizeEvent(e)
         if abs(self.view.viewport().width() - self._last_w) > 24:
-            self._resize_timer.start()  # ảnh co giãn theo khung đọc
+            if self.isVisible():
+                self._resize_timer.start()  # ảnh co giãn theo khung đọc
+            else:
+                self._stale = True  # trang đang ẩn: dựng lại khi hiện, không tốn công lúc kéo cửa sổ
+
+    def showEvent(self, e) -> None:  # noqa: N802
+        super().showEvent(e)
+        if self._stale:
+            self._stale = False
+            self._resize_timer.start()
 
     def _on_link(self, url: QUrl) -> None:
         s = url.toString()
