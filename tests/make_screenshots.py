@@ -90,6 +90,20 @@ win.go_to(2)
 wait(1.5)
 win.grab().save(str(OUT / "04-xuat.png"))
 
+# trang Cài đặt (2 cột trên màn hình rộng) — đợi đọc xong thông số máy / card đồ hoạ
+win.go_to(3)
+wait(8)
+win.grab().save(str(OUT / "07-cai-dat.png"))
+
+# trang Hướng dẫn: Tổng quan (có gì mới, 3 bước có ảnh, lưới chủ đề)
+win.go_to(4)
+win.help_page.show_hub()
+wait(1.5)
+win.grab().save(str(OUT / "08-huong-dan.png"))
+win.help_page.show_topic("xenke")
+wait(1.2)
+win.grab().save(str(OUT / "09-huong-dan-chu-de.png"))
+
 
 from loopstation.ui.batch_dialog import BatchDialog  # noqa: E402
 st = QSettings(ini, QSettings.Format.IniFormat)

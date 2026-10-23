@@ -11,9 +11,9 @@ import re
 from pathlib import Path
 
 from PySide6.QtCore import QSize, Qt, QTimer, QUrl, Signal
-from PySide6.QtGui import QImageReader
+from PySide6.QtGui import QImage, QImageReader
 from PySide6.QtWidgets import (
-    QHBoxLayout, QLabel, QLineEdit, QListWidget, QListWidgetItem, QPushButton, QSplitter, QTextBrowser, QVBoxLayout,
+    QFrame, QHBoxLayout, QLabel, QLineEdit, QListWidget, QListWidgetItem, QPushButton, QSplitter, QTextBrowser, QVBoxLayout,
     QWidget,
 )
 
@@ -33,6 +33,8 @@ h1 {{ font-size: @H1@pt; color: {T['text']}; margin: 0 0 2px 0; }}
 h2 {{ font-size: @H2@pt; color: {T['text']}; margin: 20px 0 6px 0; }}
 h3 {{ font-size: @H3@pt; color: {T['accent_soft']}; margin: 14px 0 4px 0; }}
 p, li {{ line-height: 150%; }}
+/* đoạn chứa ảnh: giãn dòng thường — 150 % nhân cả chiều cao ảnh, để lại khoảng trống to bằng nửa ảnh bên dưới */
+p.shot {{ line-height: 100%; margin-top: 8px; margin-bottom: 8px; }}
 a {{ color: {T['info_text']}; text-decoration: none; }}
 code {{ background: {T['overlay']}; color: {T['warn_text']}; font-family: Consolas; }}
 td {{ vertical-align: top; }}
@@ -58,12 +60,12 @@ CSS = css()
 
 # ---------------- các khối trình bày ----------------
 def hero(title: str, when: str, actions: tuple = ()) -> str:
-    """Tiêu đề chủ đề + "dùng khi nào" + nút đi tới đúng chỗ trong app."""
-    btns = "".join(f'<td bgcolor="{T["accent"]}"><a href="{href}" style="text-decoration:none;"><b><span style="color:{T["text_on_accent"]};">&nbsp;{label} →&nbsp;'
-                   f'</span></b></a></td><td width="10"></td>' for label, href in actions)
-    row = f'<table cellpadding="7" cellspacing="0"><tr>{btns}</tr></table>' if btns else ""
-    return (f'<table width="100%" cellpadding="14" cellspacing="0" bgcolor="{CARD}"><tr><td>'
-            f"<h1>{title}</h1><p class='muted'>{when}</p>{row}</td></tr></table>")
+    """Tiêu đề chủ đề + "dùng khi nào" + nút đi tới đúng chỗ trong app.
+
+    Không vẽ bằng HTML nữa: trả về dấu ẩn, topic() tách ra → khung đọc hiện thanh tiêu đề thật (help_hub.TopicHeader)."""
+    import json
+    data = json.dumps({"title": title, "when": when, "actions": [list(x) for x in actions]}, ensure_ascii=False)
+    return f"<!--HERO {data} -->"
 
 
 def steps(items: list[tuple[str, str]]) -> str:
@@ -91,7 +93,7 @@ def img(name: str, caption: str = "") -> str:
     """Ảnh chụp app (đổi cỡ theo khung đọc khi hiển thị)."""
     caption = (caption + " " if caption else "") + "(Bấm vào ảnh để phóng to.)"
     cap = f"<br><span class='cap'>{caption}</span>"
-    return f'<p align="center">@IMG:{name}@{cap}</p>'
+    return f'<p align="center" class="shot">@IMG:{name}@{cap}</p>'
 
 
 def box(kind: str, text: str) -> str:
@@ -136,7 +138,15 @@ def _tokens(html: str) -> str:
     return re.sub(r"@c:(\w+)@", lambda m: cols[m.group(1)], html)
 
 
+META: dict[str, dict] = {}  # tid → {"title", "when", "actions"} lấy từ hero()
+
+
 def topic(tid: str, group: str, icon: str, title: str, html: str) -> None:
+    import json
+    m = re.search(r"<!--HERO (.*?) -->", html, re.S)
+    if m:
+        META[tid] = json.loads(m.group(1))
+        html = html[:m.start()] + html[m.end():]
     TOPICS.append((tid, group, icon, title, _tokens(html)))
 
 
@@ -593,6 +603,7 @@ topic("phim", "Khác", "zap", "Phím tắt", hero("Phím tắt", "Thao tác nhan
     ("Lăn chuột", "Chỉ cuộn trang; muốn đổi ô số bằng lăn chuột thì bấm vào ô trước")], ("Phím", "Tác dụng")))
 
 GROUPS = ["Bắt đầu", "Làm video", "Âm thanh", "Xuất file", "Khác"]
+HUB = "__hub"  # mục "Tổng quan" đầu mục lục
 
 
 def _plain(html: str) -> str:
@@ -615,7 +626,19 @@ class _CachedBrowser(QTextBrowser):
             return super().loadResource(rtype, url)
         key = url.toString()
         if key not in self._res:
-            self._res[key] = super().loadResource(rtype, url)
+            m = re.match(r"helpimg/([\w-]+)@(\d+)x([\d.]+)\.png$", key)
+            if m:  # ảnh minh hoạ thu sẵn đúng cỡ hiển thị (xem HelpPage._img_tag)
+                src = QImage(str(HELP_DIR / "help" / f"{m.group(1)}.png"))
+                wpx, dpr = int(m.group(2)), float(m.group(3))
+                if not src.isNull():
+                    hpx = max(1, round(src.height() * wpx / src.width()))
+                    if wpx != src.width() or dpr != 1.0:
+                        src = src.scaled(round(wpx * dpr), round(hpx * dpr), Qt.AspectRatioMode.IgnoreAspectRatio,
+                                         Qt.TransformationMode.SmoothTransformation)
+                    src.setDevicePixelRatio(dpr)
+                self._res[key] = src
+            else:
+                self._res[key] = super().loadResource(rtype, url)
         return self._res[key]
 
 
@@ -626,47 +649,30 @@ class HelpPage(QWidget):
 
     def __init__(self, parent=None):
         super().__init__(parent)
-        logo = QLabel()
-        logo.setPixmap(branding.pixmap(56, self.devicePixelRatioF()))
-        name = QLabel(APP_NAME)
-        name.setObjectName("appName")
-        sub = QLabel(f"{AUTHOR} · Phiên bản {APP_VERSION} · Hướng dẫn sử dụng")
-        sub.setObjectName("muted")
-        info = QVBoxLayout()
-        info.setSpacing(2)
-        info.addWidget(name)
-        info.addWidget(sub)
-        head = QHBoxLayout()
-        head.addWidget(logo)
-        head.addSpacing(10)
-        head.addLayout(info)
-        btn_box = QWidget()  # nút tự xuống dòng khi cửa sổ hẹp (không đẩy trang rộng ra)
-        btn_flow = FlowLayout(btn_box, spacing=6)
-        head.addWidget(btn_box, 1)
-
         sample_dir = Path(ft.app_dir()) / "Mau-Test"
         self._samples = sorted(sample_dir.glob("*.lsproj")) if sample_dir.is_dir() else []
+        tools = []
         for proj in self._samples:
             b = QPushButton(sample_label(proj.stem))
             b.setObjectName("pill")
             b.setIcon(icons.icon("folder", 13))
             b.setToolTip(f"Mở dự án mẫu {proj.name} để thử")
             b.clicked.connect(lambda _=False, p=str(proj): self.openProjectRequested.emit(p))
-            btn_flow.addWidget(b)
+            tools.append(b)
+        self._sample_guide = sample_dir / "HUONG-DAN-TEST.md"
         if sample_dir.is_dir():
             g = QPushButton("Hướng dẫn test bộ mẫu")
             g.setObjectName("pill")
             g.setIcon(icons.icon("help", 13))
-            self._sample_guide = sample_dir / "HUONG-DAN-TEST.md"
             g.setToolTip("Đọc hướng dẫn thử bộ mẫu ngay trong app")
             g.clicked.connect(self._show_sample_guide)
-            btn_flow.addWidget(g)
+            tools.append(g)
         logs = QPushButton("Thư mục nhật ký")
         logs.setIcon(icons.icon("terminal", 13))
-        logs.setObjectName("ghost")
+        logs.setObjectName("pill")
         logs.setToolTip("Nhật ký mỗi lần xuất, bộ nhớ đệm, tự lưu")
         logs.clicked.connect(self._open_data)
-        btn_flow.addWidget(logs)
+        tools.append(logs)
 
         # ----- mục lục chủ đề -----
         self.search = QLineEdit()
@@ -685,6 +691,13 @@ class HelpPage(QWidget):
         self.toc.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
         self._items: dict[str, QListWidgetItem] = {}
         self._group_items: dict[str, QListWidgetItem] = {}
+        hub_item = QListWidgetItem(icons.icon("home", 16, "accent_text"), "Tổng quan")
+        hub_item.setData(Qt.ItemDataRole.UserRole, HUB)
+        hf = hub_item.font()
+        hf.setBold(True)
+        hub_item.setFont(hf)
+        self.toc.addItem(hub_item)
+        self._items[HUB] = hub_item
         for g in GROUPS:
             gi = QListWidgetItem(g.upper())
             gi.setFlags(Qt.ItemFlag.NoItemFlags)
@@ -725,11 +738,33 @@ class HelpPage(QWidget):
         self.back_btn.setObjectName("ghost")
         self.back_btn.clicked.connect(self._show_guide)
         self.back_btn.hide()
-        right = QWidget()
-        rv = QVBoxLayout(right)
+        from PySide6.QtWidgets import QStackedWidget
+        from .help_hub import HubPage, TopicHeader, TopicNav
+        self.head = TopicHeader()
+        self.head.homeRequested.connect(self.show_hub)
+        self.head.linkRequested.connect(lambda h: self._on_link(QUrl(h)))
+        self.nav = TopicNav()
+        self.nav.topicRequested.connect(self.show_topic)
+        reader = QFrame()
+        reader.setObjectName("helpReader")
+        rv = QVBoxLayout(reader)
         rv.setContentsMargins(0, 0, 0, 0)
+        rv.setSpacing(0)
         rv.addWidget(self.back_btn, 0, Qt.AlignmentFlag.AlignLeft)
+        rv.addWidget(self.head)
         rv.addWidget(self.view, 1)
+        nav_box = QWidget()
+        nl = QVBoxLayout(nav_box)
+        nl.setContentsMargins(theme.SP["lg"], theme.SP["sm"], theme.SP["lg"], theme.SP["md"])
+        nl.addWidget(self.nav)
+        rv.addWidget(nav_box)
+        self.hub = HubPage(TOPICS, META, GROUPS, HELP_DIR, APP_VERSION, self._samples, tools)
+        self.hub.topicRequested.connect(self.show_topic)
+        self.hub.linkRequested.connect(lambda h: self._on_link(QUrl(h)))
+        self.pages = QStackedWidget()
+        self.pages.addWidget(self.hub)
+        self.pages.addWidget(reader)
+        right = self.pages
 
         split = QSplitter(Qt.Orientation.Horizontal)
         split.setChildrenCollapsible(False)
@@ -741,11 +776,10 @@ class HelpPage(QWidget):
         lay = QVBoxLayout(self)
         theme.page_layout(lay)
         lay.setSpacing(theme.SP['lg'])
-        lay.addLayout(head)
         lay.addWidget(split, 1)
 
         self._img_sizes: dict[str, QSize] = {}
-        self._current = TOPICS[0][0]
+        self._current = HUB
         self._resize_timer = QTimer(self)
         self._resize_timer.setSingleShot(True)
         self._resize_timer.setInterval(150)
@@ -759,33 +793,49 @@ class HelpPage(QWidget):
         if tid in self._items:
             self.toc.setCurrentItem(self._items[tid])
 
+    def show_hub(self) -> None:
+        self.show_topic(HUB)
+
     def _on_toc(self, cur, _prev) -> None:
         tid = cur.data(Qt.ItemDataRole.UserRole) if cur is not None else None
         if tid:
             self._current = tid
             self.back_btn.hide()
+            if tid == HUB:
+                self.pages.setCurrentIndex(0)
+                self.hub.verticalScrollBar().setValue(0)
+                return
+            self.pages.setCurrentIndex(1)
             self._render()
 
     def _img_tag(self, m: re.Match) -> str:
+        """Ảnh minh hoạ thu sẵn về ĐÚNG cỡ hiển thị (tính cả màn hình phóng to 125 / 150 %) rồi đưa thẳng vào tài
+        liệu, ghi rõ rộng × cao. Trước đây để khung đọc tự co ảnh theo width: khi lăn chuột, Qt vẽ lại từng mảnh
+        và hay vẽ thiếu — ảnh chỉ còn một mẩu, phần còn lại trống."""
         name = m.group(1)
         if name not in self._img_sizes:
             self._img_sizes[name] = QImageReader(str(HELP_DIR / "help" / f"{name}.png")).size()
         size = self._img_sizes[name]
         avail = max(320, self.view.viewport().width() - 48)
-        wpx = min(size.width(), avail) if size.isValid() else avail
-        return f'<a href="zoom:{name}"><img src="help/{name}.png" width="{wpx}"></a>'
+        if not size.isValid():
+            return f'<a href="zoom:{name}"><img src="help/{name}.png" width="{avail}"></a>'
+        wpx = min(size.width(), avail)
+        hpx = max(1, round(size.height() * wpx / size.width()))
+        dpr = max(1.0, self.view.devicePixelRatioF())
+        url = f"helpimg/{name}@{wpx}x{dpr:g}.png"  # _CachedBrowser.loadResource tạo ảnh đúng cỡ này
+        return f'<a href="zoom:{name}"><img src="{url}" width="{wpx}" height="{hpx}"></a>'
 
     def _render(self, keep_pos: bool = False) -> None:
-        if self.back_btn.isVisible():
+        if self.back_btn.isVisible() or self._current == HUB:
             return
-        html = next(h for tid, _g, _c, _t, h in TOPICS if tid == self._current)
-        k = [t[0] for t in TOPICS].index(self._current)
-        nav = []
-        if k > 0:
-            nav.append(f'<a href="topic:{TOPICS[k - 1][0]}">← {TOPICS[k - 1][3]}</a>')
-        if k < len(TOPICS) - 1:
-            nav.append(f'<a href="topic:{TOPICS[k + 1][0]}">{TOPICS[k + 1][3]} →</a>')
-        html += f"<p>&nbsp;</p><p class='muted'>{' &nbsp;&nbsp;·&nbsp;&nbsp; '.join(nav)}</p>"
+        tid, group, ic, title, html = next(t for t in TOPICS if t[0] == self._current)
+        meta = META.get(tid, {})
+        self.head.set_topic(group, ic, meta.get("title", title), meta.get("when", ""), meta.get("actions", ()))
+        self.head.show()
+        self.nav.show()
+        k = [t[0] for t in TOPICS].index(tid)
+        self.nav.set_neighbours((TOPICS[k - 1][0], TOPICS[k - 1][3]) if k > 0 else None,
+                                (TOPICS[k + 1][0], TOPICS[k + 1][3]) if k < len(TOPICS) - 1 else None)
         html = re.sub(r"@IMG:([\w-]+)@", self._img_tag, html)
         pos = self.view.verticalScrollBar().value()
         self.view.document().setDefaultStyleSheet(css())
@@ -851,7 +901,8 @@ class HelpPage(QWidget):
         shown_groups: set[str] = set()
         first = None
         for tid, grp, _ic, title, html in TOPICS:
-            hay = fold(title + " " + _plain(html))
+            meta = META.get(tid, {})
+            hay = fold(title + " " + meta.get("when", "") + " " + _plain(html))
             ok = all(wd in hay for wd in words)
             self._items[tid].setHidden(not ok)
             if ok:
@@ -861,7 +912,9 @@ class HelpPage(QWidget):
             gi.setHidden(g not in shown_groups)
         self.no_hit.setVisible(first is None)
         cur = self.toc.currentItem()
-        if first and (cur is None or cur.isHidden()):
+        on_hub = cur is not None and cur.data(Qt.ItemDataRole.UserRole) == HUB
+        self._items[HUB].setHidden(bool(words))
+        if first and (cur is None or cur.isHidden() or (on_hub and words)):
             self.show_topic(first)
 
     def _show_sample_guide(self) -> None:
@@ -872,11 +925,16 @@ class HelpPage(QWidget):
             text = "Không tìm thấy file hướng dẫn test trong thư mục Mau-Test."
         self.view.document().setDefaultStyleSheet(css())
         self.view.setMarkdown(text)
+        self.pages.setCurrentIndex(1)
+        self.head.hide()
+        self.nav.hide()
         self.back_btn.show()
         self.view.verticalScrollBar().setValue(0)
 
     def _show_guide(self) -> None:
         self.back_btn.hide()
+        if self._current == HUB:
+            self.pages.setCurrentIndex(0)
         self._render()
 
     def refresh_font(self) -> None:

@@ -34,7 +34,12 @@ def pill(ok: bool | None, text: str, fixed: int = 0) -> QLabel:
     lab.setSizePolicy(QSizePolicy.Policy.Maximum, QSizePolicy.Policy.Fixed)
     lab.setFixedHeight(26)
     if fixed:
-        lab.setFixedWidth(fixed)
+        # rộng cố định cho thẳng hàng, nhưng không bao giờ hẹp hơn chữ (trước đây “✓ dùng được” bị cắt thành “dùng đượ”)
+        from PySide6.QtGui import QFontMetrics
+        f = lab.font()
+        f.setBold(True)
+        need = QFontMetrics(f).horizontalAdvance(lab.text()) + 30
+        lab.setFixedWidth(max(fixed, need))
         lab.setAlignment(Qt.AlignmentFlag.AlignCenter)
     return lab
 
@@ -277,21 +282,33 @@ class SettingsPage(QWidget):
         fa.addRow("Phiên bản", ver)
         fa.addRow("Tác giả", QLabel(AUTHOR.replace("By ", "")))
         fa.addRow(w.muted("Báo lỗi: gửi kèm số phiên bản này và file nhật ký (Thư mục dữ liệu → logs)."))
-        # một cột, rộng tối đa 880 px, căn giữa: Giao diện lên đầu (hay đổi nhất), phần cứng ở giữa, mục ít dùng ở cuối
+        # bố cục tự cân: màn hình rộng → 2 cột (trái: tuỳ chọn hay đổi · phải: phần cứng), hẹp → 1 cột;
+        # cả khối rộng tối đa 1360 px, căn giữa (không còn một cột hẹp giữa màn hình rộng, hai bên trống trơn)
+        self._left_groups = (g_ui, g_exp, g_ff, g_cache, g_about)
+        self._right_groups = (g_sys, g_acc, g_bench)
+        self._one_col_order = (g_ui, g_sys, g_acc, g_exp, g_ff, g_cache, g_bench, g_about)
         column = QWidget()
-        column.setMaximumWidth(880)
+        column.setMaximumWidth(1360)
         cv_ = QVBoxLayout(column)
         cv_.setContentsMargins(0, 0, 0, 0)
         cv_.setSpacing(theme.SP['lg'])
         cv_.addLayout(head)
-        for g in (g_ui, g_sys, g_acc, g_exp, g_ff, g_cache, g_bench, g_about):
-            cv_.addWidget(g)
+        grid = QHBoxLayout()
+        grid.setSpacing(theme.SP['lg'])
+        self._grid = grid
+        self._col_a, self._col_b = QVBoxLayout(), QVBoxLayout()
+        for c in (self._col_a, self._col_b):
+            c.setSpacing(theme.SP['lg'])
+            grid.addLayout(c, 1)
+        cv_.addLayout(grid)
         cv_.addStretch(1)
         cols = QHBoxLayout()
         cols.addStretch(1)
         cols.addWidget(column, 100)
         cols.addStretch(1)
         self._cols = cols
+        self._two_cols = None
+        self._arrange(False)
         lay = QVBoxLayout(self)
         theme.page_layout(lay)
         lay.addLayout(cols, 1)
@@ -486,5 +503,32 @@ class SettingsPage(QWidget):
     def pref(self, key: str, default=False) -> bool:
         return str(self.settings.value(key, default)).lower() in ("true", "1")
 
+    def _arrange(self, two: bool) -> None:
+        """Đặt các thẻ vào 1 hoặc 2 cột (giữ nguyên thẻ, chỉ đổi chỗ — không dựng lại)."""
+        if two == self._two_cols:
+            return
+        self._two_cols = two
+        for c in (self._col_a, self._col_b):
+            while c.count():
+                item = c.itemAt(0)
+                if item.widget() is not None:
+                    # removeWidget (không phải takeAt): gỡ sạch mục bố cục cũ — nếu còn sót, thẻ đổi nội dung
+                    # (ví dụ thẻ GPU điền kết quả kiểm tra) không tự cao lên, chữ bị chồng
+                    c.removeWidget(item.widget())
+                else:
+                    c.takeAt(0)
+        if two:
+            for g in self._left_groups:
+                self._col_a.addWidget(g)
+            for g in self._right_groups:
+                self._col_b.addWidget(g)
+            self._col_b.addStretch(1)
+        else:
+            for g in self._one_col_order:
+                self._col_a.addWidget(g)
+        self._col_a.addStretch(1)
+        self._grid.setStretch(1, 1 if two else 0)  # một cột: cột phải rỗng không chiếm nửa bề ngang
+
     def adapt(self, width: int, height: int = 0) -> None:
-        """Một cột căn giữa, không cần xếp lại theo độ rộng."""
+        """Rộng ≥ 1180 px: 2 cột cân nhau; hẹp hơn: 1 cột."""
+        self._arrange(width >= 1180)

@@ -128,7 +128,8 @@ wait()
 check("▲ ô giờ → 3 giờ", tg.seconds() == 10800, tg.text())
 
 # 4) nút đặt nhanh vẫn chạy
-btn = next(b for b in vt.target_wrap.findChildren(type(vt.next_btn)) if b.text() == "10h")
+from PySide6.QtWidgets import QPushButton  # noqa: E402
+btn = next(b for b in vt.target_wrap.findChildren(QPushButton) if b.text() == "10h")
 btn.click()
 wait()
 check("nút đặt nhanh 10h", tg.seconds() == 36000 and win.collect_project().video.target_duration == 36000)

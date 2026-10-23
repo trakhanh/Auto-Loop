@@ -268,7 +268,9 @@ class BatchDialog(QDialog):
             tree_h = max(tree_h, self.card_tree.sizeHint().height())
             text_h = max(text_h, self.card_text.heightForWidth(560))
         self.card_tree.setMinimumHeight(tree_h)
-        card.setMinimumHeight(max(tree_h, text_h) + 20)
+        # cố định (không chỉ tối thiểu): hộp thoại nằm trong vùng cuộn, thanh cuộn hiện / ẩn làm đổi bề ngang chút ít —
+        # khung vẫn phải đứng yên khi đổi kiểu
+        card.setFixedHeight(max(tree_h, text_h) + 20)
 
         self.folder = QLineEdit(settings.value("batch/folder", ""))
         self.folder.setPlaceholderText("Ví dụ: D:\\Video-can-lam\\Tuan-1")
@@ -462,10 +464,19 @@ class BatchDialog(QDialog):
         bl.addWidget(self.list_split, 1)
         bl.addWidget(self.summary)
 
+        # màn hình thấp (laptop 768 px, Windows phóng to 125 %…): cuộn dọc thay vì để Qt ép dẹt các hàng
+        # (trước đây hàng nút 30p / 1h / 2h… bị ép còn vài điểm ảnh, không bấm được)
+        from PySide6.QtWidgets import QScrollArea
+        self.body_scroll = QScrollArea()
+        self.body_scroll.setWidget(self.body)
+        self.body_scroll.setWidgetResizable(True)
+        self.body_scroll.setFrameShape(QFrame.Shape.NoFrame)
+        self.body_scroll.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
+
         lay = QVBoxLayout(self)
         lay.setSpacing(10)
         lay.addLayout(kind_row)
-        lay.addWidget(self.body, 1)
+        lay.addWidget(self.body_scroll, 1)
         lay.addLayout(bottom)
 
         # quét khi gõ xong (Enter / rời ô) hoặc ngừng gõ 0,8 giây — không quét từng ký tự (gõ "E:" là quét cả ổ)

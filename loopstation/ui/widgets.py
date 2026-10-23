@@ -359,8 +359,8 @@ class DurationEdit(QWidget):
             box.setKeyboardTracking(False)
             box.setAlignment(Qt.AlignmentFlag.AlignCenter)
             box.setFixedWidth(width)  # gọn: 3 ô + chữ đơn vị vừa cột cài đặt hẹp
-            # không mũi tên ▲▼ (chiếm chỗ làm che mất số); tăng / giảm bằng phím ↑ ↓ hoặc lăn chuột khi đã bấm vào ô
-            box.setButtonSymbols(QAbstractSpinBox.ButtonSymbols.NoButtons)
+            # không hiện mũi tên ▲▼ (chiếm chỗ làm che mất số): QSS #timeBox cho nút rộng 0. Không dùng
+            # setButtonSymbols(NoButtons) — Qt 6.12 bóp phần gõ chữ còn 1 px khi có QSS. Tăng / giảm bằng phím ↑ ↓.
             box.setObjectName("timeBox")
             box.setToolTip(self.HELP)
             box.valueChanged.connect(lambda *_: self._commit())

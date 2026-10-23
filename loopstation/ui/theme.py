@@ -17,7 +17,7 @@ from ..core import ffmpeg_tools as ft
 
 APP_NAME = "KT Loop Station"
 AUTHOR = "By Khánh Trà"
-APP_VERSION = "1.6.0"
+APP_VERSION = "1.7.0"
 # nơi lưu cài đặt (registry); KTLS_SETTINGS_ORG dùng cho test để không đụng cài đặt thật
 SETTINGS_ORG = os.environ.get("KTLS_SETTINGS_ORG", "KTLoopStation")
 
@@ -322,13 +322,20 @@ QLabel#chipWarn {{ background: {rgba(t['warn'], 0.14)}; border: 1px solid {rgba(
 
 def _q_tabs_buttons(t: dict, f: dict, a: dict) -> str:
     return f"""
-/* ---------- tab con: gạch chân ---------- */
-QTabWidget::pane {{ background: transparent; border: none; border-top: 1px solid {t['line_subtle']}; margin-top: 0; }}
+/* ---------- tab con: dạng thẻ bấm — chữ rõ, cỡ to hơn, thẻ đang mở nổi màu chủ đạo ---------- */
+QTabWidget::pane {{ background: transparent; border: none; margin-top: {SP['sm']}px; }}
 QTabBar {{ background: transparent; }}
-QTabBar::tab {{ background: transparent; border: none; border-bottom: 2px solid transparent; color: {t['text_muted']};
-               padding: 8px 14px; margin-right: 2px; font-weight: 600; }}
-QTabBar::tab:hover {{ color: {t['text']}; }}
-QTabBar::tab:selected {{ color: {t['text']}; border-bottom: 2px solid {t['accent']}; }}
+QTabBar::tab {{ background: {t['raised']}; border: 1px solid {t['line']}; border-radius: {R['lg']}px;
+               color: {t['text']}; padding: 8px 14px; margin-right: {SP['xs']}px; min-height: 20px;
+               font-size: {f['subtitle']}; font-weight: 600; }}
+QTabBar::tab:last {{ margin-right: 0; }}
+QTabBar::tab:hover:!selected {{ background: {t['overlay']}; border-color: {t['line_strong']}; }}
+QTabBar::tab:selected {{ background: {rgba(t['accent'], 0.24)}; border: 1px solid {t['accent']};
+                        color: {t['text_on_accent']}; font-weight: 700; }}
+QTabBar::tab:disabled {{ color: {t['text_disabled']}; background: transparent; border-color: {t['line_subtle']}; }}
+/* cột hẹp: chữ nhỏ một bậc, bớt lề (biểu tượng ẩn trong code) — 3 thẻ luôn vừa, không bị cắt mép */
+QTabBar[compact="noicon"]::tab {{ padding: 8px 11px; }}
+QTabBar[compact="small"]::tab {{ padding: 7px 8px; font-size: {f['body']}; }}
 
 /* ---------- nút bấm: secondary (mặc định) · primary · tonal · ghost · danger ---------- */
 QPushButton {{ background: {t['raised']}; border: 1px solid {t['line']}; border-radius: {R['md']}px;
@@ -452,6 +459,37 @@ QListWidget#helpToc {{ background: {t['panel']}; border: 1px solid {t['line_subt
 QListWidget#helpToc::item {{ padding: 6px 8px; border-radius: {R['sm']}px; color: {t['text_2']}; }}
 QListWidget#helpToc::item:hover {{ background: {rgba('#ffffff', 0.05)}; color: {t['text']}; }}
 QListWidget#helpToc::item:selected {{ background: {rgba(t['accent'], 0.20)}; color: {t['text']}; }}
+/* trang Hướng dẫn: Tổng quan (help_hub.HubPage) + thanh tiêu đề chủ đề */
+QWidget#helpHubBody {{ background: transparent; }}
+QFrame#helpHero {{ background: {t['panel']}; border: 1px solid {t['line_subtle']};
+                  border-left: 3px solid {t['accent']}; border-radius: {R['xl']}px; }}
+QFrame#helpHero QLabel {{ background: transparent; }}
+QLabel#helpEyebrow {{ color: {t['accent_text']}; font-size: {f['caption']}; font-weight: 700; letter-spacing: 1px;
+                     background: transparent; }}
+QLabel#helpSection {{ color: {t['text']}; font-size: {f['subtitle']}; font-weight: 700; background: transparent; }}
+QPushButton#helpCard {{ background: {t['panel']}; border: 1px solid {t['line_subtle']}; border-radius: {R['xl']}px;
+                       text-align: left; padding: 0; }}
+QPushButton#helpCard:hover {{ background: {t['raised']}; border-color: {rgba(t['accent'], 0.65)}; }}
+QPushButton#helpCard:pressed {{ background: {t['field']}; }}
+QPushButton#helpCard QLabel {{ background: transparent; }}
+QPushButton#helpCard QLabel#helpNum, QLabel#helpNum {{ background: {t['accent']}; color: {t['text_on_accent']}; border-radius: 14px; font-weight: 700; }}
+QLabel#helpMore {{ color: {t['accent_text']}; font-weight: 600; background: transparent; }}
+QLabel#helpCardTitle {{ color: {t['text']}; font-weight: 600; background: transparent; }}
+QFrame#helpNews {{ background: {rgba(t['accent'], 0.07)}; border: 1px solid {rgba(t['accent'], 0.35)};
+                  border-radius: {R['xl']}px; }}
+QFrame#helpNews QLabel, QFrame#helpNews QWidget {{ background: transparent; }}
+QFrame#helpNews QLabel#helpNewTag {{ background: {t['accent']}; color: {t['text_on_accent']}; border-radius: {R['sm']}px;
+                    padding: 1px 7px; font-size: {f['caption']}; font-weight: 700; }}
+QFrame#helpKeyChip {{ background: {t['panel']}; border: 1px solid {t['line_subtle']}; border-radius: {R['lg']}px; }}
+QFrame#helpKeyChip QLabel {{ background: transparent; }}
+QLabel#helpKbd {{ background: {t['raised']}; border: 1px solid {t['line_strong']}; border-bottom-width: 2px;
+                 border-radius: {R['sm']}px; padding: 1px 7px; color: {t['text']}; font-weight: 700;
+                 font-family: Consolas, 'Cascadia Mono', monospace; }}
+QFrame#helpReader {{ background: {t['panel']}; border: 1px solid {t['line_subtle']}; border-radius: {R['xl']}px; }}
+QFrame#helpReader QTextBrowser {{ border: none; background: transparent; }}
+QFrame#helpHead {{ background: transparent; border: none; border-bottom: 1px solid {t['line_subtle']}; }}
+QFrame#helpHead QLabel {{ background: transparent; }}
+QLabel#helpTitle {{ color: {t['text']}; font-size: {f['display']}; font-weight: 700; background: transparent; }}
 """
 
 
@@ -487,6 +525,10 @@ QSpinBox::up-button:hover, QDoubleSpinBox::up-button:hover,
 QSpinBox::down-button:hover, QDoubleSpinBox::down-button:hover {{ background: {t['raised']}; }}
 QSpinBox::up-arrow, QDoubleSpinBox::up-arrow {{ image: url("{up}"); width: 9px; height: 9px; }}
 QSpinBox::down-arrow, QDoubleSpinBox::down-arrow {{ image: url("{down}"); width: 9px; height: 9px; }}
+/* ô giờ / phút / giây: giấu mũi tên bằng cách cho nút rộng 0 (KHÔNG dùng NoButtons — Qt 6.12 có lỗi: ô số NoButtons
+   có viền / lề QSS thì phần gõ chữ chỉ còn rộng 1 px, không thấy số và không gõ được) */
+QSpinBox#timeBox::up-button, QSpinBox#timeBox::down-button {{ width: 0px; border: none; background: transparent; }}
+QSpinBox#timeBox::up-arrow, QSpinBox#timeBox::down-arrow {{ image: none; width: 0px; height: 0px; }}
 
 /* ---------- thanh trượt ---------- */
 QSlider::groove:horizontal {{ height: 4px; background: {t['line']}; border-radius: 2px; }}

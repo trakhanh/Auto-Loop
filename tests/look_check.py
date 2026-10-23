@@ -86,27 +86,22 @@ check("Space ở màn hình chào bấm Bắt đầu, không bật trình phát"
 check("đã đánh dấu xem màn hình chào", QSettings(ini, QSettings.Format.IniFormat).value("ui/welcome_done") == "1")
 check("không còn nút Đơn giản / Đầy đủ", not hasattr(win, "level_box") and not hasattr(win, "set_ui_level"))
 
-# 3) chuyển trang bằng ảnh chụp: chạy xong thì trang thật về đúng chỗ, không còn lớp vẽ tạm
+# 3) chuyển trang ngay lập tức (đã bỏ hiệu ứng trượt / mờ): trang mới hiện đúng chỗ, bấm liền nhau không kẹt
 p = Project.load(os.path.join(ROOT, "Mau-Test", "Du-an-mau - Loop 70 lan.lsproj"))
 win.load_project(p)
 win.go_to(0)
-wait(0.6)
+wait(0.3)
 win.go_to(2)
-check("đang chuyển trang: có lớp ảnh chụp", win.stack._overlay is not None)
-wait(0.6)
+app.processEvents()
 page = win.stack.currentWidget()
-check("chuyển trang xong: trang thật ở đúng chỗ", page.pos() == QPoint(0, 0), str(page.pos()))
-check("chuyển trang xong: đã gỡ lớp ảnh chụp", win.stack._overlay is None)
+check("chuyển trang: hiện ngay, đúng chỗ", win.stack.currentIndex() == 2 and page.pos() == QPoint(0, 0), str(page.pos()))
 win.go_to(0)
 win.go_to(1)  # bấm liền 2 trang: không kẹt
-wait(0.6)
+wait(0.3)
 check("bấm chuyển liền nhau: trang cuối hiện đúng", win.stack.currentIndex() == 1
       and win.stack.currentWidget().pos() == QPoint(0, 0))
-win.resize(1300, 860)
 win.go_to(2)
-win.resize(1440, 900)  # đổi cỡ giữa chừng
-wait(0.5)
-check("đổi cỡ giữa lúc chuyển trang: trang hiện đúng chỗ", win.stack.currentWidget().pos() == QPoint(0, 0))
+wait(0.3)
 
 # 4) nút chính: sáng nhẹ + thở khi sẵn sàng xuất, dừng khi đang xuất
 et = win.export_tab

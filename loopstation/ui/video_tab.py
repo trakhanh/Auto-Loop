@@ -7,7 +7,7 @@ from pathlib import Path
 
 import shiboken6
 from PySide6.QtCore import QEvent, QTimer, QRegularExpression, QSettings, QSize, Qt, Signal
-from PySide6.QtGui import QColor, QIcon, QKeySequence, QPixmap, QRegularExpressionValidator, QShortcut
+from PySide6.QtGui import QColor, QFontMetrics, QIcon, QKeySequence, QPixmap, QRegularExpressionValidator, QShortcut
 from PySide6.QtWidgets import (
     QCheckBox, QComboBox, QDoubleSpinBox, QFormLayout, QFrame, QGroupBox, QHBoxLayout, QHeaderView,
     QLabel, QLineEdit, QMessageBox, QPlainTextEdit, QPushButton, QScrollArea, QSlider, QSpinBox,
@@ -128,19 +128,23 @@ class BookendRow(QWidget):
         self.path = QLineEdit()
         self.path.setReadOnly(True)
         self.path.setPlaceholderText("Chưa chọn file")
-        self.path.setMinimumWidth(110)
+        self.path.setMinimumWidth(56)  # co được khi cột hẹp; tên đầy đủ trong tooltip
         pick = QPushButton("Chọn…")
         pick.setObjectName("pill")
         pick.clicked.connect(self._pick)
-        self.clear = QPushButton("Xoá")
+        self.clear = QPushButton()  # chỉ biểu tượng thùng rác: hàng gọn, vừa cột cài đặt hẹp
         self.clear.setObjectName("ghost")
+        icons.bind(self.clear, "trash", 14)
+        self.clear.setIconSize(QSize(14, 14))
+        self.clear.setFixedWidth(30)
         self.clear.setToolTip("Bỏ " + title.lower())
         self.clear.setEnabled(False)
         self.clear.clicked.connect(lambda: self.set_path(""))
         self.xf = w.xf_spin()
-        self.xf.setMaximumWidth(84)
+        self.xf.setMinimumWidth(64)
+        self.xf.setMaximumWidth(78)
         self.xf.setEnabled(False)
-        self.xf.setToolTip("Crossfade nối " + title.lower() + " với phần chính")
+        self.xf.setToolTip("Hoà hình khi nối " + title.lower() + " với phần chính (Cắt = nối thẳng)")
         self.xf.valueChanged.connect(lambda *_: self.changed.emit())
         row = QHBoxLayout(self)
         row.setContentsMargins(0, 0, 0, 0)
@@ -585,8 +589,8 @@ class VideoTab(QWidget):
         g_book = QGroupBox("Intro / Outro cố định (đầu && cuối video)")
         f_book = QFormLayout(g_book)
         f_book.setVerticalSpacing(8)
-        f_book.addRow("Intro mở đầu", self.intro)
-        f_book.addRow("Outro kết thúc", self.outro)
+        f_book.addRow("Intro", self.intro)  # nhãn ngắn: thẻ đã ghi rõ "đầu & cuối video"
+        f_book.addRow("Outro", self.outro)
         f_book.addRow(self.bookend_audio)
 
         # 4. Hình ảnh & Khung hình
@@ -670,7 +674,17 @@ class VideoTab(QWidget):
         self.right_tabs.setTabToolTip(0, "Video dài bao lâu, thứ tự phát, Intro / Outro")
         self.right_tabs.setTabToolTip(1, "Clip khác tỉ lệ, ảnh tĩnh, mờ dần cuối video, tiếng gốc & âm lượng")
         self.right_tabs.setTabToolTip(2, "Chỉnh màu, đóng logo / khung PNG — có ảnh xem trước")
-        self.right_tabs.tabBar().setExpanding(True)
+        self._tab_icons = ("clock", "image", "palette")  # biểu tượng giúp nhận ra thẻ nhanh hơn đọc chữ
+        self.right_tabs.setIconSize(QSize(15, 15))
+        self.right_tabs.setDocumentMode(True)  # thanh tab trải hết bề ngang cột
+        bar = self.right_tabs.tabBar()
+        bar.setExpanding(False)  # thẻ rộng vừa chữ: biểu tượng đứng sát chữ, không bị đẩy ra mép
+        bar.setElideMode(Qt.TextElideMode.ElideNone)  # không cắt chữ thành “Khung…”
+        bar.setUsesScrollButtons(False)
+        bar.setDrawBase(False)
+        self._tabs_compact = None
+        self._fit_tabs()
+        self.right_tabs.installEventFilter(self)
         self.right_tabs.setMinimumWidth(390)
         left.setMinimumWidth(420)
 
@@ -688,6 +702,8 @@ class VideoTab(QWidget):
         split.setStretchFactor(1, 1)
         split.setSizes([980, 460])
         self.split = split
+        # người dùng tự kéo vạch chia: từ đó chỉ giữ bề rộng tối thiểu, không tự cân lại nữa
+        split.splitterMoved.connect(lambda *_: getattr(self, "_balancing", False) or setattr(self, "_user_split", True))
         self.timeline = TimelineBar()
 
         # thông báo khi ở kiểu "Chỉ nhạc": trang này không dùng
@@ -721,6 +737,29 @@ class VideoTab(QWidget):
             wdg.toggled.connect(self._emit)
         self.intro.changed.connect(self._emit)
         self.outro.changed.connect(self._emit)
+
+    def _fit_tabs(self) -> None:
+        """Thanh tab cài đặt vừa bề ngang cột: đủ chỗ thì chữ to + biểu tượng; chật thì bỏ biểu tượng (chữ vẫn to);
+        rất chật (cỡ chữ lớn) mới thu chữ nhỏ một bậc — 3 thẻ không bao giờ bị cắt mép."""
+        bar = self.right_tabs.tabBar()
+        avail = max(1, self.right_tabs.width())
+        for mode in ("full", "noicon", "small"):
+            self._set_tab_mode(mode)
+            if bar.sizeHint().width() <= avail:  # đo bằng cỡ thật (đã theo QSS), không ước lượng
+                break
+
+    def _set_tab_mode(self, mode: str) -> None:
+        if mode == self._tabs_compact:
+            return
+        self._tabs_compact = mode
+        bar = self.right_tabs.tabBar()
+        for k, ic in enumerate(self._tab_icons):
+            self.right_tabs.setTabIcon(k, icons.icon(ic, 15, "text", active_color="white") if mode == "full" else QIcon())
+        bar.setProperty("compact", mode)
+        bar.style().unpolish(bar)
+        bar.style().polish(bar)
+        bar.updateGeometry()
+        bar.update()
 
     def _toggle_preview(self, checked: bool) -> None:
         self.preview.setVisible(checked)
@@ -1018,11 +1057,37 @@ class VideoTab(QWidget):
     def eventFilter(self, obj, ev):  # noqa: N802
         if obj is self.list.viewport() and ev.type() == QEvent.Type.Resize:
             QTimer.singleShot(0, self._fit_cols)
+        elif ev.type() == QEvent.Type.Resize and obj is getattr(self, "right_tabs", None):
+            self._fit_tabs()  # cột cài đặt đổi bề ngang: thanh tab gọn / đầy đủ cho vừa
         return super().eventFilter(obj, ev)
 
+    def _side_need(self) -> int:
+        """Bề rộng tối thiểu thật của cột cài đặt = thẻ rộng nhất (đo theo cỡ chữ đang dùng) + thanh cuộn."""
+        need = 0
+        for i in range(self.right_tabs.count()):
+            pg = self.right_tabs.widget(i)
+            inner = pg.widget() if hasattr(pg, "widget") and pg.widget() is not None else pg
+            need = max(need, inner.minimumSizeHint().width())
+        return max(390, need + self.style().pixelMetric(self.style().PixelMetric.PM_ScrollBarExtent) + 6)
+
     def adapt(self, width: int, height: int = 0) -> None:
-        """Gọi từ cửa sổ chính khi đổi kích thước: hẹp thì xếp phần cài đặt xuống dưới (bảng cao vừa một màn hình)."""
-        w.adapt_tab(self, width, height, 390, 880, 470)
+        """Gọi từ cửa sổ chính khi đổi kích thước: hẹp thì xếp phần cài đặt xuống dưới (bảng cao vừa một màn hình).
+
+        Cột cài đặt tự cân: không bao giờ hẹp hơn nội dung (ô không bị cắt mép), rộng ra theo màn hình tới ~40 %;
+        đã tự kéo vạch chia thì chỉ giữ mức tối thiểu, không kéo lại."""
+        side = self._side_need()
+        w.adapt_tab(self, width, height, side, 880, 470)
+        if self.split.orientation() != Qt.Orientation.Horizontal:
+            return
+        self.split.widget(1).setMinimumWidth(side)
+        if getattr(self, "_user_split", False):
+            return
+        want = max(side, min(500, int(width * 0.40)))
+        cur = self.split.sizes()
+        if len(cur) == 2 and abs(cur[1] - want) > 6 and sum(cur) > want + 300:
+            self._balancing = True
+            self.split.setSizes([sum(cur) - want, want])
+            self._balancing = False
 
     # ---------- cắt đoạn lấy ----------
     def _on_double_click(self, it: QTreeWidgetItem, column: int) -> None:
