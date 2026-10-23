@@ -450,7 +450,8 @@ class PlaysDelegate(QStyledItemDelegate):
             QToolTip.showText(editor.mapToGlobal(QPoint(0, editor.height())), PLAYS_HELP)
 
 
-def paint_placeholder(tree: QTreeWidget, text: str, hovered: bool = False, clickable: bool = False) -> None:
+def paint_placeholder(tree: QTreeWidget, text: str, hovered: bool = False, clickable: bool = False,
+                      action: str = "") -> None:
     if tree.topLevelItemCount() == 0 and text:
         vp = tree.viewport()
         p = QPainter(vp)
@@ -495,6 +496,18 @@ def paint_placeholder(tree: QTreeWidget, text: str, hovered: bool = False, click
             p.setPen(theme.qcolor("text_2" if hovered else "text_muted"))
             p.drawText(QRectF(24, circle_y + 46, vp.width() - 48, 36),
                        Qt.AlignmentFlag.AlignCenter | Qt.TextFlag.TextWordWrap, "\n".join(lines[1:]))
+            if action and r.height() >= 170:  # nút hành động chính (cả khung đều bấm được; nút chỉ để thấy việc cần làm)
+                f_btn = QFont(tree.font())
+                f_btn.setBold(True)
+                p.setFont(f_btn)
+                bw = QFontMetrics(f_btn).horizontalAdvance(action) + 52
+                br = QRectF(cx - bw / 2, circle_y + 96, bw, 34)
+                p.setPen(Qt.PenStyle.NoPen)
+                p.setBrush(theme.qcolor("accent_hover" if hovered else "accent"))
+                p.drawRoundedRect(br, theme.R["md"], theme.R["md"])
+                p.drawPixmap(int(br.left() + 14), int(br.center().y() - 8), icons.pixmap("plus", 16, "text_on_accent"))
+                p.setPen(theme.qcolor("text_on_accent"))
+                p.drawText(br.adjusted(30, 0, 0, 0), Qt.AlignmentFlag.AlignCenter, action)
         else:
             p.setPen(theme.qcolor("text_muted"))
             f = QFont(tree.font())
@@ -547,6 +560,7 @@ class MediaList(QTreeWidget):
                              | QAbstractItemView.EditTrigger.EditKeyPressed)
         self.setItemDelegate(NoEditDelegate(self))
         self.placeholder = ""
+        self.placeholder_action = ""  # chữ trên nút chính vẽ giữa bảng trống (rỗng = không vẽ)
         self._empty_hover = False
         self.itemChanged.connect(lambda *_: self._on_item_changed())
         self.itemDoubleClicked.connect(self._on_double_click)
@@ -674,7 +688,7 @@ class MediaList(QTreeWidget):
     def paintEvent(self, e) -> None:  # noqa: N802
         super().paintEvent(e)
         self._update_cursor()
-        paint_placeholder(self, self.placeholder, self._empty_hover, True)
+        paint_placeholder(self, self.placeholder, self._empty_hover, True, self.placeholder_action)
         if self.filtering() and self.topLevelItemCount() and not self.visible_items():
             p = QPainter(self.viewport())
             p.setPen(theme.qcolor("text_muted"))
@@ -780,83 +794,86 @@ def expand_dropped(paths: list[str], exts: set[str], recursive: bool = True) -> 
 
 
 class ListToolbar(QWidget):
-    """Hàng nút thao tác cho MediaList tinh gọn với vector icons và menu chọn nhanh."""
+    """Một hàng: [+ Thêm file] [Thư mục] [Cả thư mục con] [ô tìm kiếm] [Xoá] [⋯]. Sắp xếp, xáo, bật / tắt, đưa lên / xuống,
+    xoá hết nằm trong menu ⋯ (ít dùng hơn, và nút đỏ "Xoá hết" không còn nằm sát nút thường dùng)."""
 
     def __init__(self, lst: MediaList, add_files, add_folder, rng_factory, parent=None):
         super().__init__(parent)
-        self.recursive = QCheckBox("Quét thư mục con")
+        self.lst = lst
+        self.recursive = QCheckBox("Cả thư mục con")
         self.recursive.setFixedHeight(32)
-        self.recursive.setToolTip("Khi thêm thư mục hoặc kéo thả thư mục, tự quét cả các thư mục con bên trong")
-        lay = FlowLayout(self, spacing=4)
+        self.recursive.setToolTip("Quét thư mục con: khi thêm thư mục hoặc kéo thả thư mục, tự quét cả các thư mục con bên trong")
+        lay = QHBoxLayout(self)
+        lay.setContentsMargins(0, 0, 0, 0)
+        lay.setSpacing(8)
 
-        def btn(text, tip, fn, name="", icon_name="", icon_color="text_2"):
-            b = QPushButton(text)
-            b.setToolTip(tip)
-            if name:
-                b.setObjectName(name)
-            if icon_name:
-                b.setIcon(icons.icon(icon_name, 14, icon_color))
-                b.setIconSize(QSize(14, 14))
-            b.clicked.connect(fn)
+        add_btn = QPushButton("Thêm file")
+        add_btn.setObjectName("accentBtn")
+        add_btn.setIcon(icons.icon("plus", 14, "accent_text"))
+        add_btn.setIconSize(QSize(14, 14))
+        add_btn.setToolTip("Thêm file lẻ (hoặc bấm vào bảng trống / kéo thả file vào bảng)")
+        add_btn.clicked.connect(add_files)
+        folder_btn = QPushButton("Thư mục")
+        folder_btn.setIcon(icons.icon("folder", 14, "text_2"))
+        folder_btn.setIconSize(QSize(14, 14))
+        folder_btn.setToolTip("Chọn và quét cả thư mục")
+        folder_btn.clicked.connect(add_folder)
+        for b in (add_btn, folder_btn):
             b.setFixedHeight(32)
             lay.addWidget(b)
-            return b
-
-        def sep():
-            line = QFrame()
-            line.setFrameShape(QFrame.Shape.VLine)
-            line.setProperty("role", "hairline")
-            line.setFixedHeight(20)
-            lay.addWidget(line)
-
-        btn("Thêm file", "Thêm file lẻ (hoặc bấm vào bảng trống / kéo thả file vào bảng)",
-            add_files, "accentBtn", "plus", "accent_text")
-        btn("Thư mục", "Chọn và quét cả thư mục", add_folder, "", "folder")
         lay.addWidget(self.recursive)
-        sep()
-        btn("", "Đưa dòng đang chọn lên trên", lambda: lst.move_selected(-1), "ghost", "up")
-        btn("", "Đưa dòng đang chọn xuống dưới", lambda: lst.move_selected(1), "ghost", "down")
-        btn("A–Z", "Sắp xếp tự nhiên theo tên (clip2 trước clip10)", lst.sort_by_name, "ghost", "sort")
-        btn("Xáo", "Xáo ngẫu nhiên thứ tự ngay trên bảng",
-            lambda: lst.shuffle(rng_factory()), "ghost", "shuffle")
-        sep()
-
-        sel_btn = QPushButton("Chọn")
-        sel_btn.setObjectName("ghost")
-        sel_btn.setIcon(icons.icon("check", 14, "text_2"))
-        sel_btn.setIconSize(QSize(14, 14))
-        sel_btn.setToolTip("Các thao tác bật/tắt nhanh danh sách")
-        sel_menu = QMenu(sel_btn)
-        sel_menu.addAction(icons.icon("check", 14), "Bật tất cả", lambda: lst.set_all_checked("all"))
-        sel_menu.addAction("Tắt tất cả", lambda: lst.set_all_checked("none"))
-        sel_menu.addAction("Đảo ngược trạng thái bật/tắt", lambda: lst.set_all_checked("invert"))
-        sel_menu.addAction("Chỉ bật các dòng đang bôi đen", lambda: lst.set_all_checked("selected"))
-        sel_btn.setMenu(sel_menu)
-        sel_btn.setFixedHeight(32)
-        lay.addWidget(sel_btn)
-
-        btn("Xoá", "Xoá các dòng đang chọn khỏi danh sách (phím Delete)",
-            lst.remove_selected, "ghost", "trash")
-        btn("Xoá hết", "Xoá toàn bộ danh sách", lst.clear_all, "danger", "trash", "danger_text")
-        sep()
 
         # ----- tìm theo tên file -----
-        self.lst = lst
         self.search = QLineEdit()
         self.search.setObjectName("search")
         self.search.setPlaceholderText("Tìm tên file…  (Ctrl+F)")
         self.search.setClearButtonEnabled(True)
         self.search.addAction(icons.icon("search", 14, "text_muted"), QLineEdit.ActionPosition.LeadingPosition)
-        self.search.setFixedWidth(230)
+        self.search.setMinimumWidth(120)
         self.search.setFixedHeight(32)
         self.search.setToolTip("Gõ một phần tên file, không cần dấu (\"mua\" ra \"Mưa…\"). Nhiều từ = phải có đủ.\n"
                                "Khi đang tìm: Xoá, Bật/Tắt, Chọn tất cả chỉ áp cho các dòng đang hiện. Esc để xoá.")
         self.search.textChanged.connect(lst.apply_filter)
-        lay.addWidget(self.search)
+        lay.addWidget(self.search, 1)
         self.match = QLabel("")
         self.match.setProperty("role", "match")
-        self.match.setFixedHeight(32)
         lay.addWidget(self.match)
+
+        del_btn = QPushButton("")
+        del_btn.setObjectName("ghost")
+        del_btn.setProperty("icononly", True)
+        del_btn.setIcon(icons.icon("trash", 16, "text_2"))
+        del_btn.setIconSize(QSize(16, 16))
+        del_btn.setFixedSize(32, 32)
+        del_btn.setToolTip("Xoá các dòng đang chọn khỏi danh sách (phím Delete)")
+        del_btn.clicked.connect(lst.remove_selected)
+        lay.addWidget(del_btn)
+
+        more = QPushButton("")
+        more.setObjectName("ghost")
+        more.setProperty("icononly", True)
+        more.setIcon(icons.icon("more", 16, "text_2"))
+        more.setIconSize(QSize(16, 16))
+        more.setFixedSize(32, 32)
+        more.setToolTip("Thêm thao tác: đưa lên / xuống, sắp xếp, xáo, bật / tắt, xoá tất cả")
+        menu = QMenu(more)
+        menu.addAction(icons.icon("up", 14), "Đưa dòng chọn lên trên", lambda: lst.move_selected(-1))
+        menu.addAction(icons.icon("down", 14), "Đưa dòng chọn xuống dưới", lambda: lst.move_selected(1))
+        menu.addSeparator()
+        menu.addAction(icons.icon("sort", 14), "Sắp xếp A–Z (clip2 trước clip10)", lst.sort_by_name)
+        menu.addAction(icons.icon("shuffle", 14), "Xáo ngẫu nhiên thứ tự", lambda: lst.shuffle(rng_factory()))
+        menu.addSeparator()
+        sel = menu.addMenu(icons.icon("check", 14), "Bật / tắt nhanh")
+        sel.addAction("Bật tất cả", lambda: lst.set_all_checked("all"))
+        sel.addAction("Tắt tất cả", lambda: lst.set_all_checked("none"))
+        sel.addAction("Đảo ngược trạng thái bật/tắt", lambda: lst.set_all_checked("invert"))
+        sel.addAction("Chỉ bật các dòng đang bôi đen", lambda: lst.set_all_checked("selected"))
+        menu.addSeparator()
+        menu.addAction(icons.icon("trash", 14, "danger_text"), "Xoá tất cả", lst.clear_all)
+        more.setMenu(menu)
+        self.more_btn = more
+        lay.addWidget(more)
+
         lst.filterChanged.connect(self._on_filter)
         # file mới thêm / xếp lại: lọc lại theo ô tìm kiếm
         lst.model().rowsInserted.connect(lambda *_: QTimer.singleShot(0, self._refilter))
@@ -986,18 +1003,34 @@ class AnimatedStackedWidget(QStackedWidget):
 
 
 def adapt_split(split, width: int, threshold: int, side_min: int = 440, page=None,
-                stacked_height: int = 1450) -> None:
-    """Cửa sổ hẹp: xếp phần cài đặt xuống dưới thay vì bên phải; trang cao hơn và cuộn dọc."""
+                stacked_height: int = 1450, first_height: int = 0) -> None:
+    """Cửa sổ hẹp: xếp phần cài đặt xuống dưới thay vì bên phải; trang cao hơn và cuộn dọc.
+
+    first_height > 0: khi xếp dọc, khối trên (danh sách) cao đúng bằng phần nhìn thấy của trang → bảng + thanh thao tác
+    vừa một màn hình, phần cài đặt nằm ngay bên dưới (cuộn xuống là thấy)."""
     want = Qt.Orientation.Vertical if width < threshold else Qt.Orientation.Horizontal
     if split.orientation() == want:
+        if want == Qt.Orientation.Vertical and first_height and split.property("_first_h") != first_height:
+            second = max(300, stacked_height - first_height)
+            split.setProperty("_first_h", first_height)
+            if page is not None:
+                page.setMinimumHeight(first_height + second)
+            split.setSizes([first_height, second])
         return
     split.setOrientation(want)
     side = split.widget(1)
     if want == Qt.Orientation.Vertical:
         side.setMinimumWidth(0)
-        if page is not None:
-            page.setMinimumHeight(stacked_height)
-        split.setSizes([int(stacked_height * 0.55), int(stacked_height * 0.45)])
+        if first_height:
+            second = max(300, stacked_height - first_height)
+            split.setProperty("_first_h", first_height)
+            if page is not None:
+                page.setMinimumHeight(first_height + second)
+            split.setSizes([first_height, second])
+        else:
+            if page is not None:
+                page.setMinimumHeight(stacked_height)
+            split.setSizes([int(stacked_height * 0.55), int(stacked_height * 0.45)])
     else:
         side.setMinimumWidth(side_min)
         if page is not None:

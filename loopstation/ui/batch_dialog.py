@@ -382,7 +382,7 @@ class BatchDialog(QDialog):
             s.valueChanged.connect(lambda *_: self._volumes_changed())
         # trình phát giống màn hình chính: bấm một dòng là xem đúng video đó (hình + tiếng), Space = Phát / Dừng
         from .preview_player import PreviewPanel, SpaceToggle
-        self.player_panel = PreviewPanel(settings, self, title="VIDEO ĐANG CHỌN")
+        self.player_panel = PreviewPanel(settings, self, title="Video đang chọn")
         self.player_panel.setMinimumWidth(320)
         self._space = SpaceToggle(self, lambda: self.player_panel)
         self._preview_key = None

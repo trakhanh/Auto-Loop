@@ -383,7 +383,7 @@ class MainWindow(QMainWindow):
         self.name_edit.textChanged.connect(self._update_title)
         self.name_edit.textChanged.connect(lambda t: self.name_edit.setToolTip(
             f"{t}\n\nTên dự án (dùng làm tên file xuất mặc định)" if t else "Tên dự án (dùng làm tên file xuất mặc định)"))
-        hv.addWidget(self.name_edit, 3)
+        hv.addWidget(self.name_edit, 1)
 
         proj_bar = QHBoxLayout()
         proj_bar.setSpacing(2)
@@ -500,18 +500,18 @@ class MainWindow(QMainWindow):
         from PySide6.QtWidgets import QSplitter
         from .preview_player import PreviewPanel
         self.viewer = PreviewPanel(self.settings, self)
-        self.viewer.setMinimumWidth(300)
+        self.viewer.setMinimumWidth(320)
         self.work = QSplitter(Qt.Orientation.Horizontal)
         self.work.setObjectName("workSplit")
         self.work.setHandleWidth(3)
         self.work.setChildrenCollapsible(False)
         self.work.addWidget(self.stack)
         self.work.addWidget(self.viewer)
-        self.work.setStretchFactor(0, 3)
-        self.work.setStretchFactor(1, 2)
+        self.work.setStretchFactor(0, 2)
+        self.work.setStretchFactor(1, 1)
         state = self.settings.value("ui/work_split")
         if state is None or not self.work.restoreState(state):
-            self.work.setSizes([600, 400])
+            self.work.setSizes([660, 340])
         self.work.splitterMoved.connect(self._work_split_moved)
 
         main = QWidget()
@@ -566,12 +566,13 @@ class MainWindow(QMainWindow):
     def _adapt_pages(self) -> None:
         """Trang đang làm co giãn theo chỗ còn lại cạnh trình phát (hẹp thì phần cài đặt xếp xuống dưới)."""
         avail = self.stack.width() if self.stack.width() > 200 else self.width() - self.side.width() - 20
+        height = self.stack.height() if self.stack.height() > 200 else 0
         for page in self.pages:
-            page.adapt(avail)
+            page.adapt(avail, height)
 
     def _update_header_chips_visibility(self) -> None:
         width = self.width()
-        self.tl_toggle.setText("" if width < 1200 else "Dòng thời gian")
+        self.tl_toggle.setText("" if width < 1360 else "Dòng thời gian")
         # bộ chọn kiểu: cửa sổ hẹp → chỉ còn biểu tượng (rê chuột để xem tên)
         narrow = width < 1100
         for b in self.mode_buttons.values():

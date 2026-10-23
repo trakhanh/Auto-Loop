@@ -507,7 +507,7 @@ class ExportTab(QWidget):
         self.last_output = output
         self.open_out_btn.setEnabled(bool(output))
 
-    def adapt(self, width: int) -> None:
+    def adapt(self, width: int, height: int = 0) -> None:
         narrow = width < 1100
         self.top_layout.setDirection(QHBoxLayout.Direction.TopToBottom if narrow
                                      else QHBoxLayout.Direction.LeftToRight)

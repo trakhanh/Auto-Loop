@@ -919,6 +919,24 @@ class VideoView(QWidget):
         self._click.setSingleShot(True)
         self._click.timeout.connect(self.clicked)
 
+    def set_aspect(self, aspect: float) -> None:
+        """Bật khung theo tỉ lệ hình: chiều cao = chiều rộng / tỉ lệ (khung xem không còn nổi lọt thỏm giữa nền đen cao)."""
+        aspect = aspect if aspect > 0.2 else 16 / 9
+        if getattr(self, "_aspect", None) == aspect:
+            return
+        self._aspect = aspect
+        sp = self.sizePolicy()
+        sp.setHeightForWidth(True)
+        sp.setVerticalPolicy(QSizePolicy.Policy.Preferred)
+        self.setSizePolicy(sp)
+        self.updateGeometry()
+
+    def hasHeightForWidth(self) -> bool:  # noqa: N802
+        return getattr(self, "_aspect", None) is not None
+
+    def heightForWidth(self, w: int) -> int:  # noqa: N802
+        return int(w / self._aspect) if getattr(self, "_aspect", None) else -1
+
     def set_image(self, img: QImage) -> None:
         self.image = img
         self.update()
@@ -1202,7 +1220,7 @@ class PreviewPanel(QFrame):
     dòng thời gian bên dưới."""
     positionChanged = Signal(float)
 
-    def __init__(self, settings=None, parent=None, title: str = "TRÌNH PHÁT"):
+    def __init__(self, settings=None, parent=None, title: str = "Trình phát"):
         super().__init__(parent)
         self.setObjectName("playerPanel")
         self.settings = settings
@@ -1285,19 +1303,22 @@ class PreviewPanel(QFrame):
         self._short_tc = False
         self._arrange()
 
+        # hình đúng tỉ lệ, rộng hết khung, thanh tua + nút điều khiển dính ngay bên dưới; phần dư của khung nằm cuối
+        self.view.set_aspect(16 / 9)
         frame = QVBoxLayout()
-        frame.setContentsMargins(10, 0, 10, 0)
-        frame.addWidget(self.view, 1)
+        frame.setContentsMargins(12, 0, 12, 0)
+        frame.addWidget(self.view)
         lay = QVBoxLayout(self)
         lay.setContentsMargins(0, 0, 0, 0)
         lay.setSpacing(0)
         lay.addLayout(top)
-        lay.addLayout(frame, 1)
+        lay.addLayout(frame)
         sl = QHBoxLayout()
-        sl.setContentsMargins(10, 2, 10, 0)
+        sl.setContentsMargins(12, 6, 12, 0)
         sl.addWidget(self.slider)
         lay.addLayout(sl)
         lay.addLayout(bar)
+        lay.addStretch(1)
 
         # Space: xem SpaceToggle (cả cửa sổ). ← → Home: khi đang bấm vào trình phát (bảng clip dùng mũi tên để chọn dòng)
         for key, fn in ((Qt.Key.Key_Left, lambda: self.player.step(-5)),
@@ -1373,6 +1394,7 @@ class PreviewPanel(QFrame):
         self.view.set_busy(False)
         self.view.set_text(text)
         self.info.setText("")
+        self.info.setVisible(False)
         self._on_loaded(0.0)
         self._on_pos(0.0)
 
@@ -1430,10 +1452,13 @@ class PreviewPanel(QFrame):
         if tl is not None and total:
             if self.player.sch is not None:
                 self.info.setText(f"{tl.width}×{tl.height} · {float(tl.fps):g} fps")
+                if tl.height:
+                    self.view.set_aspect(tl.width / tl.height)
             else:
                 self.info.setText("Chỉ nhạc")
         else:
             self.info.setText("")
+        self.info.setVisible(bool(self.info.text()))
 
     def _on_pos(self, t: float) -> None:
         self.shown_pos = t

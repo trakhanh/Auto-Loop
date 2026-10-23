@@ -160,6 +160,9 @@ _PATHS: dict[str, str] = {
                 '0-.9.7-1.6 1.6-1.6H16a5 5 0 0 0 5-5C21 6.6 17 3 12 3z"/>'
                 '<circle cx="7.5" cy="11" r="1.2"/><circle cx="10" cy="7.3" r="1.2"/>'
                 '<circle cx="14.5" cy="7.3" r="1.2"/>'),
+    "more": '<circle cx="5" cy="12" r="1.4"/><circle cx="12" cy="12" r="1.4"/><circle cx="19" cy="12" r="1.4"/>',
+    "info": '<circle cx="12" cy="12" r="9"/><line x1="12" y1="11" x2="12" y2="16"/><line x1="12" y1="7.6" x2="12" y2="7.6"/>',
+    "upload": '<path d="M4 15v4a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-4"/><polyline points="7 8 12 3 17 8"/><line x1="12" y1="3" x2="12" y2="15"/>',
     "eye": (
         '<path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/>'
         '<circle cx="12" cy="12" r="3"/>'

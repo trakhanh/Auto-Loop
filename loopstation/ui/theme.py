@@ -491,15 +491,15 @@ QTreeView:disabled {{ color: {t['text_disabled']}; }}
 def _q_lists(t: dict, f: dict, a: dict) -> str:
     return f"""
 /* ---------- bảng danh sách ---------- */
-QTreeWidget, QTreeView {{ background: {t['panel']}; alternate-background-color: {t['panel']};
+QTreeWidget, QTreeView {{ background: {t['panel']}; alternate-background-color: {mix(t['panel'], t['text'], 0.022)};
     border: 1px solid {t['line_subtle']}; border-radius: {R['lg']}px; padding: 2px; }}
 QTreeView::item {{ height: 32px; border: none; border-bottom: 1px solid {t['line_subtle']}; padding: 0 4px; }}
-QTreeWidget#clips::item {{ height: 60px; }}
+QTreeWidget#clips::item {{ height: 56px; }}
 QTreeView::item:hover {{ background: {rgba('#ffffff', 0.04)}; }}
 QTreeView::item:selected {{ background: {rgba(t['accent'], 0.22)}; color: {t['text']}; }}
 QHeaderView {{ background: transparent; }}
 QHeaderView::section {{ background: {t['panel']}; color: {t['text_muted']}; border: none;
-    border-bottom: 1px solid {t['line']}; padding: 7px 8px; font-weight: 600; font-size: {f['small']}; }}
+    border-bottom: 1px solid {t['line']}; padding: 7px 6px; font-weight: 600; font-size: {f['small']}; }}
 QHeaderView::section:hover {{ color: {t['text']}; }}
 
 QTextBrowser {{ background: {t['panel']}; border: none; border-radius: {R['lg']}px; padding: 12px 18px; }}

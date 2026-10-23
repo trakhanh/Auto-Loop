@@ -149,5 +149,5 @@ class HomePage(QWidget):
         self.resume.setText(text)
         self.resume.setVisible(bool(text))
 
-    def adapt(self, width: int) -> None:
+    def adapt(self, width: int, height: int = 0) -> None:
         pass

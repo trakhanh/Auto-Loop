@@ -893,5 +893,5 @@ class HelpPage(QWidget):
         d.mkdir(exist_ok=True)
         os.startfile(str(d))  # type: ignore[attr-defined]
 
-    def adapt(self, width: int) -> None:
+    def adapt(self, width: int, height: int = 0) -> None:
         pass

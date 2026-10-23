@@ -50,8 +50,9 @@ class MusicTab(QWidget):
         self.list = w.MediaList(["Tên bài nhạc", "Thời lượng", "Số lần/lượt", "Âm lượng %", "Độ to gốc"])
         self.list.placeholder = (
             "Chưa có bài nhạc nào trong playlist\n"
-            "Bấm trực tiếp vào khung này hoặc kéo thả file / thư mục nhạc vào đây"
+            "Kéo thả file hoặc thư mục nhạc vào đây, hoặc bấm nút bên dưới"
         )
+        self.list.placeholder_action = "Thêm nhạc"
         self.list.setItemDelegateForColumn(COL_PLAYS, w.SpinDelegate(0, 99, self.list))
         self.list.setItemDelegateForColumn(COL_VOL, w.SpinDelegate(0, 200, self.list))
         hdr = self.list.header()
@@ -228,8 +229,9 @@ class MusicTab(QWidget):
         self.ambient = w.MediaList(["Lớp tiếng nền (tự lặp)", "Âm lượng %"])
         self.ambient.placeholder = (
             "Chưa có tiếng nền (mưa, lửa trại, sóng biển…)\n"
-            "Bấm vào đây hoặc kéo thả file âm thanh vào khung này"
+            "Kéo thả file âm thanh vào đây, hoặc bấm nút bên dưới"
         )
+        self.ambient.placeholder_action = "Thêm tiếng nền"
         self.ambient.setItemDelegateForColumn(1, w.SpinDelegate(0, 200, self.ambient))
         self.ambient.header().setStretchLastSection(False)
         self.ambient.header().setSectionResizeMode(0, QHeaderView.ResizeMode.Stretch)
@@ -617,9 +619,11 @@ class MusicTab(QWidget):
         self.schedule.addTopLevelItems(rows)
         self.schedule_badge.setText(f"{len(items)} lượt phát")
 
-    def adapt(self, width: int) -> None:
-        """Gọi từ cửa sổ chính khi đổi kích thước: hẹp thì xếp phần cài đặt xuống dưới."""
-        w.adapt_split(self.split, width, 1040, side_min=440, page=self, stacked_height=1400)
+    def adapt(self, width: int, height: int = 0) -> None:
+        """Gọi từ cửa sổ chính khi đổi kích thước: hẹp thì xếp phần cài đặt xuống dưới (bảng cao vừa một màn hình)."""
+        first = max(430, height - 4) if height > 200 else 0
+        w.adapt_split(self.split, width, 940, side_min=440, page=self, stacked_height=(first or 900) + 500,
+                      first_height=first)
 
     def set_playlist_enabled(self, enabled: bool) -> None:
         for wdg in (self.toolbar, self.list, *self.playlist_cards):

@@ -428,6 +428,6 @@ class SettingsPage(QWidget):
     def pref(self, key: str, default=False) -> bool:
         return str(self.settings.value(key, default)).lower() in ("true", "1")
 
-    def adapt(self, width: int) -> None:
+    def adapt(self, width: int, height: int = 0) -> None:
         self._cols.setDirection(QHBoxLayout.Direction.TopToBottom if width < 1150
                                 else QHBoxLayout.Direction.LeftToRight)
