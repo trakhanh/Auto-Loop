@@ -39,6 +39,7 @@ class Glow(QObject):
         self._hover = 0.0
         self._phase = 0.0
         self._want_breath = False
+        self._applied = None  # (bước độ sáng, màu) đã áp dụng: bỏ qua cập nhật không đổi để khỏi vẽ lại 60 lần/giây
         self._anim = QVariantAnimation(self)
         self._anim.setDuration(220)
         self._anim.setEasingCurve(EASE)
@@ -71,9 +72,14 @@ class Glow(QObject):
         else:
             rest = self.idle + (0.45 * self._phase if self.breathing() else 0.0)
             t = max(self._hover, min(1.0, rest))
+        t = round(t * 16) / 16  # lượng tử hoá: mắt không phân biệt được, nhưng mỗi lần đổi là một lần vẽ lại cả vùng bóng
+        key = (t, self.color or theme.C["accent"])
+        if key == self._applied:
+            return
+        self._applied = key
         self.fx.setEnabled(t > 0.01)  # không sáng: tắt hẳn, widget vẽ thẳng như thường
         self.fx.setBlurRadius(self.blur * (0.35 + 0.65 * t))
-        c = QColor(self.color or theme.C["accent"])
+        c = QColor(key[1])
         c.setAlpha(int(self.alpha * t))
         self.fx.setColor(c)
 

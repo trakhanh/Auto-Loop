@@ -16,7 +16,7 @@ with warnings.catch_warnings():
     warnings.simplefilter("ignore", DeprecationWarning)
     import audioop
 
-from PySide6.QtCore import QElapsedTimer, QIODevice, QObject, QPointF, QRectF, QSize, Qt, QTimer, Signal
+from PySide6.QtCore import QElapsedTimer, QEvent, QIODevice, QObject, QPointF, QRectF, QSize, Qt, QTimer, Signal
 from PySide6.QtGui import (QColor, QFont, QImage, QKeySequence, QLinearGradient, QPainter, QPainterPath, QPen,
                            QShortcut)
 from PySide6.QtWidgets import (
@@ -1187,7 +1187,6 @@ class SpaceToggle(QObject):
         return panel
 
     def eventFilter(self, obj, ev) -> bool:  # noqa: N802
-        from PySide6.QtCore import QEvent
         t = ev.type()
         if t not in (QEvent.Type.ShortcutOverride, QEvent.Type.KeyPress):
             return False
