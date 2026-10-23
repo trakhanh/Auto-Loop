@@ -12,7 +12,7 @@ from PySide6.QtGui import QFontMetrics, QKeySequence, QShortcut
 from PySide6.QtCore import Qt
 from PySide6.QtWidgets import (
     QSizePolicy,
-    QFrame, QScrollArea,
+    QFrame, QScrollArea, QStackedWidget,
     QApplication, QButtonGroup, QDialog, QFileDialog, QHBoxLayout, QLabel, QLineEdit, QMainWindow,
     QMessageBox, QPushButton, QVBoxLayout, QWidget,
 )
@@ -88,8 +88,8 @@ class MainWindow(QMainWindow):
         self.video_tab = VideoTab(self.settings)
         self.music_tab = MusicTab(self.settings)
         self.export_tab = ExportTab(self.settings)
-        self.stack = w.AnimatedStackedWidget()
-        self.stack.setObjectName("pageStack")  # nền có quầng sáng màu chủ đạo (theme)
+        self.stack = QStackedWidget()  # chuyển trang tức thì, không hiệu ứng
+        self.stack.setObjectName("pageStack")
         for t in (self.video_tab, self.music_tab, self.export_tab):
             # mỗi trang nằm trong vùng cuộn: cửa sổ nhỏ hơn nội dung thì hiện thanh cuộn thay vì bị kẹt
             sa = QScrollArea()
@@ -682,7 +682,7 @@ class MainWindow(QMainWindow):
         self.stack.setCurrentIndex(index)
         if btn is not None:
             btn.setChecked(True)
-            self.nav_pill.move_to(btn)
+            self.nav_pill.move_to(btn, animate=False)
         self._update_timeline_visibility()
         self._update_guide()
 
