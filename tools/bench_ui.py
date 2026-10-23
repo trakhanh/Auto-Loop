@@ -193,8 +193,11 @@ for it in list(vt.list.items()):
     key = hashlib.sha1(f"{p}|{st.st_size}|{st.st_mtime_ns}".encode("utf-8")).hexdigest()[:20]
     f = os.path.join(cache, key + ".jpg")
     if os.path.isfile(f):
+        from PySide6.QtGui import QImage
+        img = QImage(f)  # decoded in the worker in the app; here outside the timed section
+        vt._thumb_waiting.setdefault(p, []).append(it)
         t = now()
-        vt._on_thumb(p, f)
+        vt._on_thumb(p, img)
         calls.append((now() - t) * 1000)
 m = meter.stop()
 res["c2_on_thumb_sync"] = {"calls": len(calls), "total_ms": round(sum(calls), 1),
