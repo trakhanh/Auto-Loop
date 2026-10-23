@@ -24,7 +24,7 @@ SETTINGS_ORG = os.environ.get("KTLS_SETTINGS_ORG", "KTLoopStation")
 # (tên hiển thị, accent = nền nút chính [chữ trắng ≥ 4.5:1], accent2 = màu thương hiệu, accent_text = chữ sáng trên nền tối,
 #  accent_soft = chữ nhạt)
 PALETTES = {
-    "neon": ("Neon tím hồng", "#8452f5", "#ec4899", "#a78bfa", "#ddd6fe"),
+    "neon": ("Tím neon", "#8452f5", "#ec4899", "#a78bfa", "#ddd6fe"),
     "ocean": ("Đại dương", "#077f9c", "#6366f1", "#67e8f9", "#cffafe"),
     "sunset": ("Hoàng hôn", "#ca4c0a", "#e11d48", "#fdba74", "#ffedd5"),
     "classic": ("Tím xanh (bản cũ)", "#7654ff", "#3b82f6", "#a78bfa", "#c4b5fd"),

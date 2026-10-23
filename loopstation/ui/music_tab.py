@@ -60,6 +60,8 @@ class MusicTab(QWidget):
         hdr.setSectionResizeMode(COL_NAME, QHeaderView.ResizeMode.Stretch)
         for col, width in ((COL_DUR, 92), (COL_PLAYS, 102), (COL_VOL, 96), (COL_LUFS, 110)):
             self.list.setColumnWidth(col, width)
+        for _c in (COL_DUR, COL_PLAYS, COL_VOL, COL_LUFS):
+            self.list.headerItem().setTextAlignment(_c, Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter)
         self.list.headerItem().setToolTip(COL_PLAYS, "Số lần bài này được phát trong mỗi lượt playlist (0 = bỏ qua)")
         self.list.headerItem().setToolTip(COL_VOL, "Âm lượng riêng của bài (bấm đúp để sửa). 100% = giữ nguyên; "
                                                    "50% ≈ nhỏ đi 6 dB. Áp sau khi chuẩn hoá LUFS.")
@@ -88,8 +90,11 @@ class MusicTab(QWidget):
         self.count_label = QLabel("0 bài")
         self.count_label.setObjectName("chip")
         self.status = w.muted("")
-        hint = w.muted("Bỏ tick bài không muốn dùng · Kéo dòng để đổi thứ tự · Bấm đúp tên bài để nghe · "
-                       "Bấm đúp cột Âm lượng % để chỉnh to / nhỏ riêng bài đó")
+        hint = w.ElidedLabel()
+        hint.setObjectName("muted")
+        hint.set_full_text("Mẹo: bỏ tick bài không muốn dùng · kéo dòng để đổi thứ tự",
+                           "Bỏ tick bài không muốn dùng · Kéo dòng để đổi thứ tự · Bấm đúp tên bài để nghe · "
+                           "Bấm đúp cột Âm lượng % để chỉnh to / nhỏ riêng bài đó")
 
         # Khung trên của cột trái: Playlist
         top_left = QWidget()
@@ -97,7 +102,7 @@ class MusicTab(QWidget):
         tlv.setContentsMargins(0, 0, 0, 0)
         tlv.setSpacing(6)
         head_row = QHBoxLayout()
-        pl_title = QLabel("Danh sách Bài nhạc (Playlist)")
+        pl_title = QLabel("Playlist nhạc")
         pl_title.setObjectName("h2")
         head_row.addWidget(pl_title)
         head_row.addWidget(self.count_label)
@@ -107,6 +112,7 @@ class MusicTab(QWidget):
         tlv.addWidget(self.toolbar)
         self.list.setMinimumHeight(170)
         tlv.addWidget(self.list, 1)
+        self.hint_label = hint
         tlv.addWidget(hint)
 
         # Khung dưới của cột trái: Lịch phát nhạc (Chapters)
@@ -154,6 +160,26 @@ class MusicTab(QWidget):
         lv.setSpacing(8)
         lv.addWidget(self.banner)
         lv.addWidget(left_split, 1)
+        self.next_btn = QPushButton("Tiếp theo: Xuất thành phẩm")
+        self.next_btn.setObjectName("nextStepBtn")
+        self.next_btn.setIcon(icons.icon("arrow_right", 14, "text_on_accent"))
+        self.next_btn.setIconSize(QSize(14, 14))
+        self.next_btn.setLayoutDirection(Qt.LayoutDirection.RightToLeft)
+        self.next_btn.clicked.connect(self.nextStepRequested.emit)
+
+        foot = QHBoxLayout()
+        foot.setSpacing(8)
+        self.settings_btn = QPushButton("Cài đặt nhạc")
+        self.settings_btn.setObjectName("ghost")
+        self.settings_btn.setIcon(icons.icon("down", 14, "text_2"))
+        self.settings_btn.setIconSize(QSize(14, 14))
+        self.settings_btn.setToolTip("Cuộn xuống phần cài đặt: độ dài file nhạc, bảng trộn âm, tiếng nền, thứ tự phát")
+        self.settings_btn.clicked.connect(self._scroll_to_settings)
+        self.settings_btn.setVisible(False)
+        foot.addStretch(1)
+        foot.addWidget(self.settings_btn)
+        foot.addWidget(self.next_btn)
+        lv.addLayout(foot)
 
         # ----- Cột phải: Cài đặt Nhạc & Tiếng nền -----
         self.order = combo(ORDER)
@@ -378,22 +404,11 @@ class MusicTab(QWidget):
         left.setMinimumWidth(420)
         scroll.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
 
-        self.next_btn = QPushButton("Tiếp theo: Xuất thành phẩm")
-        self.next_btn.setObjectName("nextStepBtn")
-        self.next_btn.setIcon(icons.icon("arrow_right", 14, "text_on_accent"))
-        self.next_btn.setIconSize(QSize(14, 14))
-        self.next_btn.setLayoutDirection(Qt.LayoutDirection.RightToLeft)
-        self.next_btn.clicked.connect(self.nextStepRequested.emit)
-
         right_panel = QWidget()
         rp_lay = QVBoxLayout(right_panel)
         rp_lay.setContentsMargins(0, 0, 0, 0)
         rp_lay.setSpacing(8)
         rp_lay.addWidget(scroll, 1)
-        next_row = QHBoxLayout()
-        next_row.addStretch(1)
-        next_row.addWidget(self.next_btn)
-        rp_lay.addLayout(next_row)
 
         split = QSplitter(Qt.Orientation.Horizontal)
         split.setChildrenCollapsible(False)
@@ -624,6 +639,14 @@ class MusicTab(QWidget):
         first = max(430, height - 4) if height > 200 else 0
         w.adapt_split(self.split, width, 940, side_min=440, page=self, stacked_height=(first or 900) + 500,
                       first_height=first)
+        self.settings_btn.setVisible(self.split.orientation() == Qt.Orientation.Vertical)
+
+    def _scroll_to_settings(self) -> None:
+        area = self.parentWidget()
+        while area is not None and not isinstance(area, QScrollArea):
+            area = area.parentWidget()
+        if area is not None:
+            area.verticalScrollBar().setValue(area.verticalScrollBar().maximum())
 
     def set_playlist_enabled(self, enabled: bool) -> None:
         for wdg in (self.toolbar, self.list, *self.playlist_cards):
@@ -691,10 +714,10 @@ class MusicTab(QWidget):
         it.setData(0, w.ROLE_INFO, info)
         it.setToolTip(COL_NAME, t.path)
         it.setToolTip(COL_LUFS, "Đo khi xuất lần đầu, sau đó được nhớ lại")
-        it.setTextAlignment(COL_PLAYS, Qt.AlignmentFlag.AlignCenter)
-        it.setTextAlignment(COL_VOL, Qt.AlignmentFlag.AlignCenter)
+        it.setTextAlignment(COL_PLAYS, Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter)
+        it.setTextAlignment(COL_VOL, Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter)
         it.setTextAlignment(COL_DUR, Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter)
-        it.setTextAlignment(COL_LUFS, Qt.AlignmentFlag.AlignCenter)
+        it.setTextAlignment(COL_LUFS, Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter)
         if t.pinned:
             self._style_pin(it)
         return it

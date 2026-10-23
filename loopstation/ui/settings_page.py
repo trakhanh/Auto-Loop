@@ -9,7 +9,7 @@ from PySide6.QtCore import QObject, QSettings, QSize, Qt, Signal
 from PySide6.QtGui import QColor
 from PySide6.QtWidgets import (
     QCheckBox, QComboBox, QFileDialog, QFormLayout, QGridLayout, QGroupBox, QHBoxLayout, QLabel,
-    QLineEdit, QMessageBox, QProgressBar, QPushButton, QVBoxLayout, QWidget,
+    QLineEdit, QMessageBox, QProgressBar, QPushButton, QSizePolicy, QVBoxLayout, QWidget,
 )
 
 from ..core import encoders, sysinfo
@@ -27,9 +27,15 @@ VENDOR_ROWS = [
 CODEC_SHORT = {"h264": "H.264", "hevc": "H.265", "av1": "AV1", "libx264": "H.264", "libx265": "H.265"}
 
 
-def pill(ok: bool | None, text: str) -> QLabel:
-    lab = QLabel(("✓ " if ok else "✗ " if ok is not None else "") + text)
+def pill(ok: bool | None, text: str, fixed: int = 0) -> QLabel:
+    """Chip trạng thái: có (xanh) / không có (xám). fixed > 0: rộng cố định để các chip thẳng hàng, không giãn theo cột."""
+    lab = QLabel(("✓ " if ok else "– " if ok is not None else "") + text)
     lab.setObjectName("chip" if ok is None else ("chipOk" if ok else "chipOff"))
+    lab.setSizePolicy(QSizePolicy.Policy.Maximum, QSizePolicy.Policy.Fixed)
+    lab.setFixedHeight(26)
+    if fixed:
+        lab.setFixedWidth(fixed)
+        lab.setAlignment(Qt.AlignmentFlag.AlignCenter)
     return lab
 
 
@@ -37,16 +43,21 @@ def _short(enc: str) -> str:
     return CODEC_SHORT.get(enc) or CODEC_SHORT.get(enc.split("_")[0], enc)
 
 
-def _swatch(accent: str):
-    """Chấm màu nhấn (phẳng) cạnh tên bộ màu."""
+def _swatch(accent: str, selected: bool = False):
+    """Chấm màu nhấn (phẳng); bộ màu đang dùng có vòng viền ngoài."""
     from PySide6.QtGui import QIcon, QPainter, QPainterPath, QPixmap
     pm = QPixmap(28, 28)
     pm.fill(Qt.GlobalColor.transparent)
     p = QPainter(pm)
     p.setRenderHint(QPainter.RenderHint.Antialiasing)
     path = QPainterPath()
-    path.addEllipse(3, 3, 22, 22)
+    path.addEllipse(5, 5, 18, 18)
     p.fillPath(path, QColor(accent))
+    if selected:
+        from PySide6.QtGui import QPen
+        p.setPen(QPen(theme.qcolor("text"), 1.6))
+        p.setBrush(Qt.BrushStyle.NoBrush)
+        p.drawEllipse(2, 2, 24, 24)
     p.end()
     pm.setDevicePixelRatio(2)
     return QIcon(pm)
@@ -66,29 +77,33 @@ class SettingsPage(QWidget):
     def __init__(self, settings: QSettings, parent=None):
         super().__init__(parent)
         self.settings = settings
+        self._label_w = int(160 * max(1.0, theme.scale()))  # cột nhãn cố định, mọi thẻ cùng mép trái
         self.accel: sysinfo.AccelInfo | None = None
         self._bridge = _Bridge()
         self._bridge.bench.connect(self._on_bench)
         self._bridge.bench_done.connect(lambda: self.bench_btn.setEnabled(True))
         self._bridge.cache.connect(lambda t: self.cache_label.setText(t))
 
-        title = QLabel("Cài đặt hệ thống & Thông số phần cứng")
+        title = QLabel("Cài đặt")
         title.setObjectName("appName")
+        sub = QLabel("Giao diện, phần cứng và tuỳ chọn xuất")
+        sub.setObjectName("muted")
         recheck = QPushButton("Kiểm tra lại phần cứng")
-        recheck.setObjectName("accentBtn")
-        recheck.setIcon(icons.icon("refresh", 14, "accent_text"))
+        recheck.setIcon(icons.icon("refresh", 14, "text_2"))
         recheck.setIconSize(QSize(14, 14))
         recheck.clicked.connect(lambda: self.recheckRequested.emit())
         head = QHBoxLayout()
-        head.addWidget(title)
+        tbox = QVBoxLayout()
+        tbox.setSpacing(0)
+        tbox.addWidget(title)
+        tbox.addWidget(sub)
+        head.addLayout(tbox)
         head.addStretch(1)
-        head.addWidget(recheck)
+        head.addWidget(recheck, 0, Qt.AlignmentFlag.AlignTop)
 
         # ----- máy tính -----
-        self.sys_form = QFormLayout()
-        self.sys_form.setVerticalSpacing(8)
-        g_sys = QGroupBox("Thông số máy tính của bạn")
-        g_sys.setLayout(self.sys_form)
+        g_sys = QGroupBox("Thông số máy tính")
+        self.sys_form = self._form(g_sys)
         self.sys_form.addRow(w.muted("Đang đọc thông số máy…"))
 
         # ----- tăng tốc -----
@@ -121,11 +136,6 @@ class SettingsPage(QWidget):
         bv.addLayout(self.bench_rows)
         self._bars: dict[str, tuple[QProgressBar, QLabel]] = {}
 
-        left = QVBoxLayout()
-        left.setSpacing(10)
-        for g in (g_sys, g_acc, g_bench):
-            left.addWidget(g)
-        left.addStretch(1)
 
         # ----- tuỳ chọn xuất -----
         self.out_dir = QLineEdit(settings.value("pref/output_dir", ""))
@@ -145,9 +155,8 @@ class SettingsPage(QWidget):
         self.shutdown = QCheckBox("Tắt máy khi chạy xong hàng đợi (có 2 phút để huỷ)")
         self.shutdown.setToolTip("Chỉ áp dụng cho lần chạy hiện tại — mở lại app sẽ tự bỏ tick")
         g_exp = QGroupBox("Tuỳ chọn xuất video")
-        f = QFormLayout(g_exp)
-        f.setVerticalSpacing(8)
-        f.addRow("Thư mục xuất mặc định", row)
+        f = self._form(g_exp)
+        f.addRow(self._lab("Thư mục xuất mặc định"), row)
         f.addRow(self.hwdec)
         f.addRow(w.muted("Tốc độ xuất đến chủ yếu từ bộ mã hoá trên card (NVENC/Quick Sync/AMF), app luôn tự dùng. "
                          "Giải mã bằng GPU là tuỳ chọn thêm."))
@@ -171,9 +180,8 @@ class SettingsPage(QWidget):
         r2.addWidget(ff_pick)
         r2.addWidget(ff_auto)
         g_ff = QGroupBox("Đường dẫn FFmpeg")
-        f = QFormLayout(g_ff)
-        f.setVerticalSpacing(8)
-        f.addRow("Thư mục chứa ffmpeg.exe", r2)
+        f = self._form(g_ff)
+        f.addRow(self._lab("Thư mục ffmpeg.exe"), r2)
         f.addRow(w.muted("Chỉ cần đổi khi muốn dùng bản FFmpeg khác. Cần FFmpeg 7 trở lên."))
 
         # ----- bộ nhớ đệm -----
@@ -208,9 +216,9 @@ class SettingsPage(QWidget):
             self.font_combo.addItem(label, pt)
         self.font_combo.setCurrentIndex(max(0, self.font_combo.findData(int(settings.value("pref/font_pt", 10)))))
         g_ui = QGroupBox("Giao diện hiển thị")
-        f = QFormLayout(g_ui)
-        f.setVerticalSpacing(8)
-        f.addRow("Cỡ chữ ứng dụng", self.font_combo)
+        f = self._form(g_ui)
+        self.font_combo.setMaximumWidth(260)
+        f.addRow(self._lab("Cỡ chữ ứng dụng"), self.font_combo)
         self.palette_combo = QComboBox()
         for key, (label, accent, _a2, _text, _soft) in theme.PALETTES.items():
             self.palette_combo.addItem(_swatch(accent), label, key)
@@ -218,7 +226,34 @@ class SettingsPage(QWidget):
         self.palette_combo.setCurrentIndex(max(0, self.palette_combo.findData(
             settings.value("pref/palette", theme.PALETTE))))
         self.palette_combo.setToolTip("Màu của nút chính, thanh chọn, quầng sáng… Đổi là thấy ngay.")
-        f.addRow("Màu chủ đạo", self.palette_combo)
+        # bốn chấm màu thay cho ô chọn (ô chọn vẫn là nguồn dữ liệu, ẩn đi): chấm đang dùng có vòng viền
+        self.palette_combo.setVisible(False)
+        sw_row = QHBoxLayout()
+        sw_row.setSpacing(8)
+        self._swatches: list[QPushButton] = []
+        for key, (label, accent, _a2, _t, _s) in theme.PALETTES.items():
+            b = QPushButton("")
+            b.setObjectName("ghost")
+            b.setProperty("icononly", True)
+            b.setFixedSize(36, 36)
+            b.setIconSize(QSize(28, 28))
+            b.setCursor(Qt.CursorShape.PointingHandCursor)
+            b.setToolTip(label)
+            b.setAccessibleName(f"Màu {label}")
+            b.clicked.connect(lambda _=False, k=key: self.palette_combo.setCurrentIndex(self.palette_combo.findData(k)))
+            sw_row.addWidget(b)
+            self._swatches.append(b)
+        self.palette_name = QLabel("")
+        self.palette_name.setObjectName("muted")
+        sw_row.addWidget(self.palette_name)
+        sw_row.addStretch(1)
+        sw_box = QWidget()
+        sw_row.setContentsMargins(0, 0, 0, 0)
+        sw_box.setLayout(sw_row)
+        f.addRow(self._lab("Màu chủ đạo"), sw_box)
+        f.addRow(self.palette_combo)
+        self.palette_combo.currentIndexChanged.connect(self._sync_swatches)
+        self._sync_swatches()
         welcome = QPushButton("Xem lại màn hình chào")
         welcome.setObjectName("pill")
         welcome.setIcon(icons.icon("home", 13))
@@ -230,8 +265,7 @@ class SettingsPage(QWidget):
         wrow.addStretch(1)
         f.addRow(wrow)
 
-        right = QVBoxLayout()
-        right.setSpacing(10)
+        right = None
         # ----- giới thiệu: tên app, phiên bản, tác giả -----
         from .theme import APP_NAME, APP_VERSION, AUTHOR
         g_about = QGroupBox("Giới thiệu")
@@ -243,25 +277,23 @@ class SettingsPage(QWidget):
         fa.addRow("Phiên bản", ver)
         fa.addRow("Tác giả", QLabel(AUTHOR.replace("By ", "")))
         fa.addRow(w.muted("Báo lỗi: gửi kèm số phiên bản này và file nhật ký (Thư mục dữ liệu → logs)."))
-        for g in (g_exp, g_ff, g_cache, g_ui, g_about):
-            right.addWidget(g)
-        right.addStretch(1)
-
+        # một cột, rộng tối đa 880 px, căn giữa: Giao diện lên đầu (hay đổi nhất), phần cứng ở giữa, mục ít dùng ở cuối
+        column = QWidget()
+        column.setMaximumWidth(880)
+        cv_ = QVBoxLayout(column)
+        cv_.setContentsMargins(0, 0, 0, 0)
+        cv_.setSpacing(theme.SP['lg'])
+        cv_.addLayout(head)
+        for g in (g_ui, g_sys, g_acc, g_exp, g_ff, g_cache, g_bench, g_about):
+            cv_.addWidget(g)
+        cv_.addStretch(1)
         cols = QHBoxLayout()
-        cols.setSpacing(theme.SP['lg'])
-        lw, rw = QWidget(), QWidget()
-        lw.setLayout(left)
-        rw.setLayout(right)
-        for col in (left, right):
-            col.setContentsMargins(0, 0, 0, 0)
-        lw.setMinimumWidth(480)
-        rw.setMinimumWidth(420)
-        cols.addWidget(lw, 3)
-        cols.addWidget(rw, 2)
+        cols.addStretch(1)
+        cols.addWidget(column, 100)
+        cols.addStretch(1)
         self._cols = cols
         lay = QVBoxLayout(self)
         theme.page_layout(lay)
-        lay.addLayout(head)
         lay.addLayout(cols, 1)
 
         for c, key, default in ((self.hwdec, "pref/hwdec", False), (self.open_folder, "pref/open_folder", True),
@@ -276,19 +308,39 @@ class SettingsPage(QWidget):
         self.refresh_cache()
 
     # ---------- dữ liệu từ cửa sổ chính ----------
+    def _sync_swatches(self, *_) -> None:
+        cur = self.palette_combo.currentData()
+        for b, (key, (label, accent, *_rest)) in zip(self._swatches, theme.PALETTES.items()):
+            b.setIcon(_swatch(accent, key == cur))
+            if key == cur:
+                self.palette_name.setText(label)
+
+    def _lab(self, text: str) -> QLabel:
+        lb = QLabel(text)
+        lb.setMinimumWidth(self._label_w)
+        lb.setProperty("role", "fieldlabel")
+        return lb
+
+    def _form(self, box: QGroupBox) -> QFormLayout:
+        fl = QFormLayout(box)
+        fl.setVerticalSpacing(theme.FORM_GAP)
+        fl.setLabelAlignment(Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignTop)
+        fl.setFieldGrowthPolicy(QFormLayout.FieldGrowthPolicy.AllNonFixedFieldsGrow)
+        return fl
+
     def set_system(self, info: sysinfo.SystemInfo) -> None:
         f = self.sys_form
         while f.rowCount():
             f.removeRow(0)
-        f.addRow("Hệ điều hành", QLabel(info.os))
-        f.addRow("CPU", QLabel(f"{info.cpu} · {info.cores} luồng"))
-        f.addRow("RAM", QLabel(f"{info.ram_gb:.0f} GB"))
+        f.addRow(self._lab("Hệ điều hành"), QLabel(info.os))
+        f.addRow(self._lab("CPU"), QLabel(f"{info.cpu} · {info.cores} luồng"))
+        f.addRow(self._lab("RAM"), QLabel(f"{info.ram_gb:.0f} GB"))
         for i, g in enumerate(info.gpus or [sysinfo.GPU("Không đọc được")]):
             text = g.name
             details = [x for x in (f"driver {g.driver}" if g.driver else "",
                                    f"{g.vram_mb / 1024:.0f} GB VRAM" if g.vram_mb >= 1024 else "", g.extra) if x]
             lab = QLabel(text + ("\n" + " · ".join(details) if details else ""))
-            f.addRow("Card đồ hoạ" if i == 0 else "", lab)
+            f.addRow(self._lab("Card đồ hoạ" if i == 0 else ""), lab)
         has_nvidia = any("nvidia" in g.name.lower() for g in info.gpus)
         if info.cuda_version:
             cuda_txt = f"CUDA {info.cuda_version}"
@@ -296,11 +348,11 @@ class SettingsPage(QWidget):
             cuda_txt = "Có card NVIDIA (chưa đọc được số phiên bản CUDA)"
         else:
             cuda_txt = "Không có (máy không có card NVIDIA)"
-        f.addRow("CUDA", pill(bool(info.cuda_version) or has_nvidia, cuda_txt))
+        f.addRow(self._lab("CUDA"), pill(bool(info.cuda_version) or has_nvidia, cuda_txt))
         out = self.out_dir.text().strip() or os.path.expanduser("~/Videos")
         try:
             du = shutil.disk_usage(out if os.path.isdir(out) else os.path.expanduser("~"))
-            f.addRow("Ổ đĩa xuất", QLabel(f"còn trống {du.free / 1024 ** 3:.0f} GB / {du.total / 1024 ** 3:.0f} GB"))
+            f.addRow(self._lab("Ổ đĩa xuất"), QLabel(f"còn trống {du.free / 1024 ** 3:.0f} GB / {du.total / 1024 ** 3:.0f} GB"))
         except OSError:
             pass
 
@@ -314,24 +366,30 @@ class SettingsPage(QWidget):
         if info.error:
             self.verdict.setText(f"Lỗi: {info.error}")
             return
-        g.addWidget(QLabel("FFmpeg"), 0, 0)
+        left = Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignVCenter
+        g.addWidget(self._lab("FFmpeg"), 0, 0)
         ff = QLabel(f"✓ {info.ffmpeg_version}")
         ff.setObjectName("chipOk")
-        g.addWidget(ff, 0, 1, 1, 3)
-        path = QLabel(self.fontMetrics().elidedText(info.ffmpeg_path, Qt.TextElideMode.ElideMiddle, 420))
+        ff.setSizePolicy(QSizePolicy.Policy.Maximum, QSizePolicy.Policy.Fixed)
+        ff.setFixedHeight(26)
+        g.addWidget(ff, 0, 1, 1, 3, left)
+        path = w.ElidedLabel(info.ffmpeg_path, Qt.TextElideMode.ElideMiddle)  # đường dẫn dài: rút gọn giữa, đủ trong tooltip
         path.setObjectName("muted")
         path.setToolTip(info.ffmpeg_path)
-        g.addWidget(path, 1, 1, 1, 3)
-        g.addWidget(QLabel("Giải mã CUDA"), 2, 0)
-        g.addWidget(pill(info.cuda_decode, "dùng được" if info.cuda_decode else "không có"), 2, 1)
+        g.addWidget(path, 1, 1, 1, 4)
+        g.addWidget(self._lab("Giải mã CUDA"), 2, 0)
+        g.addWidget(pill(info.cuda_decode, "dùng được" if info.cuda_decode else "không có", 96), 2, 1, left)
         r = 3
         for vendor, encs in VENDOR_ROWS:
-            g.addWidget(QLabel(vendor), r, 0)
+            g.addWidget(self._lab(vendor), r, 0)
             for c, enc in enumerate(encs):
-                g.addWidget(pill(info.encoders.get(enc, False), _short(enc)), r, 1 + c)
+                g.addWidget(pill(info.encoders.get(enc, False), _short(enc), 96), r, 1 + c, left)
             r += 1
-        g.addWidget(QLabel("AAC nhanh (Windows)"), r, 0)
-        g.addWidget(pill(audio_mf, "dùng được" if audio_mf else "không có"), r, 1)
+        g.addWidget(self._lab("AAC nhanh (Windows)"), r, 0)
+        g.addWidget(pill(audio_mf, "dùng được" if audio_mf else "không có", 96), r, 1, left)
+        g.setColumnMinimumWidth(0, self._label_w)
+        for c in (1, 2, 3):
+            g.setColumnMinimumWidth(c, 96)
         g.setColumnStretch(4, 1)
         self.hwdec.setEnabled(info.cuda_decode)
         if not info.cuda_decode:
@@ -429,5 +487,4 @@ class SettingsPage(QWidget):
         return str(self.settings.value(key, default)).lower() in ("true", "1")
 
     def adapt(self, width: int, height: int = 0) -> None:
-        self._cols.setDirection(QHBoxLayout.Direction.TopToBottom if width < 1150
-                                else QHBoxLayout.Direction.LeftToRight)
+        """Một cột căn giữa, không cần xếp lại theo độ rộng."""

@@ -59,7 +59,7 @@ CSS = css()
 # ---------------- các khối trình bày ----------------
 def hero(title: str, when: str, actions: tuple = ()) -> str:
     """Tiêu đề chủ đề + "dùng khi nào" + nút đi tới đúng chỗ trong app."""
-    btns = "".join(f'<td bgcolor="{ACCENT}"><a href="{href}"><b><span style="color:{T["bg"]};">&nbsp;{label} →&nbsp;'
+    btns = "".join(f'<td bgcolor="{T["accent"]}"><a href="{href}" style="text-decoration:none;"><b><span style="color:{T["text_on_accent"]};">&nbsp;{label} →&nbsp;'
                    f'</span></b></a></td><td width="10"></td>' for label, href in actions)
     row = f'<table cellpadding="7" cellspacing="0"><tr>{btns}</tr></table>' if btns else ""
     return (f'<table width="100%" cellpadding="14" cellspacing="0" bgcolor="{CARD}"><tr><td>'
@@ -528,7 +528,7 @@ topic("caidat", "Khác", "settings", "Cài đặt & card đồ hoạ", hero(
 <li><b>Kiểm tra lại phần cứng</b>: đọc lại thông số sau khi cắm / cập nhật driver card đồ hoạ.</li>
 <li><b>Đo tốc độ mã hoá</b> (khoảng 30 giây): mã hoá thử bằng từng bộ mã hoá (×10 = nhanh gấp 10 lần thời gian thực).</li>
 <li>Thư mục xuất mặc định, <b>mở thư mục</b> / <b>âm báo</b> khi xuất xong, cỡ chữ.</li>
-<li><b>Màu chủ đạo</b> (Giao diện hiển thị): <i>Neon tím hồng</i> (mặc định), <i>Đại dương</i>, <i>Hoàng hôn</i>,
+<li><b>Màu chủ đạo</b> (Giao diện hiển thị): <i>Tím neon</i> (mặc định), <i>Đại dương</i>, <i>Hoàng hôn</i>,
 <i>Tím xanh</i> (như bản cũ) — đổi là thấy ngay. Vài biểu tượng nhỏ đổi màu hẳn sau khi mở lại app.
 <b>Xem lại màn hình chào</b> cũng ở đây.</li>
 <li><b>Tắt máy khi chạy xong hàng đợi</b> (có 2 phút để huỷ) — chỉ có tác dụng tới khi tắt app, lần mở sau phải tick lại.</li>

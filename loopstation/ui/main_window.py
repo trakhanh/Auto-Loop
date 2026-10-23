@@ -785,7 +785,7 @@ class MainWindow(QMainWindow):
                     long = (f"File dài <b>{dur}</b>. Đổi độ dài / số bản ở thẻ <b>Độ dài file nhạc</b> (cột phải). "
                             "Xong thì sang bước <b>Xuất</b>.")
             elif not n_tracks:
-                hint = f"Thêm bài nhạc: nhạc tự lặp cho đủ video {dur}. Không cần nhạc? Chọn Chỉ video."
+                hint = "Thêm bài nhạc: nhạc tự lặp cho đủ độ dài video. Không cần nhạc? Chọn Chỉ video."
                 long = (f"<b>Thêm bài nhạc</b>: nhạc tự lặp cho đủ video <b>{dur}</b>, bài cuối nhỏ dần. "
                         "Không cần nhạc? Chọn <b>Chỉ video</b> ở thanh trên cùng.")
             else:

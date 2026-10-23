@@ -34,13 +34,18 @@ CARDS = [
 ]
 
 
+MAIN_KEYS = ("video_music", "video_only", "music_only")  # ba kiểu sản phẩm: hàng chính; còn lại là công cụ, nhẹ hơn
+
+
 class HomeCard(QPushButton):
-    def __init__(self, ic: str, tone: str, title: str, desc: str, example: str, parent=None):
+    def __init__(self, ic: str, tone: str, title: str, desc: str, example: str, parent=None, compact: bool = False):
         super().__init__(parent)
         self.setObjectName("homeCard")
+        self.setProperty("compact", compact)
         self.setCursor(Qt.CursorShape.PointingHandCursor)
         self.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Preferred)
-        self.setMinimumHeight(138)
+        self.setMinimumHeight(92 if compact else 138)
+        self.setToolTip(f"{desc}\n{example}" if compact else "")
         lay = QVBoxLayout(self)
         lay.setContentsMargins(theme.SP['xl'], theme.SP['xl'], theme.SP['xl'], theme.SP['lg'])
         lay.setSpacing(6)
@@ -66,6 +71,10 @@ class HomeCard(QPushButton):
             lab.setAttribute(Qt.WidgetAttribute.WA_TransparentForMouseEvents, True)
         lay.addLayout(top)
         lay.addWidget(d)
+        if compact:
+            ex.hide()  # công cụ phụ: chỉ tiêu đề + một câu; ví dụ nằm trong tooltip
+            lay.addStretch(1)
+            return
         lay.addStretch(1)
         lay.addWidget(ex)
 
@@ -80,8 +89,7 @@ class HomePage(QWidget):
         logo = QLabel()
         logo.setPixmap(branding.pixmap(56, self.devicePixelRatioF()))
         title = effects.HeadingLabel("Bạn muốn làm gì hôm nay?")  # chữ chuyển màu theo màu chủ đạo
-        sub = QLabel(f"{APP_NAME} · {AUTHOR} — chọn một việc bên dưới, app tự mở đúng bước. "
-                     "Có thể đổi kiểu sản phẩm bất cứ lúc nào ở thanh trên cùng.")
+        sub = QLabel("Chọn một kiểu bên dưới, app tự mở đúng bước. Đổi kiểu bất cứ lúc nào ở thanh trên cùng.")
         sub.setObjectName("muted")
         sub.setWordWrap(True)
         head = QHBoxLayout()
@@ -103,12 +111,25 @@ class HomePage(QWidget):
 
         grid = QGridLayout()
         grid.setSpacing(theme.SP['lg'])
+        tools = QGridLayout()
+        tools.setSpacing(theme.SP['lg'])
         self.cards: dict[str, HomeCard] = {}
-        for k, (key, ic, color, t, d, ex) in enumerate(CARDS):
-            card = HomeCard(ic, color, t, d, ex)
+        n_main = n_tool = 0
+        for key, ic, color, t, d, ex in CARDS:
+            main = key in MAIN_KEYS
+            card = HomeCard(ic, color, t, d, ex, compact=not main)
             card.clicked.connect(lambda _=False, kk=key: self.chosen.emit(kk))
-            grid.addWidget(card, k // 3, k % 3)
+            if main:
+                grid.addWidget(card, 0, n_main)
+                n_main += 1
+            else:
+                tools.addWidget(card, 0, n_tool)
+                n_tool += 1
             self.cards[key] = card
+        main_lab = QLabel("Kiểu sản phẩm")
+        main_lab.setObjectName("h2")
+        tool_lab = QLabel("Công cụ khác")
+        tool_lab.setObjectName("h2")
 
         self.samples_row = QHBoxLayout()
         self.samples_row.setSpacing(8)
@@ -126,23 +147,35 @@ class HomePage(QWidget):
             has = True
         self.samples_row.addStretch(1)
 
-        steps = QLabel("<b>Cách làm chung — 3 bước:</b> &nbsp;① <b>Video</b>: thêm clip, chỉnh số lần loop "
-                       "&nbsp;→&nbsp; ② <b>Nhạc</b>: thêm playlist (tự lặp theo độ dài video) "
-                       "&nbsp;→&nbsp; ③ <b>Xuất</b>: chọn thư mục lưu, bấm Xuất. "
-                       "Thanh hướng dẫn phía trên mỗi trang luôn nói bước tiếp theo. Bấm <b>F1</b> để xem hướng dẫn.")
+        steps = QLabel("<b>Cách làm:</b> 1. Video: thêm clip, chỉnh số lần loop · 2. Nhạc: thêm playlist · "
+                       "3. Xuất: chọn thư mục lưu, bấm Xuất. Bấm <b>F1</b> để xem hướng dẫn.")
         steps.setObjectName("info")
         steps.setWordWrap(True)
 
-        lay = QVBoxLayout(self)
-        lay.setContentsMargins(theme.SP['xxl'], theme.SP['xl'] + theme.SP['xs'], theme.SP['xxl'], theme.SP['xl'])
-        lay.setSpacing(16)
+        # nội dung rộng tối đa 1080 px, căn giữa: không loãng trên màn hình rộng
+        col = QWidget()
+        col.setMaximumWidth(1080)
+        lay = QVBoxLayout(col)
+        lay.setContentsMargins(0, 0, 0, 0)
+        lay.setSpacing(theme.SP['lg'])
         lay.addLayout(head)
         lay.addWidget(self.resume, 0, Qt.AlignmentFlag.AlignLeft)
+        lay.addSpacing(theme.SP['sm'])
+        lay.addWidget(main_lab)
         lay.addLayout(grid)
+        lay.addSpacing(theme.SP['sm'])
+        lay.addWidget(tool_lab)
+        lay.addLayout(tools)
         if has:
+            lay.addSpacing(theme.SP['sm'])
             lay.addLayout(self.samples_row)
         lay.addWidget(steps)
         lay.addStretch(1)
+        outer = QHBoxLayout(self)
+        outer.setContentsMargins(theme.SP['xxl'], theme.SP['xl'] + theme.SP['xs'], theme.SP['xxl'], theme.SP['xl'])
+        outer.addStretch(1)
+        outer.addWidget(col, 100)
+        outer.addStretch(1)
 
     def set_resume(self, text: str) -> None:
         """Nút "Tiếp tục dự án đang làm" (ẩn khi dự án trống)."""
