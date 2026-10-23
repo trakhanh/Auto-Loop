@@ -15,6 +15,7 @@ ap.add_argument("--palette", default="neon")
 ap.add_argument("--font", type=int, default=10)
 ap.add_argument("--w", type=int, default=1440)
 ap.add_argument("--h", type=int, default=900)
+ap.add_argument("--suffix", default="", help="appended to every file name, e.g. _1280x720")
 args = ap.parse_args()
 
 scratch = tempfile.mkdtemp(prefix="ktls_shots_")
@@ -45,7 +46,7 @@ def pump(sec: float) -> None:
 
 def shot(win, name: str) -> None:
     pump(0.6)
-    path = os.path.join(args.out, f"{name}.png")
+    path = os.path.join(args.out, f"{name}{args.suffix}.png")
     win.grab().save(path)
     print("saved", path)
 

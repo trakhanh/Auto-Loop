@@ -1005,6 +1005,45 @@ def adapt_split(split, width: int, threshold: int, side_min: int = 440, page=Non
         split.setSizes([max(1, width - side_min), side_min])
 
 
+class ElidedLabel(QLabel):
+    """Nhãn một dòng: chữ dài tự rút gọn bằng "…" theo chiều rộng, đầy đủ nằm trong tooltip. Không đòi chiều rộng tối thiểu."""
+
+    def __init__(self, text: str = "", mode=Qt.TextElideMode.ElideRight, parent=None):
+        super().__init__(parent)
+        self._full = ""
+        self._mode = mode
+        self._tip = ""
+        self.setSizePolicy(QSizePolicy.Policy.Ignored, QSizePolicy.Policy.Preferred)
+        self.setMinimumWidth(0)
+        self.set_full_text(text)
+
+    def full_text(self) -> str:
+        return self._full
+
+    def set_full_text(self, text: str, tip: str = "") -> None:
+        self._full, self._tip = text, tip
+        self._refit()
+
+    def resizeEvent(self, e) -> None:  # noqa: N802
+        super().resizeEvent(e)
+        self._refit()
+
+    def _refit(self) -> None:
+        shown = QFontMetrics(self.font()).elidedText(self._full, self._mode, max(0, self.width() - 2))
+        if shown != self.text():
+            super().setText(shown)
+        self.setToolTip(self._tip or (self._full if shown != self._full else ""))
+
+
+def hairline() -> QFrame:
+    """Vạch dọc mảnh ngăn các nhóm điều khiển trên một hàng."""
+    line = QFrame()
+    line.setFrameShape(QFrame.Shape.VLine)
+    line.setProperty("role", "hairline")
+    line.setFixedHeight(20)
+    return line
+
+
 def muted(text: str) -> QLabel:
     lab = QLabel(text)
     lab.setObjectName("muted")

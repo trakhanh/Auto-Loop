@@ -238,13 +238,19 @@ QWidget#sidebar QWidget#sidebarCard {{ background: {t['field']}; }}
 QWidget#sidebarCard {{ background: {t['field']}; border: 1px solid {t['line']}; border-radius: {R['lg']}px; }}
 QWidget#header {{ background: {t['panel']}; border-bottom: 1px solid {t['line']}; }}
 QWidget#header QLabel {{ background: transparent; }}
-QWidget#header QLabel[chip="true"], QWidget#header QLabel#chip {{ background: {t['raised']}; }}
-QWidget#header QLabel#chipAccent {{ background: {rgba(t['accent'], 0.22)}; }}
-QWidget#header QLabel#chipError {{ background: {rgba(t['danger'], 0.16)}; }}
+/* chữ số liệu ở thanh trên cùng: không khung, không nền (tổng thời lượng là một chỉ số, không phải nút) */
+QWidget#header QLabel#chip, QWidget#header QLabel#chipOff {{ background: transparent; border: none; padding: 0 4px;
+                                                       color: {t['text_muted']}; font-weight: 400; }}
+QWidget#header QLabel#chipAccent {{ background: transparent; border: none; padding: 0 4px; color: {t['text']};
+                                    font-family: Consolas, 'Cascadia Mono', monospace; font-weight: 700; }}
+QWidget#header QLabel#chipError {{ background: {rgba(t['danger'], 0.14)}; }}
 QWidget#header QLabel#chipWarn {{ background: {rgba(t['warn'], 0.16)}; }}
 QWidget#header QLabel#chipOk {{ background: {rgba(t['success'], 0.16)}; }}
 QWidget#subHeader {{ background: {t['bg']}; border-bottom: 1px solid {t['line']}; }}
 QWidget#timelineDock {{ background: {t['panel']}; border-top: 1px solid {t['line']}; }}
+QPushButton#dockBar {{ background: transparent; border: none; color: {t['text_muted']}; padding: 0 6px; font-size: {f['small']};
+                      font-weight: 600; text-align: left; }}
+QPushButton#dockBar:hover {{ color: {t['text']}; background: {rgba('#ffffff', 0.05)}; }}
 
 /* ---------- thẻ ---------- */
 QWidget#quickBar, QFrame#batchCard, QWidget#metricCard {{ background: {t['panel']}; border: 1px solid {t['line_subtle']};
@@ -340,6 +346,9 @@ QPushButton#ghost, QPushButton[variant="ghost"] {{ background: transparent; bord
                           color: {t['text_2']}; padding: 5px 8px; }}
 QPushButton#ghost:hover, QPushButton[variant="ghost"]:hover {{ background: {rgba('#ffffff', 0.06)}; color: {t['text']}; }}
 QPushButton#ghost:pressed, QPushButton[variant="ghost"]:pressed {{ background: {rgba('#ffffff', 0.10)}; }}
+QPushButton#ghost:checked, QPushButton[variant="ghost"]:checked {{ background: {rgba(t['accent'], 0.16)}; color: {t['accent_text']};
+                          border-color: transparent; }}
+QPushButton#ghost[icononly="true"] {{ padding: 0; }}
 QPushButton#ghost:disabled, QPushButton[variant="ghost"]:disabled {{ background: transparent; border-color: transparent;
                           color: {t['text_disabled']}; }}
 
@@ -401,8 +410,8 @@ QLabel#homeTitle {{ font-size: {f['subtitle']}; font-weight: 600; color: {t['tex
 QLabel#homeDesc {{ color: {t['text_2']}; background: transparent; }}
 QLabel#homeExample {{ color: {t['text_muted']}; font-size: {f['small']}; background: transparent; }}
 QWidget#stepGuide {{ background: {t['bg']}; border-bottom: 1px solid {t['line']}; }}
-QPushButton#stepPill {{ border-radius: {R['pill']}px; padding: 3px 12px; font-weight: 600; border: 1px solid {t['line']};
-                        background: transparent; color: {t['text_muted']}; }}
+QPushButton#stepPill {{ border-radius: {R['pill']}px; padding: 2px 12px; font-weight: 600; border: 1px solid {t['line']};
+                        background: transparent; color: {t['text_muted']}; font-size: {f['small']}; }}
 QPushButton#stepPill[state="current"] {{ background: {rgba(t['accent'], 0.20)}; border-color: {rgba(t['accent'], 0.55)};
                         color: {t['text']}; }}
 QPushButton#stepPill[state="done"] {{ color: {t['success_text']}; border-color: {rgba(t['success'], 0.45)}; }}

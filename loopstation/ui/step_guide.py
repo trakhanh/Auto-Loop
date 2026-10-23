@@ -1,10 +1,11 @@
 """Thanh hướng dẫn từng bước (dùng chung cho trang Video / Nhạc / Xuất): đang ở bước mấy + việc cần làm tiếp."""
 from __future__ import annotations
 
-from PySide6.QtCore import Qt, Signal
+from PySide6.QtCore import QSize, Qt, Signal
 from PySide6.QtWidgets import QHBoxLayout, QLabel, QPushButton, QSizePolicy, QWidget
 
-from . import icons, motion, theme
+from . import icons
+from .widgets import ElidedLabel
 
 
 class StepGuide(QWidget):
@@ -15,7 +16,7 @@ class StepGuide(QWidget):
         self.setObjectName("stepGuide")
         self.setAttribute(Qt.WidgetAttribute.WA_StyledBackground, True)
         lay = QHBoxLayout(self)
-        lay.setContentsMargins(16, 7, 16, 7)
+        lay.setContentsMargins(16, 5, 16, 5)
         lay.setSpacing(6)
         self._steps_box = QHBoxLayout()
         self._steps_box.setSpacing(4)
@@ -23,22 +24,21 @@ class StepGuide(QWidget):
         lay.addSpacing(10)
         self.icon = QLabel()
         self.icon.setFixedWidth(18)
-        self.hint = QLabel("")
+        self.hint = ElidedLabel("")  # một dòng, dài quá thì rút gọn; câu đầy đủ nằm trong tooltip
         self.hint.setObjectName("stepHint")
-        self.hint.setWordWrap(True)
-        self.hint.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Preferred)
-        self.hint.setMinimumWidth(200)
         lay.addWidget(self.icon)
         lay.addWidget(self.hint, 1)
         self._buttons: list[QWidget] = []
 
-    def set_state(self, steps: list[tuple[str, int, bool]], current: int, hint: str, ok: bool = False) -> None:
-        """steps: (tên, chỉ số trang, đã xong) theo thứ tự; current: trang đang mở; hint: việc cần làm (HTML)."""
+    def set_state(self, steps: list[tuple[str, int, bool]], current: int, hint: str, ok: bool = False,
+                  tip: str = "") -> None:
+        """steps: (tên, chỉ số trang, đã xong) theo thứ tự; current: trang đang mở; hint: việc cần làm (một dòng,
+        chữ thường); tip: câu hướng dẫn đầy đủ (HTML) hiện khi rê chuột."""
         key = (tuple(steps), current)
         if key != getattr(self, "_key", None):  # chỉ dựng lại các nút bước khi bước / trạng thái thật sự đổi
             self._key = key
             self._rebuild(steps, current)
-        self._set_hint(hint, ok)
+        self._set_hint(hint, ok, tip)
 
     def _rebuild(self, steps: list[tuple[str, int, bool]], current: int) -> None:
         for b in self._buttons:  # ẩn + tách ngay: nút cũ không được vẽ chồng trong lúc chờ xoá
@@ -54,8 +54,11 @@ class StepGuide(QWidget):
                 arrow.setObjectName("stepArrow")
                 self._steps_box.addWidget(arrow)
                 self._buttons.append(arrow)
-            b = QPushButton(f"{k + 1}. {name}" + ("  ✓" if done and page != current else ""))
+            b = QPushButton(f"{k + 1}. {name}")
             b.setObjectName("stepPill")
+            if done and page != current:
+                b.setIcon(icons.icon("check", 12, "success_text"))
+                b.setIconSize(QSize(12, 12))
             b.setSizePolicy(QSizePolicy.Policy.Fixed, QSizePolicy.Policy.Fixed)
             b.setProperty("state", "current" if page == current else ("done" if done else "todo"))
             b.setCursor(Qt.CursorShape.PointingHandCursor)
@@ -64,10 +67,10 @@ class StepGuide(QWidget):
             self._steps_box.addWidget(b)
             self._buttons.append(b)
 
-    def _set_hint(self, hint: str, ok: bool) -> None:
+    def _set_hint(self, hint: str, ok: bool, tip: str = "") -> None:
         if ok != getattr(self, "_ok", None):
             self._ok = ok
             self.icon.setPixmap(icons.pixmap("check" if ok else "arrow_right", 15, "success_text" if ok else "accent_text"))
-        if hint != self.hint.text():
-            self.hint.setText(hint)
-            motion.fade_in(self.hint, 200, 0.2)  # việc cần làm vừa đổi: chữ hiện dần
+        if (hint, tip) != (self.hint.full_text(), getattr(self, "_tip", "")):
+            self._tip = tip
+            self.hint.set_full_text(hint, tip)

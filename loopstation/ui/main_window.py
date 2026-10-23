@@ -289,7 +289,7 @@ class MainWindow(QMainWindow):
         sv.addLayout(brand)
         sv.addSpacing(14)
 
-        lbl_steps = QLabel("QUY TRÌNH 3 BƯỚC")
+        lbl_steps = QLabel("Trang làm việc")
         lbl_steps.setObjectName("sectionLabel")
         self.steps_label = lbl_steps
         self.nav = QButtonGroup(self)
@@ -306,16 +306,16 @@ class MainWindow(QMainWindow):
         sv.addWidget(lbl_steps)
 
         nav_items = (
-            ("film", "1. Video"),
-            ("music", "2. Nhạc && Nền"),
-            ("export", "3. Xuất file"),
+            ("film", "Video"),
+            ("music", "Nhạc && Nền"),
+            ("export", "Xuất file"),
             ("settings", "Cài đặt"),
             ("help", "Hướng dẫn (F1)"),
         )
         for i, (ic_name, text) in enumerate(nav_items):
             if i == 3:
                 sv.addSpacing(10)
-                lbl_util = QLabel("HỆ THỐNG & TRỢ GIÚP")
+                lbl_util = QLabel("Hệ thống")
                 lbl_util.setObjectName("sectionLabel")
                 self.util_label = lbl_util
                 sv.addWidget(lbl_util)
@@ -333,7 +333,7 @@ class MainWindow(QMainWindow):
         self.nav_pill = motion.NavPill(side)  # nền mục đang chọn, trượt theo khi đổi trang
         sv.addStretch(1)
 
-        lab = QLabel("CÔNG CỤ")
+        lab = QLabel("Công cụ")
         lab.setObjectName("sectionLabel")
         self.project_label = lab
         sv.addWidget(lab)
@@ -369,39 +369,47 @@ class MainWindow(QMainWindow):
         header = QWidget()
         header.setObjectName("header")
         hv = QHBoxLayout(header)
-        hv.setContentsMargins(16, 9, 16, 9)
+        hv.setContentsMargins(16, 8, 16, 8)
         hv.setSpacing(8)
 
+        # Nhóm 1: tên dự án + thao tác tệp
         self.name_edit = QLineEdit()
         self.name_edit.setObjectName("title")
         self.name_edit.setPlaceholderText("Tên dự án…")
-        self.name_edit.setMinimumWidth(120)
-        self.name_edit.setMaximumWidth(280)
+        self.name_edit.setMinimumWidth(150)
+        self.name_edit.setMaximumWidth(340)
         self.name_edit.setToolTip("Tên dự án (dùng làm tên file xuất mặc định)")
         self.name_edit.textChanged.connect(self._schedule)
         self.name_edit.textChanged.connect(self._update_title)
-        hv.addWidget(self.name_edit)
+        self.name_edit.textChanged.connect(lambda t: self.name_edit.setToolTip(
+            f"{t}\n\nTên dự án (dùng làm tên file xuất mặc định)" if t else "Tên dự án (dùng làm tên file xuất mặc định)"))
+        hv.addWidget(self.name_edit, 3)
 
-        # Cụm nút thao tác dự án nhanh ngay trên thanh trên cùng (theo đúng SPEC mục 3)
         proj_bar = QHBoxLayout()
-        proj_bar.setSpacing(4)
+        proj_bar.setSpacing(2)
         for ic_name, text, tip, fn in (
             ("plus", "Mới", "Dự án mới (Ctrl+N)", self.new_project),
             ("folder", "Mở", "Mở dự án .lsproj (Ctrl+O)", self.open_project),
             ("save", "Lưu", "Lưu dự án (Ctrl+S)", self.save_project),
             ("save_as", "Lưu thành…", "Lưu thành file dự án khác (Ctrl+Shift+S)", self.save_project_as),
         ):
-            tb = QPushButton(text)
+            tb = QPushButton("")
             tb.setObjectName("ghost")
-            tb.setIcon(icons.icon(ic_name, 14))
-            tb.setIconSize(QSize(14, 14))
+            tb.setProperty("icononly", True)
+            tb.setIcon(icons.icon(ic_name, 16))
+            tb.setIconSize(QSize(16, 16))
+            tb.setFixedSize(32, 32)
             tb.setToolTip(tip)
+            tb.setAccessibleName(text)
             tb.clicked.connect(fn)
             self._top_proj_buttons.append((tb, ic_name, text))
             proj_bar.addWidget(tb)
         hv.addLayout(proj_bar)
         hv.addSpacing(4)
+        hv.addWidget(w.hairline())
+        hv.addSpacing(4)
 
+        # Nhóm 2: kiểu sản phẩm (bộ chọn một trong ba)
         # Chọn kiểu sản phẩm: quyết định trang nào được dùng và nút Xuất ra file gì
         self.mode = "video_music"
         self.mode_group = QButtonGroup(self)
@@ -428,7 +436,11 @@ class MainWindow(QMainWindow):
         self.mode_buttons["video_music"].setChecked(True)
         self.mode_box = motion.SegmentBox(list(self.mode_buttons.values()))  # khối sáng trượt theo kiểu đang chọn
         hv.addWidget(self.mode_box)
+        hv.addSpacing(4)
+        hv.addWidget(w.hairline())
+        hv.addSpacing(4)
 
+        # Nhóm 3: tổng thời lượng + bật / tắt dòng thời gian
         self.chip_seq = chip()
         self.chip_rounds = chip()
         self.chip_total = chip("", "chipAccent")
@@ -449,7 +461,8 @@ class MainWindow(QMainWindow):
         hv.addWidget(chip_box, 1)
 
         self.tl_toggle = QPushButton("Dòng thời gian")
-        self.tl_toggle.setObjectName("pill")
+        self.tl_toggle.setObjectName("ghost")
+        self.tl_toggle.setFixedHeight(32)
         self.tl_toggle.setIcon(icons.icon("timeline", 14))
         self.tl_toggle.setIconSize(QSize(14, 14))
         self.tl_toggle.setCheckable(True)
@@ -469,8 +482,18 @@ class MainWindow(QMainWindow):
         self.timeline_wrap = QWidget()
         self.timeline_wrap.setObjectName("timelineDock")
         tl_lay = QVBoxLayout(self.timeline_wrap)
-        tl_lay.setContentsMargins(16, 8, 16, 8)
-        tl_lay.setSpacing(0)
+        tl_lay.setContentsMargins(16, 4, 16, 6)
+        tl_lay.setSpacing(2)
+        # thanh mảnh luôn hiện: bấm để thu gọn / mở dòng thời gian (nhớ lựa chọn)
+        self.dock_bar = QPushButton("Dòng thời gian")
+        self.dock_bar.setObjectName("dockBar")
+        self.dock_bar.setIcon(icons.icon("down", 12, "text_muted"))
+        self.dock_bar.setIconSize(QSize(12, 12))
+        self.dock_bar.setFixedHeight(22)
+        self.dock_bar.setCursor(Qt.CursorShape.PointingHandCursor)
+        self.dock_bar.setToolTip("Thu gọn / mở dòng thời gian (kéo vạch phát trên đó để tua trình phát)")
+        self.dock_bar.clicked.connect(lambda: self.tl_toggle.click())
+        tl_lay.addWidget(self.dock_bar, 0, Qt.AlignmentFlag.AlignLeft)
         tl_lay.addWidget(self.video_tab.timeline)
 
         # Trình phát xem trước luôn hiện cạnh trang đang làm (bước Video / Nhạc / Xuất)
@@ -515,7 +538,11 @@ class MainWindow(QMainWindow):
             return
         idx = self.stack.currentIndex()
         on_steps = idx in (0, 1, 2)
-        self.timeline_wrap.setVisible(on_steps and self.tl_toggle.isChecked())
+        expanded = self.tl_toggle.isChecked()
+        self.timeline_wrap.setVisible(on_steps)  # thanh mảnh luôn hiện; nội dung chỉ hiện khi mở
+        self.video_tab.timeline.setVisible(expanded)
+        self.dock_bar.setIcon(icons.icon("down" if expanded else "up", 12, "text_muted"))
+        self.dock_bar.setText("Dòng thời gian" if expanded else "Dòng thời gian (đang thu gọn)")
         self.tl_toggle.setVisible(on_steps)
         if hasattr(self, "viewer"):
             was = self.viewer.isVisible()
@@ -544,8 +571,6 @@ class MainWindow(QMainWindow):
 
     def _update_header_chips_visibility(self) -> None:
         width = self.width()
-        for tb, _ic, text in self._top_proj_buttons:
-            tb.setText("" if width < 1400 else text)
         self.tl_toggle.setText("" if width < 1200 else "Dòng thời gian")
         # bộ chọn kiểu: cửa sổ hẹp → chỉ còn biểu tượng (rê chuột để xem tên)
         narrow = width < 1100
@@ -579,7 +604,7 @@ class MainWindow(QMainWindow):
             super().resizeEvent(e)
         self._set_compact(self.width() < 1280)
         if not getattr(self, "_tl_user", True):  # màn hình laptop thấp: nhường chỗ cho nội dung chính
-            want = self.height() >= 700  # dòng thời gian là nơi kéo vạch phát: chỉ ẩn khi màn hình rất thấp
+            want = self.height() >= 820  # màn hình thấp: thu gọn dòng thời gian để bảng clip có chỗ
             if self.tl_toggle.isChecked() != want:
                 self.tl_toggle.setChecked(want)
         self._adapt_pages()
@@ -633,13 +658,13 @@ class MainWindow(QMainWindow):
         if video_skipped and self.stack.currentIndex() == 0:
             self.go_to(1)
 
-        v_txt = "1. Video (bỏ qua)" if video_skipped else (f"1. Video ({n_clips})" if n_clips else "1. Video")
+        v_txt = "Video (bỏ qua)" if video_skipped else (f"Video ({n_clips})" if n_clips else "Video")
         if music_skipped:
-            m_txt = f"2. Tiếng nền ({n_amb})" if n_amb else "2. Tiếng nền"
+            m_txt = f"Tiếng nền ({n_amb})" if n_amb else "Tiếng nền"
         else:
             m_parts = ([f"{n_tracks} bài"] if n_tracks else []) + ([f"{n_amb} nền"] if n_amb else [])
-            m_txt = f"2. Nhạc ({', '.join(m_parts)})" if m_parts else "2. Nhạc && Nền"
-        e_txt = f"3. Xuất file ({n_q} chờ)" if n_q else "3. Xuất file"
+            m_txt = f"Nhạc ({', '.join(m_parts)})" if m_parts else "Nhạc && Nền"
+        e_txt = f"Xuất file ({n_q} chờ)" if n_q else "Xuất file"
 
         for page, new_text in ((0, v_txt), (1, m_txt), (2, e_txt)):
             btn = self.nav.button(page)
@@ -724,51 +749,61 @@ class MainWindow(QMainWindow):
         steps = [(nm, page, done.get(page, False)) for nm, page in self._steps_for_mode()]
         dur = fmt_dur(total) if total else ""
         ok = False
+        long = ""  # câu hướng dẫn đầy đủ (HTML) trong tooltip; hint là bản một dòng
         if idx == 0:
             if self.mode == "music_only":
-                hint = "Kiểu <b>Chỉ nhạc</b> không dùng trang Video — sang bước <b>Nhạc</b>."
+                hint = "Kiểu Chỉ nhạc không dùng trang Video: sang bước Nhạc."
             elif not n_clips:
-                hint = ("<b>Thêm clip:</b> kéo thả video / ảnh / cả thư mục vào bảng (hoặc bấm vào khung trống). "
+                hint = "Thêm clip: kéo thả video / ảnh / thư mục vào bảng."
+                long = ("<b>Thêm clip:</b> kéo thả video / ảnh / cả thư mục vào bảng (hoặc bấm vào khung trống). "
                         "Có clip tên <i>loop…</i> và các cảnh <i>2_, 3_…</i>? Bấm <b>Xen kẽ clip nền</b> để tự xếp.")
             elif not ok_tl:
-                hint = "<span style='color:" + theme.T["danger_text"] + "'>Còn lỗi ở bảng clip — xem dòng màu đỏ / thanh trên cùng.</span>"
+                hint = "Còn lỗi ở bảng clip: xem dòng đỏ ở thanh trên cùng."
             else:
                 ok = True
                 nxt = "Nhạc" if self.mode == "video_music" else "Xuất"
-                hint = (f"<b>{n_clips} clip</b> · video dài <b>{dur}</b>. Đổi số lần loop ở cột <i>Số lần phát</i> "
+                hint = f"{n_clips} clip, dài {dur}. Sửa cột Số lần phát nếu cần, rồi sang bước {nxt}."
+                long = (f"<b>{n_clips} clip</b> · video dài <b>{dur}</b>. Đổi số lần loop ở cột <i>Số lần phát</i> "
                         f"(<code>70</code> = 70 lần, <code>10p</code> = 10 phút). Xong thì bấm <b>Tiếp theo: {nxt}</b>.")
         elif idx == 1:
             if self.mode == "video_only" or (self.mode == "video_music" and proj.video.source_audio == "only"):
-                why = "Kiểu <b>Chỉ video</b>" if self.mode == "video_only" else "Đang dùng <b>chỉ tiếng gốc clip</b>"
-                hint = (f"{why}: playlist nhạc không dùng. (Tuỳ chọn) thêm <b>tiếng nền</b> — mưa, sóng, gió… — ở cột "
+                why = "Kiểu Chỉ video" if self.mode == "video_only" else "Đang dùng chỉ tiếng gốc clip"
+                hint = f"{why}: không dùng playlist. Có thể thêm tiếng nền, rồi sang bước Xuất."
+                long = (f"<b>{why}</b>: playlist nhạc không dùng. (Tuỳ chọn) thêm <b>tiếng nền</b> — mưa, sóng, gió… — ở cột "
                         "phải, tự lặp hết video. Xong thì sang bước <b>Xuất</b>.")
                 ok = True
             elif self.mode == "music_only":
                 if not (n_tracks or n_amb):
-                    hint = ("<b>Thêm bài nhạc</b> vào playlist (kéo thả file / thư mục) — hoặc chỉ thêm "
+                    hint = "Thêm bài nhạc vào playlist, hoặc chỉ thêm tiếng nền ở cột phải."
+                    long = ("<b>Thêm bài nhạc</b> vào playlist (kéo thả file / thư mục) — hoặc chỉ thêm "
                             "<b>tiếng nền</b> (mưa, lửa…) ở cột phải để làm âm thanh môi trường.")
                 else:
                     ok = True
-                    hint = (f"File dài <b>{dur}</b>. Đổi độ dài / số bản ở thẻ <b>Độ dài file nhạc</b> (cột phải). "
+                    hint = f"File dài {dur}. Đổi độ dài ở thẻ Độ dài file nhạc, rồi sang bước Xuất."
+                    long = (f"File dài <b>{dur}</b>. Đổi độ dài / số bản ở thẻ <b>Độ dài file nhạc</b> (cột phải). "
                             "Xong thì sang bước <b>Xuất</b>.")
             elif not n_tracks:
-                hint = (f"<b>Thêm bài nhạc</b>: nhạc tự lặp cho đủ video <b>{dur}</b>, bài cuối nhỏ dần. "
+                hint = f"Thêm bài nhạc: nhạc tự lặp cho đủ video {dur}. Không cần nhạc? Chọn Chỉ video."
+                long = (f"<b>Thêm bài nhạc</b>: nhạc tự lặp cho đủ video <b>{dur}</b>, bài cuối nhỏ dần. "
                         "Không cần nhạc? Chọn <b>Chỉ video</b> ở thanh trên cùng.")
             else:
                 ok = True
-                hint = (f"<b>{n_tracks} bài</b> tự lặp theo video <b>{dur}</b>. (Tuỳ chọn) chỉnh to / nhỏ ở Bảng trộn âm (có nghe thử), thêm tiếng nền, ghim bài, "
-                        "đổi thứ tự ở cột phải. Xong thì sang bước <b>Xuất</b>.")
+                hint = f"{n_tracks} bài tự lặp theo video {dur}. Chỉnh âm lượng ở Bảng trộn âm, rồi sang bước Xuất."
+                long = (f"<b>{n_tracks} bài</b> tự lặp theo video <b>{dur}</b>. (Tuỳ chọn) chỉnh to / nhỏ ở Bảng trộn âm (có nghe thử), "
+                        "thêm tiếng nền, ghim bài, đổi thứ tự ở cột phải. Xong thì sang bước <b>Xuất</b>.")
         else:
             if not proj.export.output_dir:
-                hint = "<b>Chọn thư mục lưu</b> ở thẻ <i>Nơi lưu</i> bên phải, rồi bấm <b>Bắt đầu xuất</b>."
+                hint = "Chọn thư mục lưu ở thẻ Nơi lưu, rồi bấm Xuất."
+                long = "<b>Chọn thư mục lưu</b> ở thẻ <i>Nơi lưu</i>, rồi bấm <b>Bắt đầu xuất</b>."
             elif not ok_tl:
-                hint = ("<span style='color:" + theme.T["danger_text"] + "'>Chưa xuất được — quay lại bước trước để thêm clip / nhạc.</span>")
+                hint = "Chưa xuất được: quay lại bước trước để thêm clip / nhạc."
             else:
                 ok = True
                 size = getattr(self, "_size_text", "")
-                hint = (f"Sẵn sàng: dài <b>{dur}</b>{(' · dung lượng ' + size) if size else ''} → bấm "
+                hint = f"Sẵn sàng: dài {dur}{(', ' + size) if size else ''}. Bấm Xuất, hoặc thêm vào hàng đợi."
+                long = (f"Sẵn sàng: dài <b>{dur}</b>{(' · dung lượng ' + size) if size else ''} → bấm "
                         "<b>Bắt đầu xuất</b>, hoặc <b>Thêm vào hàng đợi</b> để xuất nhiều dự án liền nhau.")
-        self.guide.set_state(steps, idx, hint, ok)
+        self.guide.set_state(steps, idx, hint, ok, long)
 
     def showEvent(self, e) -> None:  # noqa: N802
         super().showEvent(e)
