@@ -36,6 +36,9 @@ import loopstation.ui.main_window as mw  # noqa: E402
 
 ini = os.path.join(scratch, "settings.ini")
 mw.QSettings = lambda org, name: QSettings(ini, QSettings.Format.IniFormat)
+_seed = QSettings(ini, QSettings.Format.IniFormat)
+_seed.setValue("pref/font_pt", args.font)  # MainWindow re-reads the font pref, so seed it
+_seed.sync()
 
 
 def pump(sec: float) -> None:

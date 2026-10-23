@@ -5,7 +5,7 @@ import os
 import random
 from pathlib import Path
 
-from PySide6.QtCore import QSettings, QSize, Qt, Signal
+from PySide6.QtCore import QEvent, QSettings, QSize, Qt, QTimer, Signal
 from PySide6.QtGui import QColor, QIcon
 from PySide6.QtWidgets import (
     QCheckBox, QComboBox, QDoubleSpinBox, QFormLayout, QGroupBox, QHBoxLayout, QHeaderView, QLabel,
@@ -59,8 +59,13 @@ class MusicTab(QWidget):
         hdr = self.list.header()
         hdr.setStretchLastSection(False)
         hdr.setSectionResizeMode(COL_NAME, QHeaderView.ResizeMode.Stretch)
-        for col, width in ((COL_DUR, 92), (COL_PLAYS, 102), (COL_VOL, 96), (COL_LUFS, 110)):
-            self.list.setColumnWidth(col, width)
+
+        def size_cols(*_) -> None:  # column widths follow the font size so header text is never clipped
+            for col, width in ((COL_DUR, 92), (COL_PLAYS, 102), (COL_VOL, 96), (COL_LUFS, 110)):
+                self.list.setColumnWidth(col, theme.px(width))
+            self.schedule.setColumnWidth(0, theme.px(105))
+        self._size_cols = size_cols
+        self.list.viewport().installEventFilter(self)
         for _c in (COL_DUR, COL_PLAYS, COL_VOL, COL_LUFS):
             self.list.headerItem().setTextAlignment(_c, Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter)
         self.list.headerItem().setToolTip(COL_PLAYS, "Số lần bài này được phát trong mỗi lượt playlist (0 = bỏ qua)")
@@ -121,7 +126,8 @@ class MusicTab(QWidget):
         self.schedule.setHeaderLabels(["Mốc bắt đầu", "Tên bài nhạc"])
         self.schedule.setRootIsDecorated(False)
         self.schedule.setAlternatingRowColors(True)
-        self.schedule.setColumnWidth(0, 105)
+        self._size_cols()
+        theme.on_change(self.schedule, self._size_cols)
         self.schedule_label = QLabel("Lịch phát dự kiến (YouTube Chapters)")
         self.schedule_label.setObjectName("h2")
         self.schedule_badge = QLabel("0 lượt")
@@ -634,6 +640,23 @@ class MusicTab(QWidget):
             rows.append(row)
         self.schedule.addTopLevelItems(rows)
         self.schedule_badge.setText(f"{len(items)} lượt phát")
+
+    def _fit_cols(self) -> None:
+        """Narrow list: hide Độ to gốc, then Âm lượng, until ~16 characters of the track name fit."""
+        lst = self.list
+        need = lst.fontMetrics().horizontalAdvance("0") * 18 + 44
+        widths = {c: theme.px(x) for c, x in ((COL_DUR, 92), (COL_PLAYS, 102), (COL_VOL, 96), (COL_LUFS, 110))}
+        free = lst.viewport().width() - sum(widths.values())
+        for c in (COL_LUFS, COL_VOL):
+            hide = free < need
+            lst.setColumnHidden(c, hide)
+            if hide:
+                free += widths[c]
+
+    def eventFilter(self, obj, ev):  # noqa: N802
+        if obj is self.list.viewport() and ev.type() == QEvent.Type.Resize:
+            QTimer.singleShot(0, self._fit_cols)
+        return super().eventFilter(obj, ev)
 
     def adapt(self, width: int, height: int = 0) -> None:
         """Gọi từ cửa sổ chính khi đổi kích thước: hẹp thì xếp phần cài đặt xuống dưới (bảng cao vừa một màn hình)."""

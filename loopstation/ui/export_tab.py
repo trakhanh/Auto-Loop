@@ -8,7 +8,7 @@ import shutil
 from pathlib import Path
 
 from PySide6.QtCore import QEasingCurve, QPropertyAnimation, QSettings, QSize, Qt, Signal
-from PySide6.QtGui import QColor
+from PySide6.QtGui import QColor, QIcon
 from PySide6.QtWidgets import (
     QCheckBox, QComboBox, QDoubleSpinBox, QFileDialog, QFormLayout, QFrame, QGroupBox, QHBoxLayout, QHeaderView, QLabel,
     QLineEdit, QMenu, QPlainTextEdit, QProgressBar, QPushButton, QScrollArea, QSplitter, QTreeWidget, QTreeWidgetItem,
@@ -176,11 +176,11 @@ class ExportTab(QWidget):
         row.addWidget(open_dir)
         self.filename = QLineEdit()
         self.filename.setPlaceholderText("Để trống = tự đặt theo Tên dự án + Ngày giờ")
-        self.tracklist = QCheckBox("Xuất kèm tracklist .txt (dán vào mô tả YouTube để tạo Chapter)")
-        self.project_copy = QCheckBox("Lưu kèm bản sao dự án (.lsproj) cạnh file xuất để dùng lại sau")
-        self.own_folder = QCheckBox("Mỗi video một thư mục riêng (video + các file kèm nằm chung)")
+        self.tracklist = w.ElidedCheckBox("Xuất kèm tracklist .txt (dán vào mô tả YouTube để tạo Chapter)")
+        self.project_copy = w.ElidedCheckBox("Lưu kèm bản sao dự án (.lsproj) cạnh file xuất để dùng lại sau")
+        self.own_folder = w.ElidedCheckBox("Mỗi video một thư mục riêng (video + các file kèm nằm chung)")
         self.own_folder.setToolTip("Ví dụ: Thư mục lưu › Ten-video › Ten-video.mp4 cùng file mốc thời gian, tracklist…")
-        self.markers = QCheckBox("Xuất kèm file mốc thời gian cho editor (đoạn LOOP / đoạn THƯỜNG)")
+        self.markers = w.ElidedCheckBox("Xuất kèm file mốc thời gian cho editor (đoạn LOOP / đoạn THƯỜNG)")
         self.markers.setToolTip("4 file: .txt để đọc, .csv mở bằng Excel, .srt kéo vào Premiere / CapCut / DaVinci "
                                 "thành track chữ trên timeline, .edl nhập marker vào DaVinci Resolve. "
                                 "Đoạn THƯỜNG là cảnh chèn — chỗ editor thêm sound effect.")
@@ -360,6 +360,7 @@ class ExportTab(QWidget):
         self.queue.customContextMenuRequested.connect(self._queue_menu)
         q_clean = QPushButton("Dọn mục đã xong")
         q_clean.setObjectName("ghost")
+        q_clean.setIconSize(QSize(13, 13))
         q_clean.clicked.connect(self._remove_finished)
         q_up = QPushButton("")
         q_up.setObjectName("ghost")
@@ -387,6 +388,12 @@ class ExportTab(QWidget):
         qr.addWidget(q_del)
         qr.addWidget(q_clean)
         qv.addLayout(qr)
+        self._q_row = [(q_del, "Xoá mục chọn", "Xoá các mục đang chọn khỏi hàng đợi"),
+                       (q_clean, "Dọn mục đã xong", "Bỏ các mục đã xuất xong khỏi hàng đợi"),
+                       (q_batch, "Xuất hàng loạt…", q_batch.toolTip())]
+        self._q_fixed = (self.queue_run_btn, q_up, q_down)
+        self._q_iconly = False
+        self._q_clean = q_clean
 
         g_log = QGroupBox("Nhật ký xử lý (FFmpeg Log)")
         lv_log = QVBoxLayout(g_log)
@@ -443,6 +450,9 @@ class ExportTab(QWidget):
 
         for cb in (self.preset, self.resolution, self.fps, self.encoder, self.quality, self.audio, self.cap):
             cb.currentIndexChanged.connect(self._emit)
+            # long item texts must not set the page's minimum width (bigger fonts)
+            cb.setSizeAdjustPolicy(QComboBox.SizeAdjustPolicy.AdjustToMinimumContentsLengthWithIcon)
+            cb.setMinimumContentsLength(12)
         self.cap.currentIndexChanged.connect(self._update_cap_ui)
         for sb in (self.cap_mbps, self.cap_gb):
             sb.valueChanged.connect(self._emit)
@@ -633,13 +643,26 @@ class ExportTab(QWidget):
         self.open_out_btn.setVisible(bool(output))
 
     def adapt(self, width: int, height: int = 0) -> None:
-        narrow = width < 1100
+        narrow = width < 1100 * max(1.0, theme.scale())  # bigger fonts need more room per column
         self.top_layout.setDirection(QHBoxLayout.Direction.TopToBottom if narrow
                                      else QHBoxLayout.Direction.LeftToRight)
         want = Qt.Orientation.Vertical if narrow else Qt.Orientation.Horizontal
         if self.bottom_split.orientation() != want:
             self.bottom_split.setOrientation(want)
         self.bottom_split.setMinimumHeight(560 if narrow else 280)
+        # queue action row: labels collapse to icons (tooltips keep the names) when the group is too narrow
+        fm = self.fontMetrics()
+        need = sum(fm.horizontalAdvance(t) + 44 for _b, t, _tip in self._q_row)
+        need += sum(b.sizeHint().width() for b in self._q_fixed if b.text()) + 2 * 32 + 5 * 6 + 20
+        group_w = width - 60 if narrow else (width - 60) // 2
+        icon_only = group_w < need
+        if icon_only != self._q_iconly:
+            self._q_iconly = icon_only
+            for b, text, tip in self._q_row:
+                b.setText("" if icon_only else text)
+                if b is self._q_clean:  # no icon while labelled
+                    b.setIcon(icons.icon("check", 13) if icon_only else QIcon())
+                b.setToolTip(f"{text}\n{tip}" if icon_only and tip != text else tip)
 
     # ---------- kiểu sản phẩm ----------
     def set_mode(self, mode: str) -> None:

@@ -19,7 +19,7 @@ class _Channel:
 
     def __init__(self, grid: QGridLayout, row: int, icon: str, color: str, name: str, tip: str):
         self.icon = QLabel()
-        self.icon.setPixmap(icons.icon(icon, 15, color).pixmap(15, 15))
+        icons.bind(self.icon, icon, 15, color)
         self.name = QLabel(name)
         self.name.setToolTip(tip)
         self.slider = QSlider(Qt.Orientation.Horizontal)
@@ -136,6 +136,7 @@ class MixerPanel(QGroupBox):
         self.play_btn = QPushButton("Nghe thử 20 giây")
         self.play_btn.setObjectName("accentBtn")
         self.play_btn.setIcon(icons.icon("play", 13, "accent_text"))
+        theme.on_change(self.play_btn, lambda btn: btn.setIcon(icons.icon(btn.property("icon_name") or "play", 13, "accent_text")))
         self.play_btn.setIconSize(QSize(13, 13))
         self.play_btn.setToolTip("Trộn nhanh 20 giây đúng như khi xuất (nhạc + tiếng gốc + tiếng nền) rồi phát trong app")
         self.play_btn.clicked.connect(self._toggle_play)
@@ -278,6 +279,7 @@ class MixerPanel(QGroupBox):
     def _set_play_text(self) -> None:
         playing = self.is_playing()
         self.play_btn.setText("Dừng nghe" if playing else "Nghe thử 20 giây")
+        self.play_btn.setProperty("icon_name", "stop" if playing else "play")  # read back when the palette changes
         self.play_btn.setIcon(icons.icon("stop" if playing else "play", 13, "accent_text"))
 
     def play_stems(self, stems: dict[str, bytes], start: float) -> None:

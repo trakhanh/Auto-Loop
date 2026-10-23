@@ -11,7 +11,7 @@ import random
 from pathlib import Path
 
 from PySide6.QtCore import QRegularExpression, QSettings, QSize, Qt, QTimer
-from PySide6.QtGui import QColor, QRegularExpressionValidator
+from PySide6.QtGui import QRegularExpressionValidator
 from PySide6.QtWidgets import (
     QAbstractItemView, QCheckBox, QComboBox, QDialog, QDialogButtonBox, QFormLayout, QGroupBox, QHBoxLayout,
     QHeaderView, QInputDialog, QLabel, QLineEdit, QListWidget, QListWidgetItem, QMessageBox, QPushButton, QSpinBox,
@@ -60,6 +60,9 @@ class InterleaveDialog(QDialog):
         self.settings = settings
         self.result_clips: list[ClipItem] | None = None
         self._busy = False
+        self._pv_tones: list[str] = []  # colour token per preview row, so a palette change can recolour them
+        self._warn_msg = ""
+        theme.on_change(self, InterleaveDialog._on_theme)  # unbound: the listener list must not keep the dialog alive
 
         # danh sách file duy nhất theo thứ tự xuất hiện
         self._unique: list[int] = []
@@ -176,7 +179,7 @@ class InterleaveDialog(QDialog):
             b.setObjectName("ghost")
             b.setToolTip(tip)
             if icon:
-                b.setIcon(icons.icon(icon, 14))
+                icons.bind(b, icon, 14)
                 b.setIconSize(QSize(14, 14))
             b.clicked.connect(fn)
             return b
@@ -461,13 +464,25 @@ class InterleaveDialog(QDialog):
         x = min(c.loop_xfade, d * 0.45)
         return n * d - (n - 1) * x
 
+    def _warn(self, msg: str) -> None:
+        self._warn_msg = msg
+        self.summary.setText(f"<span style='color:{theme.T['warn_text']}'>{msg}</span>")
+
+    def _on_theme(self, _wd=None) -> None:
+        """Palette changed while the dialog is open: recolour the preview rows and the warning text."""
+        for k, tone in enumerate(self._pv_tones):
+            self.preview.item(k).setForeground(theme.qcolor(tone))
+        if self._warn_msg:
+            self._warn(self._warn_msg)
+
     def _update(self) -> None:
         if self._busy:
             return
         self.preview.clear()
+        self._pv_tones = []
         opt = self._options()
         if opt is None:
-            self.summary.setText("<span style='color:" + theme.T["warn_text"] + "'>Số lần phát của clip nền chưa hợp lệ.</span>")
+            self._warn("Số lần phát của clip nền chưa hợp lệ.")
             self.ok_btn.setEnabled(False)
             return
         out = il.build(self.clips, opt)
@@ -485,13 +500,14 @@ class InterleaveDialog(QDialog):
             if not is_base and c.enabled:
                 n_ins += 1
             it = QListWidgetItem(f"{k + 1:>3}.  [{tag}]  {Path(c.path).name}    {plays}    ≈ {w.fmt_dur(sec)}")
-            it.setForeground(QColor(theme.T['accent_text']) if is_base else theme.qcolor("text_muted") if not c.enabled
-                             else theme.qcolor("text"))
+            tone = "accent_text" if is_base else "text_muted" if not c.enabled else "text"
+            it.setForeground(theme.qcolor(tone))
+            self._pv_tones.append(tone)
             self.preview.addItem(it)
         if n_ins == 0:
-            self.summary.setText("<span style='color:" + theme.T["warn_text"] + "'>Chưa có cảnh chèn nào được chọn — tick ít nhất "
-                                 "một cảnh (và Xuất hiện ≥ 1).</span>")
+            self._warn("Chưa có cảnh chèn nào được chọn — tick ít nhất một cảnh (và Xuất hiện ≥ 1).")
         else:
+            self._warn_msg = ""
             rnd = f" · {opt.repeat} lượt mẫu" if opt.repeat > 1 else ""
             self.summary.setText(f"<b>{len(out)}</b> dòng · <b>{n_ins}</b> lần chèn cảnh{rnd} · tổng ≈ "
                                  f"<b>{w.fmt_dur(total)}</b> (chưa trừ phần nối crossfade)")

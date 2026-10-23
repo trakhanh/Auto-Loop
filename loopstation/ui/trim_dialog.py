@@ -230,13 +230,15 @@ class TrimDialog(QDialog):
         self.mute_btn.setCheckable(True)
         self.mute_btn.setFixedSize(QSize(36, 36))
         self.mute_btn.setToolTip("Tắt / bật tiếng")
+        theme.on_change(self.play_btn, lambda b: b.setIcon(icons.icon(b.property("icon_name") or "play", 18, "accent_text")))
+        theme.on_change(self.mute_btn, lambda b: b.setIcon(icons.icon(b.property("icon_name") or "volume", 16)))
         self.mute_btn.toggled.connect(self._toggle_mute)
         set_in = QPushButton("Đặt điểm đầu tại đây")
-        set_in.setIcon(icons.icon("mark_in", 14))
+        icons.bind(set_in, "mark_in", 14)
         set_in.setToolTip("Bỏ mọi thứ trước vị trí đang phát (phím I)")
         set_in.clicked.connect(self._mark_in)
         set_out = QPushButton("Đặt điểm cuối tại đây")
-        set_out.setIcon(icons.icon("mark_out", 14))
+        icons.bind(set_out, "mark_out", 14)
         set_out.setToolTip("Bỏ mọi thứ sau vị trí đang phát (phím O)")
         set_out.clicked.connect(self._mark_out)
         transport = QHBoxLayout()
@@ -411,6 +413,7 @@ class TrimDialog(QDialog):
         self._update_buttons(state == QMediaPlayer.PlaybackState.PlayingState)
 
     def _update_buttons(self, playing: bool) -> None:
+        self.play_btn.setProperty("icon_name", "pause" if playing else "play")  # read back when the palette changes
         self.play_btn.setIcon(icons.icon("pause" if playing else "play", 18, "accent_text"))
 
     def _on_position(self, ms: int) -> None:
@@ -440,6 +443,7 @@ class TrimDialog(QDialog):
     def _toggle_mute(self, muted: bool) -> None:
         if self.player is not None:
             self.audio.setMuted(muted)
+        self.mute_btn.setProperty("icon_name", "volume_x" if muted else "volume")
         self.mute_btn.setIcon(icons.icon("volume_x" if muted else "volume", 16))
 
     def _seek(self, t: float) -> None:

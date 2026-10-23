@@ -17,7 +17,7 @@ from PySide6.QtWidgets import (
     QApplication, QAbstractScrollArea, QAbstractSpinBox, QComboBox, QFrame, QGraphicsOpacityEffect,
     QLayout, QMenu, QScrollArea, QSizePolicy, QStackedWidget,
     QAbstractItemView, QCheckBox, QFileDialog, QHBoxLayout, QLineEdit, QPushButton,
-    QDoubleSpinBox, QLabel, QSpinBox, QStyledItemDelegate, QTreeWidget, QTreeWidgetItem, QWidget,
+    QDoubleSpinBox, QLabel, QSpinBox, QStyle, QStyledItemDelegate, QStyleOptionButton, QStylePainter, QTreeWidget, QTreeWidgetItem, QWidget,
 )
 
 from ..core import ffmpeg_tools as ft
@@ -169,7 +169,7 @@ class TwoLineNameDelegate(QStyledItemDelegate):
         col = title_color.color() if hasattr(title_color, "color") else (title_color or theme.qcolor("text"))
         painter.setPen(QColor(col))
         painter.drawText(QRect(r.left(), y, r.width(), fm1.height()), Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignVCenter,
-                         fm1.elidedText(title, Qt.TextElideMode.ElideMiddle, r.width()))
+                         fm1.elidedText(title, Qt.TextElideMode.ElideRight, r.width()))
         if sub:
             painter.setFont(f2)
             painter.setPen(QColor(sub_color))
@@ -801,7 +801,7 @@ class ListToolbar(QWidget):
         super().__init__(parent)
         self.lst = lst
         self.recursive = QCheckBox("Cả thư mục con")
-        self.recursive.setFixedHeight(32)
+        self.recursive.setMinimumHeight(32)
         self.recursive.setToolTip("Quét thư mục con: khi thêm thư mục hoặc kéo thả thư mục, tự quét cả các thư mục con bên trong")
         lay = QHBoxLayout(self)
         lay.setContentsMargins(0, 0, 0, 0)
@@ -819,8 +819,12 @@ class ListToolbar(QWidget):
         folder_btn.setToolTip("Chọn và quét cả thư mục")
         folder_btn.clicked.connect(add_folder)
         for b in (add_btn, folder_btn):
-            b.setFixedHeight(32)
+            b.setMinimumHeight(32)
             lay.addWidget(b)
+        self.add_btn, self.folder_btn = add_btn, folder_btn
+        self._labels = {add_btn: "Thêm file", folder_btn: "Thư mục"}
+        self._full_w: dict = {}
+        self._stage = 0  # 0 full, 1 folder icon-only + "cả thư mục con" in the menu, 2 add button icon-only too
         lay.addWidget(self.recursive)
 
         # ----- tìm theo tên file -----
@@ -830,7 +834,7 @@ class ListToolbar(QWidget):
         self.search.setClearButtonEnabled(True)
         self.search.addAction(icons.icon("search", 14, "text_muted"), QLineEdit.ActionPosition.LeadingPosition)
         self.search.setMinimumWidth(120)
-        self.search.setFixedHeight(32)
+        self.search.setMinimumHeight(32)
         self.search.setToolTip("Gõ một phần tên file, không cần dấu (\"mua\" ra \"Mưa…\"). Nhiều từ = phải có đủ.\n"
                                "Khi đang tìm: Xoá, Bật/Tắt, Chọn tất cả chỉ áp cho các dòng đang hiện. Esc để xoá.")
         self.search.textChanged.connect(lst.apply_filter)
@@ -870,8 +874,17 @@ class ListToolbar(QWidget):
         sel.addAction("Chỉ bật các dòng đang bôi đen", lambda: lst.set_all_checked("selected"))
         menu.addSeparator()
         menu.addAction(icons.icon("trash", 14, "danger_text"), "Xoá tất cả", lst.clear_all)
+        # narrow: the "include subfolders" checkbox moves into this menu (same state as the checkbox)
+        self._rec_sep = menu.addSeparator()
+        self._rec_act = menu.addAction("Cả thư mục con khi thêm thư mục")
+        self._rec_act.setCheckable(True)
+        self._rec_act.toggled.connect(self.recursive.setChecked)
+        self.recursive.toggled.connect(self._rec_act.setChecked)
+        self._rec_sep.setVisible(False)
+        self._rec_act.setVisible(False)
         more.setMenu(menu)
         self.more_btn = more
+        theme.on_change(self, ListToolbar._on_theme)
         lay.addWidget(more)
 
         lst.filterChanged.connect(self._on_filter)
@@ -884,6 +897,66 @@ class ListToolbar(QWidget):
         esc.setContext(Qt.ShortcutContext.WidgetShortcut)
         esc.activated.connect(self.search.clear)
 
+    def _on_theme(self, _wd=None) -> None:
+        self._full_w.clear()  # label widths depend on the font size
+        self.updateGeometry()
+        self._fit()
+
+    def _widths(self) -> tuple[int, int, int]:
+        """Row width needed per stage (0 full, 1 folder icon-only + subfolders in menu, 2 add icon-only too)."""
+        if not self._full_w:
+            for b, text in self._labels.items():
+                b.setText(text)
+                b.setMinimumWidth(0)
+                b.setMaximumWidth(16777215)
+                self._full_w[b] = b.sizeHint().width()
+            self._full_w[self.recursive] = self.recursive.sizeHint().width()
+            self._stage = 0
+            self.recursive.setVisible(True)
+            self._rec_sep.setVisible(False)
+            self._rec_act.setVisible(False)
+        sp = self.layout().spacing()
+        fw = self._full_w
+        tail = self.search.minimumWidth() + 64 + (self.match.sizeHint().width() if self.match.text() else 0)
+        w0 = fw[self.add_btn] + fw[self.folder_btn] + fw[self.recursive] + tail + sp * 6
+        w1 = fw[self.add_btn] + 32 + tail + sp * 5
+        w2 = 32 + 32 + tail + sp * 5
+        return w0, w1, w2
+
+    def minimumSizeHint(self) -> QSize:  # noqa: N802
+        return QSize(self._widths()[2], 32)
+
+    def _fit(self) -> None:
+        """Too narrow for the full row: collapse labels to icons and move extras into the "…" menu."""
+        if self.width() < 40:
+            return
+        w0, w1, _ = self._widths()
+        want = 0 if self.width() >= w0 else (1 if self.width() >= w1 else 2)
+        if want == self._stage:
+            return
+        self._stage = want
+        self.recursive.setVisible(want == 0)
+        self._rec_sep.setVisible(want > 0)
+        self._rec_act.setVisible(want > 0)
+        for b, icon_only in ((self.folder_btn, want >= 1), (self.add_btn, want >= 2)):
+            b.setText("" if icon_only else self._labels[b])
+            if icon_only:
+                b.setFixedWidth(32)
+            else:
+                b.setMinimumWidth(0)
+                b.setMaximumWidth(16777215)
+        self.add_btn.setToolTip("Thêm file lẻ (hoặc bấm vào bảng trống / kéo thả file vào bảng)")
+        self.folder_btn.setToolTip("Chọn và quét cả thư mục")
+        self.updateGeometry()
+
+    def resizeEvent(self, e) -> None:  # noqa: N802
+        super().resizeEvent(e)
+        self._fit()
+        full = "Tìm tên file…  (Ctrl+F)"
+        room = self.search.width() - 60  # leading icon + clear button + padding
+        self.search.setPlaceholderText(full if self.search.fontMetrics().horizontalAdvance(full) <= room
+                                       else "Tìm tên file…")
+
     def _refilter(self) -> None:
         if self.lst.filtering():
             self.lst.apply_filter()
@@ -891,6 +964,8 @@ class ListToolbar(QWidget):
     def _on_filter(self, shown: int, total: int) -> None:
         self.match.setText(f"{shown}/{total} khớp" if self.lst.filtering() else "")
         theme.tag(self.match, role="match", tone="danger" if self.lst.filtering() and not shown else "")
+        self.updateGeometry()
+        self._fit()
 
     def _focus_search(self) -> None:
         if self.isVisible():  # chỉ trang đang mở
@@ -1097,6 +1172,25 @@ class ElidedLabel(QLabel):
         if shown != self.text():
             super().setText(shown)
         self.setToolTip(self._tip or (self._full if shown != self._full else ""))
+
+
+class ElidedCheckBox(QCheckBox):
+    """Ô tick có chữ dài: hẹp thì rút gọn bằng "…" (đầy đủ nằm trong tooltip) thay vì đòi chiều rộng tối thiểu lớn."""
+
+    def __init__(self, text: str = "", parent=None):
+        super().__init__(text, parent)
+        self.setSizePolicy(QSizePolicy.Policy.Ignored, QSizePolicy.Policy.Fixed)
+        self.setToolTip(text)
+
+    def minimumSizeHint(self) -> QSize:  # noqa: N802
+        return QSize(60, super().minimumSizeHint().height())
+
+    def paintEvent(self, e) -> None:  # noqa: N802
+        opt = QStyleOptionButton()
+        self.initStyleOption(opt)
+        room = self.style().subElementRect(QStyle.SubElement.SE_CheckBoxContents, opt, self).width()
+        opt.text = QFontMetrics(self.font()).elidedText(opt.text, Qt.TextElideMode.ElideRight, max(0, room))
+        QStylePainter(self).drawControl(QStyle.ControlElement.CE_CheckBox, opt)
 
 
 def hairline() -> QFrame:

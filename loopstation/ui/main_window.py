@@ -461,7 +461,7 @@ class MainWindow(QMainWindow):
 
         self.tl_toggle = QPushButton("Dòng thời gian")
         self.tl_toggle.setObjectName("ghost")
-        self.tl_toggle.setFixedHeight(32)
+        self.tl_toggle.setMinimumHeight(32)
         self.tl_toggle.setIcon(icons.icon("timeline", 14))
         self.tl_toggle.setIconSize(QSize(14, 14))
         self.tl_toggle.setCheckable(True)
@@ -602,7 +602,7 @@ class MainWindow(QMainWindow):
     def resizeEvent(self, e) -> None:  # noqa: N802
         if e is not None:
             super().resizeEvent(e)
-        self._set_compact(self.width() < 1280)
+        self._set_compact(self.width() < 1280 * max(1.0, theme.scale()))  # bigger fonts need more room
         if not getattr(self, "_tl_user", True):  # màn hình laptop thấp: nhường chỗ cho nội dung chính
             want = self.height() >= 820  # màn hình thấp: thu gọn dòng thời gian để bảng clip có chỗ
             if self.tl_toggle.isChecked() != want:

@@ -6,7 +6,7 @@ import random
 from pathlib import Path
 
 import shiboken6
-from PySide6.QtCore import QTimer, QRegularExpression, QSettings, QSize, Qt, Signal
+from PySide6.QtCore import QEvent, QTimer, QRegularExpression, QSettings, QSize, Qt, Signal
 from PySide6.QtGui import QColor, QIcon, QKeySequence, QPixmap, QRegularExpressionValidator, QShortcut
 from PySide6.QtWidgets import (
     QCheckBox, QComboBox, QDoubleSpinBox, QFormLayout, QFrame, QGroupBox, QHBoxLayout, QHeaderView,
@@ -203,6 +203,8 @@ class VideoTab(QWidget):
         # cột tên vẽ 2 dòng (tên + thông số) nên cột "Thông tin nguồn" riêng được ẩn đi cho rộng chỗ
         self.list.setItemDelegateForColumn(COL_NAME, w.TwoLineNameDelegate(self.list))
         self.list.setColumnHidden(COL_INFO, True)
+        self.list.viewport().installEventFilter(self)
+        theme.on_change(self.list, lambda _w: self._fit_cols())
         hdr = self.list.header()
         hdr.setStretchLastSection(False)
         hdr.setMinimumSectionSize(56)
@@ -308,7 +310,7 @@ class VideoTab(QWidget):
         lbl_fast.setToolTip("Đặt số lần phát cho các dòng đang chọn trong bảng (bôi đen nhiều dòng để đặt cùng lúc)")
         r1.addWidget(fast_ic)
         r1.addWidget(lbl_fast)
-        self.bulk.setFixedHeight(30)
+        self.bulk.setMinimumHeight(30)
         self.bulk.setPlaceholderText("Số lần")
         r1.addWidget(self.bulk)
         for p_txt, p_val in (("×1", "1"), ("×10", "10"), ("×70", "70"), ("10p", "10p"), ("1h", "1h")):
@@ -317,10 +319,10 @@ class VideoTab(QWidget):
             pb.setToolTip(f"Loop cho đủ {p_val.replace('p', ' phút').replace('h', ' giờ')} cho dòng đang chọn"
                           if not p_val.isdigit() else f"Đặt nhanh {p_val} lần phát cho dòng đang chọn")
             pb.clicked.connect(lambda _=False, v=p_val: self._quick_plays(v))
-            pb.setFixedHeight(30)
+            pb.setMinimumHeight(30)
             r1.addWidget(pb)
         b_apply.setObjectName("accentBtn")
-        b_apply.setFixedHeight(30)
+        b_apply.setMinimumHeight(30)
         r1.addWidget(b_apply)
         r1.addStretch(1)
         self.more_tools = QPushButton("Cắt && hoà hình ▾")
@@ -993,6 +995,30 @@ class VideoTab(QWidget):
             if shiboken6.isValid(it):  # dòng đã bị xoá khỏi bảng thì bỏ qua
                 it.setIcon(COL_NAME, icon)
         self.list.blockSignals(False)
+
+    def _fit_cols(self) -> None:
+        """Narrow table (big fonts / small window): the name column keeps ~16 readable characters; the least
+        important columns (Sang clip, Đoạn lấy, Nối loop) hide until it fits. Their values stay in the cell tooltips."""
+        lst, fm = self.list, self.list.fontMetrics()
+        need = fm.horizontalAdvance("0") * 18 + w.ThumbLoader.W + 44
+        shown = [c for c in (COL_PLAYS, COL_DUR, COL_TRIM, COL_LOOPXF, COL_NEXTXF)]
+        for c in (COL_NEXTXF, COL_TRIM, COL_LOOPXF):
+            lst.setColumnHidden(c, False)
+        sizes = {c: max(lst.header().sectionSizeHint(c), lst.sizeHintForColumn(c) + 16) for c in shown}
+        free = lst.viewport().width() - sum(sizes.values())
+        hide = []
+        for c in (COL_NEXTXF, COL_TRIM, COL_LOOPXF):
+            if free >= need:
+                break
+            free += sizes[c]
+            hide.append(c)
+        for c in hide:
+            lst.setColumnHidden(c, True)
+
+    def eventFilter(self, obj, ev):  # noqa: N802
+        if obj is self.list.viewport() and ev.type() == QEvent.Type.Resize:
+            QTimer.singleShot(0, self._fit_cols)
+        return super().eventFilter(obj, ev)
 
     def adapt(self, width: int, height: int = 0) -> None:
         """Gọi từ cửa sổ chính khi đổi kích thước: hẹp thì xếp phần cài đặt xuống dưới (bảng cao vừa một màn hình)."""

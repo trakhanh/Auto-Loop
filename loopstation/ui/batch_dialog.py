@@ -6,7 +6,6 @@ import os
 from pathlib import Path
 
 from PySide6.QtCore import QSettings, QSize, Qt, QTimer
-from PySide6.QtGui import QColor
 from PySide6.QtWidgets import (
     QApplication, QButtonGroup, QCheckBox, QComboBox, QMenu, QDialog, QDialogButtonBox, QDoubleSpinBox, QFormLayout,
     QFrame, QHBoxLayout, QHeaderView, QLabel, QLineEdit, QPushButton, QSpinBox, QTreeWidget, QTreeWidgetItem,
@@ -212,6 +211,8 @@ class BatchDialog(QDialog):
         self._vol_overrides: dict[str, dict] = {}  # thư mục → âm lượng riêng {"music", "source", "amb": [...]}
         self._row_info: list[tuple[float, list[float]]] = []  # (thời lượng, mốc đổi bài) để chọn chỗ nghe thử
         self._play_btns: dict[int, QPushButton] = {}
+        self._note_tones: list = []  # (row item, colour token) so a palette change can recolour the notes
+        theme.on_change(self, BatchDialog._on_theme)  # unbound: the listener list must not keep the dialog alive
         self._playing_row: int | None = None
         self._fade = None
 
@@ -226,7 +227,7 @@ class BatchDialog(QDialog):
         self.kind_buttons: dict[str, QPushButton] = {}
         for key, ic, tip in KINDS:
             b = QPushButton(KIND_TEXT[key])
-            b.setIcon(icons.icon(ic, 14))
+            icons.bind(b, ic, 14)
             b.setIconSize(QSize(14, 14))
             b.setCheckable(True)
             b.setChecked(key == self.kind)
@@ -275,7 +276,7 @@ class BatchDialog(QDialog):
         browse.clicked.connect(self._browse)
         self.sample = QPushButton("Thư mục thử")
         self.sample.setObjectName("ghost")
-        self.sample.setIcon(icons.icon("folder", 14))
+        icons.bind(self.sample, "folder", 14)
         self.sample.setIconSize(QSize(14, 14))
         self.sample.setToolTip("Dùng thư mục mẫu Mau-Test\\Hang-loat (3 video) để thử")
         self._sample_dir = Path(ft.app_dir()) / "Mau-Test" / "Hang-loat"
@@ -502,6 +503,15 @@ class BatchDialog(QDialog):
         combo.setCurrentIndex(max(0, combo.findData(want)))
         combo.blockSignals(False)
 
+    def _on_theme(self, _wd=None) -> None:
+        """Palette changed while the dialog is open: re-render the colour-coded card and the note column."""
+        if hasattr(self, "card_text"):
+            left, right = kind_card_html(self.kind, self._audio_ext)
+            self.card_text.setText(left)
+            self.card_tree.setText(right)
+        for it, tone in self._note_tones:
+            it.setForeground(C_NOTE, theme.qcolor(tone))
+
     def _apply_kind(self, initial: bool = False) -> None:
         """Hiện đúng những gì kiểu đang chọn cần: khung hướng dẫn, các hàng, lựa chọn trong ô, cột của bảng."""
         k, mo, t = self.kind, self.music_only, self.template
@@ -712,6 +722,7 @@ class BatchDialog(QDialog):
         self._projects: list[Project | None] = []
         self._row_info = []
         self._play_btns = {}
+        self._note_tones = []
         if not self.jobs:
             self.tree.blockSignals(False)
             self.summary.setText("<span style='color:" + theme.T["warn_text"] + "'>Không thấy thư mục con nào.</span>"
@@ -776,13 +787,15 @@ class BatchDialog(QDialog):
                              else Qt.CheckState.Unchecked)
             if not ok:
                 it.setFlags(it.flags() & ~Qt.ItemFlag.ItemIsUserCheckable & ~Qt.ItemFlag.ItemIsEnabled)
-                it.setForeground(C_NOTE, theme.qcolor("danger_text"))
+                tone = "danger_text"
             elif edited or vol_edited:
-                it.setForeground(C_NOTE, QColor(theme.T['accent_text']))
+                tone = "accent_text"
             elif job.notes or extra:
-                it.setForeground(C_NOTE, theme.qcolor("warn_text"))
+                tone = "warn_text"
             else:
-                it.setForeground(C_NOTE, theme.qcolor("success_text"))
+                tone = "success_text"
+            it.setForeground(C_NOTE, theme.qcolor(tone))
+            self._note_tones.append((it, tone))
             it.setData(C_NAME, Qt.ItemDataRole.UserRole, total)
             self._projects.append(proj)
             self._row_info.append((total, changes))
@@ -790,7 +803,7 @@ class BatchDialog(QDialog):
             if ok:
                 pbtn = QPushButton("Xem")
                 pbtn.setObjectName("pill")
-                pbtn.setIcon(icons.icon("play", 12))
+                icons.bind(pbtn, "play", 12)
                 pbtn.setIconSize(QSize(12, 12))
                 pbtn.setToolTip(f"Phát {self._unit} này trong trình phát bên phải (hình + tiếng, đúng âm lượng đang đặt)")
                 pbtn.setMinimumWidth(pbtn.sizeHint().width() + 10)
