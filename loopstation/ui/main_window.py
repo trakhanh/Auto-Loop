@@ -356,7 +356,7 @@ class MainWindow(QMainWindow):
         hw_lay.setContentsMargins(10, 8, 10, 8)
         hw_lay.setSpacing(6)
         hw_ic = QLabel()
-        hw_ic.setPixmap(icons.pixmap("chip", 14, theme.C["mid"]))
+        hw_ic.setPixmap(icons.pixmap("chip", 14, theme.T['accent_text']))
         hw_ic.setFixedSize(14, 14)
         self.gpu_label = QLabel("Đang kiểm tra card đồ hoạ…")
         self.gpu_label.setObjectName("muted")
@@ -432,7 +432,6 @@ class MainWindow(QMainWindow):
         self.chip_seq = chip()
         self.chip_rounds = chip()
         self.chip_total = chip("", "chipAccent")
-        effects.Glow(self.chip_total, idle=0.45, blur=22, offset_y=2, alpha=150)  # tổng thời lượng sáng nổi
         self.chip_warn = chip("", "chipWarn")
         self.chip_size = chip()
         self.chip_size.hide()
@@ -732,7 +731,7 @@ class MainWindow(QMainWindow):
                 hint = ("<b>Thêm clip:</b> kéo thả video / ảnh / cả thư mục vào bảng (hoặc bấm vào khung trống). "
                         "Có clip tên <i>loop…</i> và các cảnh <i>2_, 3_…</i>? Bấm <b>Xen kẽ clip nền</b> để tự xếp.")
             elif not ok_tl:
-                hint = "<span style='color:#fca5a5'>Còn lỗi ở bảng clip — xem dòng màu đỏ / thanh trên cùng.</span>"
+                hint = "<span style='color:" + theme.T["danger_text"] + "'>Còn lỗi ở bảng clip — xem dòng màu đỏ / thanh trên cùng.</span>"
             else:
                 ok = True
                 nxt = "Nhạc" if self.mode == "video_music" else "Xuất"
@@ -763,7 +762,7 @@ class MainWindow(QMainWindow):
             if not proj.export.output_dir:
                 hint = "<b>Chọn thư mục lưu</b> ở thẻ <i>Nơi lưu</i> bên phải, rồi bấm <b>Bắt đầu xuất</b>."
             elif not ok_tl:
-                hint = ("<span style='color:#fca5a5'>Chưa xuất được — quay lại bước trước để thêm clip / nhạc.</span>")
+                hint = ("<span style='color:" + theme.T["danger_text"] + "'>Chưa xuất được — quay lại bước trước để thêm clip / nhạc.</span>")
             else:
                 ok = True
                 size = getattr(self, "_size_text", "")
@@ -997,7 +996,7 @@ class MainWindow(QMainWindow):
             self._set_chips(error=" · ".join(tl.errors))
             self.video_tab.set_preview("\n".join(tl.errors + tl.warnings))
             self.music_tab.set_schedule([], track_paths, 0, "Chưa tính được lịch phát: " + " ".join(tl.errors))
-            self.export_tab.set_summary("<span style='color:#fca5a5'>" + "<br>".join(tl.errors) + "</span>")
+            self.export_tab.set_summary("<span style='color:" + theme.T["danger_text"] + "'>" + "<br>".join(tl.errors) + "</span>")
             return
         self.export_tab.set_can_export(True)
         v = tl.video
@@ -1047,7 +1046,7 @@ class MainWindow(QMainWindow):
                  f"Âm thanh: <b>{' + '.join(parts) or 'không có'}</b>",
                  f"Ổ lưu: {self.export_tab.free_space_text() or 'chưa chọn thư mục'} · {self.export_tab.gpu_text()}"]
         if tl.warnings:
-            lines.append("<span style='color:#fcd34d'>Lưu ý: " + "<br>Lưu ý: ".join(tl.warnings) + "</span>")
+            lines.append("<span style='color:" + theme.T["warn_text"] + "'>Lưu ý: " + "<br>Lưu ý: ".join(tl.warnings) + "</span>")
         self.export_tab.set_summary("<br>".join(lines))
         self._schedule_size(proj, tl)
 
@@ -1109,7 +1108,7 @@ class MainWindow(QMainWindow):
         tips = []
         free = self.export_tab.free_bytes()
         if free is not None and free < est.bytes * 1.05:
-            tips.append(f"<span style='color:#fca5a5'>Ổ đĩa chỉ còn {size_estimate.fmt_size(free)} — không đủ chỗ.</span>")
+            tips.append(f"<span style='color:{theme.T['danger_text']}'>Ổ đĩa chỉ còn {size_estimate.fmt_size(free)} — không đủ chỗ.</span>")
         if est.maxrate_kbps:
             tips.append(f"Đang chặn bitrate hình tối đa {est.maxrate_kbps / 1000:.1f} Mbps.")
         if ex.bitrate_cap == "size" and est.bytes < ex.cap_gb * 1024 ** 3 * 0.8:
@@ -1186,7 +1185,7 @@ class MainWindow(QMainWindow):
         if tl.ambient_infos:
             banner += f" · {len(tl.ambient_infos)} lớp tiếng nền."
         if tl.warnings:
-            banner += "<br><span style='color:#fcd34d'>" + "<br>".join(tl.warnings) + "</span>"
+            banner += "<br><span style='color:" + theme.T["warn_text"] + "'>" + "<br>".join(tl.warnings) + "</span>"
         self.music_tab.set_schedule(tl.music_items, track_paths, tl.total, banner)
         self.export_tab.start_btn.setText(f"Xuất {n_ver} bản nhạc" if n_ver > 1 else "Bắt đầu xuất file nhạc")
         self.video_tab.set_preview("Kiểu “Chỉ nhạc” — trang Video đã được bỏ qua.")

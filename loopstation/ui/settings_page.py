@@ -37,19 +37,16 @@ def _short(enc: str) -> str:
     return CODEC_SHORT.get(enc) or CODEC_SHORT.get(enc.split("_")[0], enc)
 
 
-def _swatch(a: str, b: str):
-    """Ô màu nhỏ (dải chuyển màu a → b) cạnh tên bộ màu."""
-    from PySide6.QtGui import QIcon, QLinearGradient, QPainter, QPainterPath, QPixmap
-    pm = QPixmap(68, 28)
+def _swatch(accent: str):
+    """Chấm màu nhấn (phẳng) cạnh tên bộ màu."""
+    from PySide6.QtGui import QIcon, QPainter, QPainterPath, QPixmap
+    pm = QPixmap(28, 28)
     pm.fill(Qt.GlobalColor.transparent)
     p = QPainter(pm)
     p.setRenderHint(QPainter.RenderHint.Antialiasing)
-    g = QLinearGradient(0, 0, 68, 0)
-    g.setColorAt(0, QColor(a))
-    g.setColorAt(1, QColor(b))
     path = QPainterPath()
-    path.addRoundedRect(1, 1, 66, 26, 9, 9)
-    p.fillPath(path, g)
+    path.addEllipse(3, 3, 22, 22)
+    p.fillPath(path, QColor(accent))
     p.end()
     pm.setDevicePixelRatio(2)
     return QIcon(pm)
@@ -79,7 +76,7 @@ class SettingsPage(QWidget):
         title.setObjectName("appName")
         recheck = QPushButton("Kiểm tra lại phần cứng")
         recheck.setObjectName("accentBtn")
-        recheck.setIcon(icons.icon("refresh", 14, "#ffffff"))
+        recheck.setIcon(icons.icon("refresh", 14, "accent_text"))
         recheck.setIconSize(QSize(14, 14))
         recheck.clicked.connect(lambda: self.recheckRequested.emit())
         head = QHBoxLayout()
@@ -110,7 +107,7 @@ class SettingsPage(QWidget):
         # ----- đo tốc độ -----
         self.bench_btn = QPushButton("Đo tốc độ mã hoá (khoảng 30 giây)")
         self.bench_btn.setObjectName("accentBtn")
-        self.bench_btn.setIcon(icons.icon("play", 13, "#ffffff"))
+        self.bench_btn.setIcon(icons.icon("play", 13, "accent_text"))
         self.bench_btn.setIconSize(QSize(13, 13))
         self.bench_btn.clicked.connect(self._run_bench)
         self.bench_rows = QFormLayout()
@@ -184,7 +181,7 @@ class SettingsPage(QWidget):
         self.cache_label.setObjectName("chip")
         clear = QPushButton("Xoá bộ nhớ đệm")
         clear.setObjectName("danger")
-        clear.setIcon(icons.icon("trash", 14, "#fca5a5"))
+        clear.setIcon(icons.icon("trash", 14, "danger_text"))
         clear.setIconSize(QSize(14, 14))
         clear.clicked.connect(self._clear_cache)
         self.clear_cache_btn = clear
@@ -215,9 +212,9 @@ class SettingsPage(QWidget):
         f.setVerticalSpacing(8)
         f.addRow("Cỡ chữ ứng dụng", self.font_combo)
         self.palette_combo = QComboBox()
-        for key, (label, a1, a2, _mid, _soft) in theme.PALETTES.items():
-            self.palette_combo.addItem(_swatch(a1, a2), label, key)
-        self.palette_combo.setIconSize(QSize(34, 14))
+        for key, (label, accent, _a2, _text, _soft) in theme.PALETTES.items():
+            self.palette_combo.addItem(_swatch(accent), label, key)
+        self.palette_combo.setIconSize(QSize(14, 14))
         self.palette_combo.setCurrentIndex(max(0, self.palette_combo.findData(
             settings.value("pref/palette", theme.PALETTE))))
         self.palette_combo.setToolTip("Màu của nút chính, thanh chọn, quầng sáng… Đổi là thấy ngay.")

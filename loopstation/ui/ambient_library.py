@@ -10,7 +10,7 @@ from PySide6.QtWidgets import (
 )
 
 from ..core import ambient_lib
-from . import icons
+from . import icons, theme
 from . import widgets as w
 
 
@@ -55,7 +55,7 @@ class AmbientLibraryDialog(QDialog):
             else:
                 it.setFlags(it.flags() | Qt.ItemFlag.ItemIsUserCheckable)
                 it.setCheckState(0, Qt.CheckState.Unchecked)
-            it.setIcon(0, icons.icon("waves", 14, "#22d3ee"))
+            it.setIcon(0, icons.icon("waves", 14, "info_text"))
             self.tree.addTopLevelItem(it)
         self.tree.setCurrentItem(self.tree.topLevelItem(0))
         self.tree.itemDoubleClicked.connect(lambda it, _c: self._preview(it))
@@ -129,7 +129,7 @@ class AmbientLibraryDialog(QDialog):
     def _on_ready(self, key: str, path: str) -> None:
         self.play_btn.setEnabled(True)
         if not path:
-            self.status.setText("<span style='color:#f87171'>Không tạo được âm này.</span>")
+            self.status.setText("<span style='color:" + theme.T["danger_text"] + "'>Không tạo được âm này.</span>")
             return
         try:
             from PySide6.QtMultimedia import QAudioOutput, QMediaPlayer

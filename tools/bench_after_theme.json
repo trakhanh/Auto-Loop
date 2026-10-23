@@ -1,0 +1,69 @@
+{
+  "n_files": 50,
+  "psutil": false,
+  "platform": "win32",
+  "a_add_files": {
+    "total_s": 0.991,
+    "rows_added": 50,
+    "on_probed_ui_ms": 22.7,
+    "completed": true,
+    "max_stall_ms": 27.1,
+    "p95_gap_ms": 17.6,
+    "ticks": 64
+  },
+  "c_thumbnails_async": {
+    "total_s": 5.889,
+    "thumbs_received": 50,
+    "rows_with_icon": 50,
+    "completed": true,
+    "max_stall_ms": 36.9,
+    "p95_gap_ms": 17.1,
+    "ticks": 379
+  },
+  "c2_on_thumb_sync": {
+    "calls": 50,
+    "total_ms": 3.0,
+    "mean_ms": 0.06,
+    "max_call_ms": 0.7,
+    "max_stall_ms": 30.7,
+    "p95_gap_ms": 30.7,
+    "ticks": 1
+  },
+  "b_recompute": {
+    "project": "50 clips",
+    "recompute_ms_runs": [
+      25.0,
+      10.2,
+      11.6,
+      11.3,
+      11.2
+    ],
+    "recompute_ms_median": 11.3,
+    "recompute_ms_max": 25.0,
+    "recompute_core_ms": 8.5,
+    "collect_project_ms": 0.6,
+    "max_stall_ms_incl_pumps": 27.9
+  },
+  "b2_recompute_loop70_project": {
+    "recompute_ms_runs": [
+      14.8,
+      9.6,
+      9.3,
+      8.9,
+      9.0
+    ],
+    "recompute_ms_median": 9.3,
+    "recompute_ms_max": 14.8
+  },
+  "d_idle": {
+    "seconds": 5.0,
+    "cpu_percent_of_one_core": 0.94,
+    "cpu_percent_of_machine": 0.08,
+    "method": "time.process_time (all threads of this process; child ffmpeg not counted)",
+    "max_stall_ms": 17.6,
+    "p95_gap_ms": 16.4,
+    "ticks": 322
+  },
+  "errors": [],
+  "python": "3.12.0"
+}

@@ -242,12 +242,12 @@ class MusicTab(QWidget):
         self.ambient.openRequested.connect(lambda p: w.open_with_default_app(ambient_lib.resolve(p)))
         a_add = QPushButton("Thêm tiếng nền")
         a_add.setObjectName("accentBtn")
-        a_add.setIcon(icons.icon("plus", 13, "#ffffff"))
+        a_add.setIcon(icons.icon("plus", 13, "accent_text"))
         a_add.setIconSize(QSize(13, 13))
         a_add.clicked.connect(self._pick_ambient)
         a_lib = QPushButton("Thư viện có sẵn…")
         a_lib.setObjectName("pill")
-        a_lib.setIcon(icons.icon("waves", 13, "#22d3ee"))
+        a_lib.setIcon(icons.icon("waves", 13, "info_text"))
         a_lib.setIconSize(QSize(13, 13))
         a_lib.setToolTip("Mưa, sóng biển, gió, lửa củi, white / pink / brown noise — app tự tạo, không cần file")
         a_lib.clicked.connect(self._open_ambient_library)
@@ -378,8 +378,7 @@ class MusicTab(QWidget):
 
         self.next_btn = QPushButton("Tiếp theo: Xuất thành phẩm")
         self.next_btn.setObjectName("nextStepBtn")
-        self.next_btn.setIcon(icons.icon("arrow_right", 14, "#ffffff"))
-        effects.Glow(self.next_btn, idle=0.25, blur=24, offset_y=4, alpha=140)  # nút bước tiếp sáng nhẹ
+        self.next_btn.setIcon(icons.icon("arrow_right", 14, "text_on_accent"))
         self.next_btn.setIconSize(QSize(14, 14))
         self.next_btn.setLayoutDirection(Qt.LayoutDirection.RightToLeft)
         self.next_btn.clicked.connect(self.nextStepRequested.emit)
@@ -470,14 +469,14 @@ class MusicTab(QWidget):
             on = it.checkState(0) == Qt.CheckState.Checked and plays > 0
             if on:
                 active += 1
-            col_main = QColor("#eef1f8") if on else QColor("#646c80")
-            col_sub = QColor("#8c96b0") if on else QColor("#525a70")
-            col_Acc = QColor(theme.C["soft"]) if on else QColor("#525a70")
+            col_main = theme.qcolor("text") if on else theme.qcolor("text_disabled")
+            col_sub = theme.qcolor("text_muted") if on else theme.qcolor("text_disabled")
+            col_Acc = QColor(theme.T['accent_soft']) if on else theme.qcolor("text_disabled")
             it.setForeground(COL_NAME, col_main)
             it.setForeground(COL_DUR, col_sub)
             it.setForeground(COL_PLAYS, col_Acc)
-            it.setForeground(COL_VOL, (QColor("#fbbf24") if it.text(COL_VOL) != "100" else col_sub) if on else col_sub)
-            it.setForeground(COL_LUFS, QColor("#6ee7b7") if (on and it.text(COL_LUFS) != "—") else col_sub)
+            it.setForeground(COL_VOL, (theme.qcolor("warn_text") if it.text(COL_VOL) != "100" else col_sub) if on else col_sub)
+            it.setForeground(COL_LUFS, theme.qcolor("success_text") if (on and it.text(COL_LUFS) != "—") else col_sub)
         self.list.blockSignals(False)
         total = len(items)
         self.count_label.setText(f"{active}/{total} bài bật" if total else "0 bài")
@@ -565,7 +564,7 @@ class MusicTab(QWidget):
 
     def _style_pin(self, it) -> None:
         t: MusicTrack = it.data(0, w.ROLE_DATA)
-        it.setIcon(COL_NAME, icons.icon("pin", 14, "#fbbf24") if t.pinned else QIcon())
+        it.setIcon(COL_NAME, icons.icon("pin", 14, "warn_text") if t.pinned else QIcon())
         tip = t.path + ("\nBài ghim: luôn có trong file (mọi bản)" if t.pinned else "")
         it.setToolTip(COL_NAME, tip)
 
@@ -573,7 +572,7 @@ class MusicTab(QWidget):
         pins = [Path(it.data(0, w.ROLE_DATA).path).stem for it in self.list.items() if it.data(0, w.ROLE_DATA).pinned]
         if pins:
             shown = ", ".join(pins[:2]) + (f" và {len(pins) - 2} bài nữa" if len(pins) > 2 else "")
-            self.pin_info.setText(f"<span style='color:#fbbf24'>Đã ghim {len(pins)} bài:</span> {shown}")
+            self.pin_info.setText(f"<span style='color:{theme.T['warn_text']}'>Đã ghim {len(pins)} bài:</span> {shown}")
         else:
             self.pin_info.setText("Chưa ghim bài nào — chuột phải một bài → <i>Ghim</i> để bài đó luôn có trong file.")
         self.lbl_pin_pos.setVisible(bool(pins))
@@ -613,7 +612,7 @@ class MusicTab(QWidget):
         for it in items[:3000]:
             start = w.fmt_dur(it.start) if long else f"{int(it.start) // 60:02d}:{int(it.start) % 60:02d}"
             row = QTreeWidgetItem([start, Path(paths[it.track]).stem])
-            row.setForeground(0, QColor("#93c5fd"))
+            row.setForeground(0, theme.qcolor("info_text"))
             rows.append(row)
         self.schedule.addTopLevelItems(rows)
         self.schedule_badge.setText(f"{len(items)} lượt phát")
@@ -702,7 +701,7 @@ class MusicTab(QWidget):
         it.setData(0, w.ROLE_DATA, a)
         it.setToolTip(0, "Âm có sẵn do app tự tạo, tự lặp liền mạch" if builtin else a.path)
         if builtin:
-            it.setIcon(0, icons.icon("waves", 13, "#22d3ee"))
+            it.setIcon(0, icons.icon("waves", 13, "info_text"))
         it.setTextAlignment(1, Qt.AlignmentFlag.AlignCenter)
         return it
 

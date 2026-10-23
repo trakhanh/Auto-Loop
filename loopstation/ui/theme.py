@@ -53,10 +53,6 @@ _FIXED = {
 }
 
 T: dict[str, str] = {}  # token đang dùng (đổi theo bộ màu)
-C = T  # tên cũ
-_LEGACY = {"surface": "panel", "surface2": "raised", "surface3": "overlay", "border": "line",
-           "border_light": "line_strong", "muted": "text_muted", "mid": "accent_text", "soft": "accent_soft",
-           "ok": "success"}
 
 # Khoảng cách (px) theo lưới 4: 2xs 2 · xs 4 · sm/md 8 · lg 12 · xl 16 · xxl 24 · 3xl 32
 SP = {"2xs": 2, "xs": 4, "sm": 8, "md": 8, "lg": 12, "xl": 16, "xxl": 24, "3xl": 32}
@@ -71,6 +67,14 @@ H = {"sm": 24, "md": 32, "lg": 40}
 FS = {"caption": 8.5, "small": 9, "body": 10, "label": 10, "subtitle": 11, "title": 13, "display": 17}
 # Thời lượng chuyển động (ms)
 DUR = {"fast": 120, "base": 180, "slow": 240}
+
+# Màu dữ liệu của timeline: mỗi clip một màu để nhận ra clip lặp lại (không đổi theo bộ màu)
+CLIP_COLORS = ["#7c5cff", "#10b981", "#f59e0b", "#ec4899", "#3b82f6", "#06b6d4", "#84cc16", "#f97316",
+               "#8b5cf6", "#14b8a6"]
+BOOKEND_COLOR = "#64748b"
+MUSIC_COLORS = ["#3b5bdb", "#2b6cb0", "#4c51bf", "#2c7a7b"]
+SOURCE_COLOR = "#334155"
+FLOW_COLORS = ("#6d28d9", "#db2777", "#0e7490")  # khối minh hoạ thứ tự phát trong trang Hướng dẫn
 
 FONT_PT = 10  # cỡ chữ đang dùng (Cài đặt → Cỡ chữ ứng dụng)
 
@@ -108,8 +112,6 @@ def set_palette(key: str) -> None:
     PALETTE = key
     T.clear()
     T.update(build_tokens(key))
-    for old, new in _LEGACY.items():  # tên cũ → token mới (tạm, xoá ở bước dọn dẹp)
-        T[old] = T[new]
 
 
 set_palette(PALETTE)
@@ -391,6 +393,10 @@ QPushButton#homeCard {{ background: {t['panel']}; border: 1px solid {t['line_sub
 QPushButton#homeCard:hover {{ background: {t['raised']}; border-color: {t['line_strong']}; }}
 QPushButton#homeCard:pressed {{ background: {t['field']}; }}
 QLabel#homeBadge {{ background: {t['raised']}; border-radius: {R['lg']}px; }}
+QLabel#homeBadge[tone="accent"] {{ background: {rgba(t['accent'], 0.16)}; }}
+QLabel#homeBadge[tone="info"] {{ background: {rgba(t['info'], 0.14)}; }}
+QLabel#homeBadge[tone="success"] {{ background: {rgba(t['success'], 0.14)}; }}
+QLabel#homeBadge[tone="warn"] {{ background: {rgba(t['warn'], 0.14)}; }}
 QLabel#homeTitle {{ font-size: {f['subtitle']}; font-weight: 600; color: {t['text']}; background: transparent; }}
 QLabel#homeDesc {{ color: {t['text_2']}; background: transparent; }}
 QLabel#homeExample {{ color: {t['text_muted']}; font-size: {f['small']}; background: transparent; }}
@@ -530,7 +536,7 @@ QFrame#playerFrame {{ background: {t['black']}; border: 1px solid {t['line']}; b
 QFrame#sideCard {{ background: {t['panel']}; border: 1px solid {t['line']}; border-radius: {R['xl']}px; }}
 QLabel[role="thumb"] {{ background: {t['field']}; border: 1px solid {t['line']}; border-radius: {R['md']}px;
                         color: {t['text_muted']}; }}
-QLabel#previewBox {{ background: {t['field']}; border: 1px solid {t['line']}; border-radius: {R['lg']}px; }}
+QLabel#previewBox {{ color: {t['text_muted']}; background: {t['field']}; border: 1px solid {t['line']}; border-radius: {R['lg']}px; }}
 QFrame[role="hairline"] {{ color: {t['line_subtle']}; background: {t['line_subtle']}; max-width: 1px; }}
 """
 

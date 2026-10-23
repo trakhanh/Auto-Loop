@@ -192,16 +192,14 @@ class ExportTab(QWidget):
 
         self.start_btn = QPushButton("Bắt đầu xuất video")
         self.start_btn.setObjectName("primary")
-        self.start_btn.setIcon(icons.icon("play", 15, "#ffffff"))
+        self.start_btn.setIcon(icons.icon("play", 15, "text_on_accent"))
         self.start_btn.setIconSize(QSize(15, 15))
         self.start_btn.setMinimumHeight(40)
         self.start_btn.clicked.connect(lambda: self.startRequested.emit())
-        # nút chính luôn sáng nhẹ; sẵn sàng xuất thì quầng sáng "thở" chậm mời bấm
-        self._start_glow = effects.Glow(self.start_btn, idle=0.55, blur=34, offset_y=5, alpha=170)
 
         self.queue_add_btn = QPushButton("Thêm vào hàng đợi")
         self.queue_add_btn.setObjectName("accentBtn")
-        self.queue_add_btn.setIcon(icons.icon("plus", 15, "#ffffff"))
+        self.queue_add_btn.setIcon(icons.icon("plus", 15, "accent_text"))
         self.queue_add_btn.setIconSize(QSize(15, 15))
         self.queue_add_btn.setMinimumHeight(40)
         self.queue_add_btn.setToolTip("Lưu cấu hình hiện tại thành một mục chờ xuất. Thêm nhiều dự án rồi chạy "
@@ -210,7 +208,7 @@ class ExportTab(QWidget):
 
         self.cancel_btn = QPushButton("Huỷ xuất")
         self.cancel_btn.setObjectName("danger")
-        self.cancel_btn.setIcon(icons.icon("stop", 14, "#fca5a5"))
+        self.cancel_btn.setIcon(icons.icon("stop", 14, "danger_text"))
         self.cancel_btn.setIconSize(QSize(14, 14))
         self.cancel_btn.setMinimumHeight(40)
         self.cancel_btn.setEnabled(False)
@@ -272,7 +270,7 @@ class ExportTab(QWidget):
 
         self.queue_run_btn = QPushButton("Chạy hàng đợi")
         self.queue_run_btn.setObjectName("accentBtn")
-        self.queue_run_btn.setIcon(icons.icon("play", 13, "#ffffff"))
+        self.queue_run_btn.setIcon(icons.icon("play", 13, "accent_text"))
         self.queue_run_btn.setIconSize(QSize(13, 13))
         self.queue_run_btn.setEnabled(False)
         self.queue_run_btn.clicked.connect(lambda: self.queueRunRequested.emit())
@@ -475,7 +473,6 @@ class ExportTab(QWidget):
         self._can_export = ok
         self.start_btn.setEnabled(ok and not self._running)
         self.queue_add_btn.setEnabled(ok)
-        self._start_glow.breathe(ok and not self._running)
 
     def set_running(self, running: bool, clear_log: bool = True) -> None:
         self._running = running
@@ -484,7 +481,6 @@ class ExportTab(QWidget):
         pending = sum(1 for i in self.items if i.status == "pending")
         self.queue_run_btn.setEnabled(not running and pending > 0)
         self.cancel_btn.setEnabled(running)
-        self._start_glow.breathe(self._can_export and not running)
         if running:
             self._shimmer.start()
         else:
@@ -551,11 +547,11 @@ class ExportTab(QWidget):
         self.items = items
         self.queue.clear()
         status_colors = {
-            "done": "#6ee7b7",
-            "running": "#93c5fd",
-            "error": "#fca5a5",
-            "cancelled": "#fcd34d",
-            "pending": "#cbd5e1",
+            "done": "success_text",
+            "running": "info_text",
+            "error": "danger_text",
+            "cancelled": "warn_text",
+            "pending": "text_2",
         }
         for it in items:
             row = QTreeWidgetItem([it.project.name, KIND_LABELS.get(it.kind, it.kind),
@@ -564,7 +560,7 @@ class ExportTab(QWidget):
             row.setToolTip(3, it.message)
             col = status_colors.get(it.status)
             if col:
-                row.setForeground(3, QColor(col))
+                row.setForeground(3, theme.qcolor(col))
             self.queue.addTopLevelItem(row)
         pending = sum(1 for i in items if i.status == "pending")
         self.queue_run_btn.setText(f"Chạy hàng đợi ({pending})" if pending else "Chạy hàng đợi")
@@ -574,7 +570,7 @@ class ExportTab(QWidget):
         row = self.queue.topLevelItem(index)
         if row:
             row.setText(3, text)
-            row.setForeground(3, QColor("#93c5fd"))
+            row.setForeground(3, theme.qcolor("info_text"))
 
     def _remove_selected(self) -> None:
         rows = sorted({self.queue.indexOfTopLevelItem(r) for r in self.queue.selectedItems()}, reverse=True)

@@ -854,25 +854,22 @@ class SeekBar(QWidget):
             r = r.adjusted(0, -1.5, 0, 1.5)
         rad = r.height() / 2
         p.setPen(Qt.PenStyle.NoPen)
-        p.setBrush(QColor("#232838"))
+        p.setBrush(theme.qcolor("line"))
         p.drawRoundedRect(r, rad, rad)
         if self.total:
             if self._hover is not None and not self._drag:  # phần đang rê chuột (sáng nhẹ)
                 hx = self._x_at(self._hover)
-                p.setBrush(QColor(255, 255, 255, 28))
+                p.setBrush(theme.qcolor("white", 28))
                 p.drawRoundedRect(QRectF(r.left(), r.top(), max(0.0, hx - r.left()), r.height()), rad, rad)
             x = self._x_at(self.pos)
-            g = QLinearGradient(r.left(), 0, r.right(), 0)
-            g.setColorAt(0, theme.qcolor("accent"))
-            g.setColorAt(1, theme.qcolor("accent2"))
-            p.setBrush(g)
+            p.setBrush(theme.qcolor("accent"))
             p.drawRoundedRect(QRectF(r.left(), r.top(), max(0.0, x - r.left()), r.height()), rad, rad)
-            p.setBrush(QColor(255, 255, 255, 55 if not hot else 90))  # mốc đổi bài nhạc (mờ, chỉ rõ khi rê chuột)
+            p.setBrush(theme.qcolor("white", 55 if not hot else 90))  # mốc đổi bài nhạc (mờ, chỉ rõ khi rê chuột)
             for m in self.marks:
                 mx = self._x_at(m)
                 p.drawRect(QRectF(mx - 0.5, r.top(), 1.0, r.height()))
             kr = 7 if hot else 5
-            p.setBrush(QColor("#ffffff"))
+            p.setBrush(theme.qcolor("white"))
             p.drawEllipse(QPointF(x, r.center().y()), kr, kr)
             if self._hover is not None:  # bong bóng giờ
                 txt = fmt_time(self._hover)
@@ -882,10 +879,10 @@ class SeekBar(QWidget):
                 p.setFont(f)
                 tw = p.fontMetrics().horizontalAdvance(txt) + 14
                 bx = max(0.0, min(self.width() - tw, self._x_at(self._hover) - tw / 2))
-                p.setBrush(QColor(15, 18, 28, 235))
-                p.setPen(QPen(QColor("#343e58"), 1))
+                p.setBrush(theme.qcolor("overlay", 235))
+                p.setPen(QPen(theme.qcolor("line_strong"), 1))
                 p.drawRoundedRect(QRectF(bx, 1, tw, 17), 6, 6)
-                p.setPen(QColor("#eef1f8"))
+                p.setPen(theme.qcolor("text"))
                 p.drawText(QRectF(bx, 1, tw, 17), Qt.AlignmentFlag.AlignCenter, txt)
 
 
@@ -895,13 +892,13 @@ class VideoView(QWidget):
     doubleClicked = Signal()
     clicked = Signal()
 
-    def __init__(self, parent=None, bg: str = "#0b0d13", rounded: bool = True):
+    def __init__(self, parent=None, bg: str = "field", rounded: bool = True):
         super().__init__(parent)
         self.setMinimumSize(240, 135)
         self.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Expanding)
         self.setFocusPolicy(Qt.FocusPolicy.ClickFocus)  # bấm vào khung xem → phím Space điều khiển trình phát
         self.setMouseTracking(True)
-        self.bg = QColor(bg)
+        self.bg = QColor(theme.T.get(bg, bg))
         self.rounded = rounded
         self.image: QImage | None = None
         self.text = ""
@@ -998,17 +995,17 @@ class VideoView(QWidget):
                 p.setClipPath(clip)
                 p.drawImage(r, self.image)
                 p.restore()
-                p.setPen(QPen(QColor(255, 255, 255, 18), 1))
+                p.setPen(QPen(theme.qcolor("white", 18), 1))
                 p.setBrush(Qt.BrushStyle.NoBrush)
                 p.drawRoundedRect(r.adjusted(0.5, 0.5, -0.5, -0.5), 8, 8)
             else:
                 p.drawImage(r, self.image)
         elif self.audio_only:
-            pm = icons.pixmap("music", 56, "#3b3f55")
+            pm = icons.pixmap("music", 56, "line_strong")
             p.drawPixmap((self.width() - 56) // 2, (self.height() - 56) // 2 - 16, pm)
         c = QPointF(self.width() / 2, self.height() / 2)
         if self._busy_shown:  # vòng xoay chờ
-            p.setPen(QPen(QColor(255, 255, 255, 40), 4))
+            p.setPen(QPen(theme.qcolor("white", 40), 4))
             p.drawEllipse(c, 18, 18)
             pen = QPen(theme.qcolor("accent"), 4)
             pen.setCapStyle(Qt.PenCapStyle.RoundCap)
@@ -1018,14 +1015,14 @@ class VideoView(QWidget):
             # nút phát tròn ở giữa (bấm vào hình là phát)
             rad = 30 if self._hover else 27
             p.setPen(Qt.PenStyle.NoPen)
-            p.setBrush(QColor(10, 12, 20, 150 if self._hover else 115))
+            p.setBrush(theme.qcolor("black", 150 if self._hover else 115))
             p.drawEllipse(c, rad, rad)
             tri = QPainterPath()
             tri.moveTo(c.x() - 8, c.y() - 12)
             tri.lineTo(c.x() + 13, c.y())
             tri.lineTo(c.x() - 8, c.y() + 12)
             tri.closeSubpath()
-            p.fillPath(tri, QColor(255, 255, 255, 235))
+            p.fillPath(tri, theme.qcolor("white", 235))
         if self.text:
             f = QFont(self.font())
             f.setBold(True)
@@ -1035,9 +1032,9 @@ class VideoView(QWidget):
             y = c.y() + (32 if self._busy_shown or self.audio_only else -16)
             r = QRectF((self.width() - tw) / 2, y, tw, 32)
             p.setPen(Qt.PenStyle.NoPen)
-            p.setBrush(QColor(10, 12, 20, 210))
+            p.setBrush(theme.qcolor("black", 210))
             p.drawRoundedRect(r, 9, 9)
-            p.setPen(QColor("#e5e7f0"))
+            p.setPen(theme.qcolor("text"))
             p.drawText(r, Qt.AlignmentFlag.AlignCenter,
                        fm.elidedText(self.text, Qt.TextElideMode.ElideRight, int(tw) - 20))
 
@@ -1048,7 +1045,7 @@ class FullscreenView(VideoView):
     closed = Signal()
 
     def __init__(self, panel: "PreviewPanel"):
-        super().__init__(None, bg="#000000", rounded=False)
+        super().__init__(None, bg="black", rounded=False)
         self.panel = panel
         self.setWindowTitle("Xem trước — toàn màn hình")
         self.setFocusPolicy(Qt.FocusPolicy.StrongFocus)
@@ -1115,32 +1112,29 @@ class FullscreenView(VideoView):
         p.setRenderHint(QPainter.RenderHint.Antialiasing)
         h = self.height()
         g = QLinearGradient(0, h - 130, 0, h)
-        g.setColorAt(0, QColor(0, 0, 0, 0))
-        g.setColorAt(1, QColor(0, 0, 0, 190))
+        g.setColorAt(0, theme.qcolor("black", 0))
+        g.setColorAt(1, theme.qcolor("black", 190))
         p.fillRect(QRectF(0, h - 130, self.width(), 130), g)
         pl = self.panel.player
         b = self._bar()
         p.setPen(Qt.PenStyle.NoPen)
-        p.setBrush(QColor(255, 255, 255, 60))
+        p.setBrush(theme.qcolor("white", 60))
         p.drawRoundedRect(b, 3, 3)
         if pl.total:
             x = b.left() + b.width() * min(1.0, self.panel.shown_pos / pl.total)
-            gr = QLinearGradient(b.left(), 0, b.right(), 0)
-            gr.setColorAt(0, theme.qcolor("accent"))
-            gr.setColorAt(1, theme.qcolor("accent2"))
-            p.setBrush(gr)
+            p.setBrush(theme.qcolor("accent"))
             p.drawRoundedRect(QRectF(b.left(), b.top(), x - b.left(), b.height()), 3, 3)
-            p.setBrush(QColor("#ffffff"))
+            p.setBrush(theme.qcolor("white"))
             p.drawEllipse(QPointF(x, b.center().y()), 7, 7)
         f = QFont(self.font())
         f.setPointSizeF(f.pointSizeF() + 1.5)
         f.setBold(True)
         p.setFont(f)
-        p.setPen(QColor("#ffffff"))
+        p.setPen(theme.qcolor("white"))
         fps = self.panel._fps()
         p.drawText(QRectF(32, h - 34, 600, 28), Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignVCenter,
                    f"{fmt_tc(self.panel.shown_pos, fps)}  /  {fmt_tc(pl.total, fps)}")
-        p.setPen(QColor(255, 255, 255, 150))
+        p.setPen(theme.qcolor("white", 150))
         f.setBold(False)
         f.setPointSizeF(f.pointSizeF() - 2)
         p.setFont(f)
@@ -1257,8 +1251,6 @@ class PreviewPanel(QFrame):
         self.home_btn = self._btn("to_start", "", "Về đầu video (Home)", lambda: self.player.seek(0))
         self.back_btn = self._btn("replay10", "10", "Lùi 10 giây (←: 5 giây)", lambda: self.player.step(-10))
         self.play_btn = self._btn("play", "", "Phát (Space)", self.player.toggle, big=True)
-        from . import effects
-        self._play_glow = effects.Glow(self.play_btn, idle=0.35, blur=26, offset_y=3, alpha=160)
         self.fwd_btn = self._btn("forward10", "10", "Tới 10 giây (→: 5 giây)", lambda: self.player.step(10))
         self.mute_btn = self._btn("volume", "", "Tắt tiếng trình phát (không đổi âm lượng của dự án)", self._toggle_mute)
         self.full_btn = self._btn("fullscreen", "", "Toàn màn hình (nhấp đúp vào hình) — Esc để thoát",
@@ -1356,7 +1348,7 @@ class PreviewPanel(QFrame):
         b.setObjectName("playerPlay" if big else "playerBtn")
         if icon:
             n = 20 if big else 16
-            b.setIcon(icons.icon(icon, n, "#e5e7f0"))
+            b.setIcon(icons.icon(icon, n, "text"))
             b.setIconSize(QSize(n, n))
         b.setToolTip(tip)
         b.setFocusPolicy(Qt.FocusPolicy.NoFocus)  # Space không "bấm" nhầm nút đang được chọn
@@ -1387,7 +1379,7 @@ class PreviewPanel(QFrame):
     def _toggle_mute(self) -> None:
         m = not self.player.muted
         self.player.set_muted(m)
-        self.mute_btn.setIcon(icons.icon("volume_x" if m else "volume", 16, "#f59e0b" if m else "#e5e7f0"))
+        self.mute_btn.setIcon(icons.icon("volume_x" if m else "volume", 16, "warn_text" if m else "text"))
         self.mute_btn.setToolTip("Bật lại tiếng trình phát" if m else
                                  "Tắt tiếng trình phát (không đổi âm lượng của dự án)")
 
@@ -1453,7 +1445,7 @@ class PreviewPanel(QFrame):
 
     def _on_state(self, s: str) -> None:
         playing = s in ("playing", "loading", "buffering")
-        self.play_btn.setIcon(icons.icon("pause" if playing else "play", 20, "#ffffff"))
+        self.play_btn.setIcon(icons.icon("pause" if playing else "play", 20, "text_on_accent"))
         self.play_btn.setToolTip("Dừng (Space)" if playing else "Phát (Space)")
         on = s != "empty" or self.player.project is not None
         for b in (self.play_btn, self.back_btn, self.fwd_btn, self.home_btn, self.full_btn, self.mute_btn):

@@ -14,7 +14,7 @@ from PySide6.QtWidgets import (
 
 from ..core import look as lk
 from ..core.project import VideoSettings
-from . import icons
+from . import icons, theme
 from . import widgets as w
 
 PREVIEW_W = 400
@@ -99,14 +99,13 @@ class LookPanel(QWidget):
 
         # ----- xem trước -----
         self.preview = QLabel("Thêm clip ở bảng bên trái để xem trước.")
-        self.preview.setObjectName("muted")
+        self.preview.setObjectName("previewBox")
         self.preview.setAlignment(Qt.AlignmentFlag.AlignCenter)
         self.preview.setMinimumSize(120, 90)
         self.preview.setSizePolicy(QSizePolicy.Policy.Ignored, QSizePolicy.Policy.Fixed)  # co theo bề rộng khung
         self.preview.setFixedHeight(200)
         self._pm: QPixmap | None = None
         self._aspect = 9 / 16
-        self.preview.setStyleSheet("background: #0b0d13; border: 1px solid #242b3d; border-radius: 8px;")
         self.preview_note = w.muted("")
         g_prev = QGroupBox("Xem trước (clip đầu tiên, giữa clip)")
         pv = QVBoxLayout(g_prev)
@@ -255,7 +254,7 @@ class LookPanel(QWidget):
         if gen != self._gen:
             return
         if not out:
-            self.preview_note.setText("<span style='color:#f87171'>Không tạo được ảnh xem trước (kiểm tra file logo).</span>")
+            self.preview_note.setText("<span style='color:" + theme.T["danger_text"] + "'>Không tạo được ảnh xem trước (kiểm tra file logo).</span>")
             return
         self._pm = QPixmap(out)
         self._aspect = self._pm.height() / max(1, self._pm.width())

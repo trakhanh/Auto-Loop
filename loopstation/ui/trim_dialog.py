@@ -66,9 +66,9 @@ class RangeBar(QWidget):
         track = QRectF(14, 12, self.width() - 28, 22)
         bg = QPainterPath()
         bg.addRoundedRect(track, 7, 7)
-        p.fillPath(bg, QColor("#232838"))
+        p.fillPath(bg, theme.qcolor("line"))
         # phần bị bỏ: kẻ sọc mờ
-        p.setPen(QPen(QColor("#323a4f"), 1))
+        p.setPen(QPen(theme.qcolor("line"), 1))
         x = 14.0
         while x < self.width() - 14:
             if not (self._x(self.start) <= x <= self._x(self.end)):
@@ -78,22 +78,22 @@ class RangeBar(QWidget):
         kp = QPainterPath()
         kp.addRoundedRect(keep, 6, 6)
         p.fillPath(kp, theme.qcolor("accent"))
-        p.setPen(QColor("white"))
+        p.setPen(theme.qcolor("white"))
         if keep.width() > 80:
             p.drawText(keep, Qt.AlignmentFlag.AlignCenter, f"lấy {self.end - self.start:.1f}s")
         for t in (self.start, self.end):
             hx = self._x(t)
-            p.setPen(QPen(QColor("#ffffff"), 2))
-            p.setBrush(theme.qcolor("soft"))
+            p.setPen(QPen(theme.qcolor("white"), 2))
+            p.setBrush(theme.qcolor("accent_soft"))
             p.drawRoundedRect(QRectF(hx - 6, 6, 12, 34), 4, 4)
         # vị trí đang phát
         px = self._x(self.playhead)
-        p.setPen(QPen(QColor("#fcd34d"), 2))
+        p.setPen(QPen(theme.qcolor("warn_text"), 2))
         p.drawLine(QPointF(px, 4), QPointF(px, 42))
-        p.setBrush(QColor("#fcd34d"))
+        p.setBrush(theme.qcolor("warn_text"))
         p.drawPolygon([QPointF(px - 5, 2), QPointF(px + 5, 2), QPointF(px, 8)])
         # vạch giây + nhãn (nhãn ở mép được canh vào trong để không bị cắt)
-        p.setPen(QColor("#8b93a7"))
+        p.setPen(theme.qcolor("text_muted"))
         fm = p.fontMetrics()
         y_label = 50
         step = 1 if self.duration <= 15 else 5 if self.duration <= 60 else 10 if self.duration <= 180 else 30
@@ -195,7 +195,6 @@ class TrimDialog(QDialog):
         if HAS_PLAYER:
             self.video = QVideoWidget()
             self.video.setMinimumSize(560, 315)
-            self.video.setStyleSheet("background: #000;")
             self.player = QMediaPlayer(self)
             self.audio = QAudioOutput(self)
             self.audio.setVolume(0.5)
@@ -206,7 +205,6 @@ class TrimDialog(QDialog):
             self.player.playbackStateChanged.connect(self._on_state)
             screen = QFrame()
             screen.setObjectName("playerFrame")
-            screen.setStyleSheet("QFrame#playerFrame { background:#000; border:1px solid #2a2f3c; border-radius:10px; }")
             sl = QVBoxLayout(screen)
             sl.setContentsMargins(2, 2, 2, 2)
             sl.addWidget(self.video)
@@ -224,7 +222,7 @@ class TrimDialog(QDialog):
         self.play_btn.setToolTip("Phát / Tạm dừng (phím Space)")
         self.play_btn.clicked.connect(self._toggle_play)
         self.time_label = QLabel("0:00.0 / " + _fmt(duration))
-        self.time_label.setStyleSheet("font-family: Consolas; color: #e7e9f0;")
+        self.time_label.setProperty("role", "mono")
         self.loop_cb = QCheckBox("Lặp đoạn đã chọn")
         self.loop_cb.setChecked(True)
         self.loop_cb.setToolTip("Phát đi phát lại đúng đoạn sẽ được dùng, để xem chỗ nối đầu–cuối có mượt không")
@@ -285,7 +283,7 @@ class TrimDialog(QDialog):
         for col, (img, cap) in enumerate(((self.img_start, self.cap_start), (self.img_end, self.cap_end))):
             img.setFixedSize(QSize(160, 90))
             img.setAlignment(Qt.AlignmentFlag.AlignCenter)
-            img.setStyleSheet("background:#0b0d12; border:1px solid #2a2f3c; border-radius:6px; color:#6b7389;")
+            img.setProperty("role", "thumb")
             img.setText("…")
             cap.setObjectName("muted")
             cap.setAlignment(Qt.AlignmentFlag.AlignCenter)
@@ -327,7 +325,6 @@ class TrimDialog(QDialog):
 
         right_box = QFrame()
         right_box.setObjectName("sideCard")
-        right_box.setStyleSheet("QFrame#sideCard { background:#151923; border:1px solid #2a2f3c; border-radius:12px; }")
         right_box.setFixedWidth(360)
         rv = QVBoxLayout(right_box)
         rv.setContentsMargins(14, 12, 14, 12)
@@ -414,7 +411,7 @@ class TrimDialog(QDialog):
         self._update_buttons(state == QMediaPlayer.PlaybackState.PlayingState)
 
     def _update_buttons(self, playing: bool) -> None:
-        self.play_btn.setIcon(icons.icon("pause" if playing else "play", 18, "#ffffff"))
+        self.play_btn.setIcon(icons.icon("pause" if playing else "play", 18, "accent_text"))
 
     def _on_position(self, ms: int) -> None:
         t = ms / 1000

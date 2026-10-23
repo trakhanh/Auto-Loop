@@ -22,12 +22,12 @@ from .theme import APP_NAME
 from .widgets import sample_label
 
 STEPS = (
-    ("film", "#a78bfa", "Thêm video",
+    ("film", "accent_text", "Thêm video",
      "Kéo thả clip vào bảng. Gõ số lần loop ở cột <b>Số lần phát</b>: <b>70</b> = 70 lần, "
      "<b>10p</b> = đủ 10 phút."),
-    ("music", "#34d399", "Thêm nhạc",
+    ("music", "success_text", "Thêm nhạc",
      "Thêm playlist — nhạc <b>tự lặp</b> cho đủ độ dài video, bài cuối nhỏ dần. Thêm tiếng mưa, sóng… nếu muốn."),
-    ("export", "#60a5fa", "Xuất file",
+    ("export", "info_text", "Xuất file",
      "Chọn thư mục lưu rồi bấm <b>Bắt đầu xuất</b>. Xem trước bất cứ lúc nào ở trình phát bên phải "
      "(phím <b>Space</b>)."),
 )
@@ -91,7 +91,7 @@ class WelcomeOverlay(QWidget):
         logo.setPixmap(branding.pixmap(52, self.devicePixelRatioF()))
         texts = QVBoxLayout()
         texts.setSpacing(2)
-        texts.addWidget(effects.GradientLabel(f"Chào mừng đến với {APP_NAME}"))
+        texts.addWidget(effects.HeadingLabel(f"Chào mừng đến với {APP_NAME}"))
         texts.addWidget(_label("Làm video loop dài cho YouTube — clip lặp ×70, nhạc tự lặp đủ giờ — chỉ với 3 bước.",
                                "muted"))
         head.addWidget(logo, 0, Qt.AlignmentFlag.AlignTop)
@@ -104,7 +104,7 @@ class WelcomeOverlay(QWidget):
         for k, (ic, color, title, desc) in enumerate(STEPS):
             if k:
                 arrow = QLabel()
-                arrow.setPixmap(icons.pixmap("arrow_right", 14, "#64708d"))
+                arrow.setPixmap(icons.pixmap("arrow_right", 14, "text_muted"))
                 arrow.setAlignment(Qt.AlignmentFlag.AlignCenter)
                 self._arrows.append(arrow)
                 self.steps_box.addWidget(arrow)
@@ -124,13 +124,11 @@ class WelcomeOverlay(QWidget):
             foot.addWidget(b)
         self.start_btn = QPushButton("Bắt đầu")
         self.start_btn.setObjectName("primary")
-        self.start_btn.setIcon(icons.icon("arrow_right", 15, "#ffffff"))
+        self.start_btn.setIcon(icons.icon("arrow_right", 15, "text_on_accent"))
         self.start_btn.setIconSize(QSize(15, 15))
         self.start_btn.setLayoutDirection(Qt.LayoutDirection.RightToLeft)
         self.start_btn.setMinimumWidth(150)
         self.start_btn.clicked.connect(lambda: self._finish())
-        self._start_glow = effects.Glow(self.start_btn, idle=0.5, blur=30, offset_y=4, alpha=150)
-        self._start_glow.breathe(True)
         foot.addWidget(self.start_btn)
         cv.addLayout(foot)
 
@@ -242,7 +240,7 @@ class WelcomeOverlay(QWidget):
     # ---------- vẽ + phím ----------
     def paintEvent(self, e) -> None:  # noqa: N802
         p = QPainter(self)
-        p.fillRect(self.rect(), QColor(5, 7, 12, int(214 * self._dim)))
+        p.fillRect(self.rect(), theme.qcolor("black", int(214 * self._dim)))
 
     def keyPressEvent(self, e) -> None:  # noqa: N802
         if e.key() in (Qt.Key.Key_Escape, Qt.Key.Key_Return, Qt.Key.Key_Enter):

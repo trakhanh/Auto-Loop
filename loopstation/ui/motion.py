@@ -174,8 +174,6 @@ class NavPill(QWidget):
 class Toast(QWidget):
     """Thông báo nổi nhỏ ở góc dưới phải, tự ẩn sau vài giây."""
 
-    COLORS = {"ok": "#34d399", "info": "#a78bfa", "warn": "#fbbf24", "error": "#f87171"}
-
     def __init__(self, host: QWidget):
         super().__init__(host)
         self.host = host
@@ -186,6 +184,7 @@ class Toast(QWidget):
         lay.setContentsMargins(14, 10, 16, 10)
         lay.setSpacing(10)
         self.dot = QLabel("●")
+        self.dot.setObjectName("toastDot")
         self.text = QLabel()
         self.text.setWordWrap(True)
         self.text.setMaximumWidth(420)
@@ -209,8 +208,7 @@ class Toast(QWidget):
 
     def show_message(self, text: str, kind: str = "ok", ms: int = 2800) -> None:
         from . import theme
-        col = theme.C["mid"] if kind == "info" else self.COLORS.get(kind, theme.C["mid"])
-        self.dot.setStyleSheet(f"color: {col}; font-size: 11pt;")
+        theme.tag(self.dot, tone=kind if kind in ("ok", "warn", "error") else "info")
         self.text.setText(text)
         self.text.setWordWrap(len(text) > 70)  # câu ngắn nằm trên một dòng
         self.adjustSize()

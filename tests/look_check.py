@@ -59,7 +59,7 @@ for key in theme.PALETTES:
         check(f"bộ màu {key}: QSS không còn màu tím bản cũ", "#7c5cff" not in q and "124,92,255" not in q)
     check(f"bộ màu {key}: dùng đúng màu chính", theme.PALETTES[key][1] in q)
 theme.apply(app, 10, "neon")
-check("mặc định: Neon tím hồng", theme.PALETTE == "neon" and theme.C["accent"] == "#8b5cf6")
+check("mặc định: Neon tím hồng", theme.PALETTE == "neon" and theme.T["accent"] == theme.PALETTES["neon"][1])
 
 # 2) màn hình chào lần đầu: chỉ còn 3 bước + Bắt đầu (không còn chọn Đơn giản / Đầy đủ)
 win = mw.MainWindow()
@@ -144,7 +144,7 @@ check("rời ô: gỡ viền sáng", ed.graphicsEffect() is None)
 sp = win.settings_page
 sp.palette_combo.setCurrentIndex(sp.palette_combo.findData("ocean"))
 wait(0.4)
-check("Cài đặt → Đại dương: áp ngay", theme.PALETTE == "ocean" and theme.C["accent"] == "#06b6d4")
+check("Cài đặt → Đại dương: áp ngay", theme.PALETTE == "ocean" and theme.T["accent"] == theme.PALETTES["ocean"][1])
 check("đã lưu màu chủ đạo", QSettings(ini, QSettings.Format.IniFormat).value("pref/palette") == "ocean")
 check("QSS toàn app đổi theo", "#06b6d4" in app.styleSheet())
 win.go_to(0)

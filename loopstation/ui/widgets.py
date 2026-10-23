@@ -151,7 +151,7 @@ class TwoLineNameDelegate(QStyledItemDelegate):
         self.initStyleOption(o, index)
         title = o.text
         sub = index.data(ROLE_SUB) or ""
-        sub_color = index.data(ROLE_SUB_COLOR) or QColor("#8c96b0")
+        sub_color = index.data(ROLE_SUB_COLOR) or theme.qcolor("text_muted")
         title_color = index.data(Qt.ItemDataRole.ForegroundRole)
         o.text = ""
         style = o.widget.style() if o.widget else QApplication.style()
@@ -166,7 +166,7 @@ class TwoLineNameDelegate(QStyledItemDelegate):
         total_h = fm1.height() + (fm2.height() + 2 if sub else 0)
         y = r.top() + (r.height() - total_h) // 2
         painter.setFont(f1)
-        col = title_color.color() if hasattr(title_color, "color") else (title_color or QColor("#eef1f8"))
+        col = title_color.color() if hasattr(title_color, "color") else (title_color or theme.qcolor("text"))
         painter.setPen(QColor(col))
         painter.drawText(QRect(r.left(), y, r.width(), fm1.height()), Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignVCenter,
                          fm1.elidedText(title, Qt.TextElideMode.ElideMiddle, r.width()))
@@ -459,10 +459,10 @@ def paint_placeholder(tree: QTreeWidget, text: str, hovered: bool = False, click
         if r.width() > 120 and r.height() > 54:
             path = QPainterPath()
             path.addRoundedRect(r, 10, 10)
-            border_col = theme.qcolor("accent") if (hovered and clickable) else QColor(theme.C["border"])
+            border_col = theme.qcolor("accent") if (hovered and clickable) else theme.qcolor("line")
             pen = QPen(border_col, 1.5, Qt.PenStyle.DashLine)
             p.setPen(pen)
-            bg_col = theme.qcolor("accent", 22) if (hovered and clickable) else QColor(13, 16, 24, 120)
+            bg_col = theme.qcolor("accent", 22) if (hovered and clickable) else theme.qcolor("field", 120)
             p.fillPath(path, bg_col)
             p.drawPath(path)
 
@@ -477,26 +477,26 @@ def paint_placeholder(tree: QTreeWidget, text: str, hovered: bool = False, click
             circle_path = QPainterPath()
             circle_path.addEllipse(QRectF(cx - circle_r, circle_y - circle_r, circle_r * 2, circle_r * 2))
             p.fillPath(circle_path, theme.qcolor("accent", 40 if hovered else 24))
-            p.setPen(QPen(theme.qcolor("accent") if hovered else QColor("#3b4766"), 1.2))
+            p.setPen(QPen(theme.qcolor("accent") if hovered else theme.qcolor("line_strong"), 1.2))
             p.drawPath(circle_path)
-            pm = icons.pixmap("file_plus", 20, theme.C["mid"] if hovered else "#8b95b0")
+            pm = icons.pixmap("file_plus", 20, "accent_text" if hovered else "text_muted")
             p.drawPixmap(int(cx - 10), int(circle_y - 10), pm)
 
             f_title = QFont(tree.font())
             f_title.setPointSize(f_title.pointSize() + 1)
             f_title.setBold(True)
             p.setFont(f_title)
-            p.setPen(QColor("#eef1f8" if hovered else "#c3cbe0"))
+            p.setPen(theme.qcolor("text" if hovered else "text_2"))
             p.drawText(QRectF(24, circle_y + 24, vp.width() - 48, 24),
                        Qt.AlignmentFlag.AlignCenter, lines[0])
 
             f_sub = QFont(tree.font())
             p.setFont(f_sub)
-            p.setPen(QColor("#8c96b0" if hovered else "#6d7792"))
+            p.setPen(theme.qcolor("text_2" if hovered else "text_muted"))
             p.drawText(QRectF(24, circle_y + 46, vp.width() - 48, 36),
                        Qt.AlignmentFlag.AlignCenter | Qt.TextFlag.TextWordWrap, "\n".join(lines[1:]))
         else:
-            p.setPen(QColor("#7d87a3"))
+            p.setPen(theme.qcolor("text_muted"))
             f = QFont(tree.font())
             p.setFont(f)
             p.drawText(vp.rect().adjusted(24, 14, -24, -14), Qt.AlignmentFlag.AlignCenter, text)
@@ -677,7 +677,7 @@ class MediaList(QTreeWidget):
         paint_placeholder(self, self.placeholder, self._empty_hover, True)
         if self.filtering() and self.topLevelItemCount() and not self.visible_items():
             p = QPainter(self.viewport())
-            p.setPen(QColor("#7c86a2"))
+            p.setPen(theme.qcolor("text_muted"))
             p.drawText(self.viewport().rect(), Qt.AlignmentFlag.AlignCenter,
                        f"Không có file nào khớp “{self.filter_text.strip()}”")
 
@@ -715,7 +715,7 @@ class MediaList(QTreeWidget):
             menu.addAction(icons.icon("up", 14), "Đưa lên trên", lambda: self.move_selected(-1))
             menu.addAction(icons.icon("down", 14), "Đưa xuống dưới", lambda: self.move_selected(1))
             menu.addSeparator()
-            menu.addAction(icons.icon("trash", 14, "#fca5a5"), "Xoá dòng đang chọn (Delete)", self.remove_selected)
+            menu.addAction(icons.icon("trash", 14, "danger_text"), "Xoá dòng đang chọn (Delete)", self.remove_selected)
         if self.topLevelItemCount() > 0:
             if not menu.isEmpty():
                 menu.addSeparator()
@@ -789,7 +789,7 @@ class ListToolbar(QWidget):
         self.recursive.setToolTip("Khi thêm thư mục hoặc kéo thả thư mục, tự quét cả các thư mục con bên trong")
         lay = FlowLayout(self, spacing=4)
 
-        def btn(text, tip, fn, name="", icon_name="", icon_color="#c3cbe0"):
+        def btn(text, tip, fn, name="", icon_name="", icon_color="text_2"):
             b = QPushButton(text)
             b.setToolTip(tip)
             if name:
@@ -805,12 +805,12 @@ class ListToolbar(QWidget):
         def sep():
             line = QFrame()
             line.setFrameShape(QFrame.Shape.VLine)
-            line.setStyleSheet("color: #252c3f;")
+            line.setProperty("role", "hairline")
             line.setFixedHeight(20)
             lay.addWidget(line)
 
         btn("Thêm file", "Thêm file lẻ (hoặc bấm vào bảng trống / kéo thả file vào bảng)",
-            add_files, "accentBtn", "plus", "#ffffff")
+            add_files, "accentBtn", "plus", "accent_text")
         btn("Thư mục", "Chọn và quét cả thư mục", add_folder, "", "folder")
         lay.addWidget(self.recursive)
         sep()
@@ -823,7 +823,7 @@ class ListToolbar(QWidget):
 
         sel_btn = QPushButton("Chọn")
         sel_btn.setObjectName("ghost")
-        sel_btn.setIcon(icons.icon("check", 14, "#c3cbe0"))
+        sel_btn.setIcon(icons.icon("check", 14, "text_2"))
         sel_btn.setIconSize(QSize(14, 14))
         sel_btn.setToolTip("Các thao tác bật/tắt nhanh danh sách")
         sel_menu = QMenu(sel_btn)
@@ -837,7 +837,7 @@ class ListToolbar(QWidget):
 
         btn("Xoá", "Xoá các dòng đang chọn khỏi danh sách (phím Delete)",
             lst.remove_selected, "ghost", "trash")
-        btn("Xoá hết", "Xoá toàn bộ danh sách", lst.clear_all, "danger", "trash", "#fca5a5")
+        btn("Xoá hết", "Xoá toàn bộ danh sách", lst.clear_all, "danger", "trash", "danger_text")
         sep()
 
         # ----- tìm theo tên file -----
@@ -846,7 +846,7 @@ class ListToolbar(QWidget):
         self.search.setObjectName("search")
         self.search.setPlaceholderText("Tìm tên file…  (Ctrl+F)")
         self.search.setClearButtonEnabled(True)
-        self.search.addAction(icons.icon("search", 14, "#8c96b0"), QLineEdit.ActionPosition.LeadingPosition)
+        self.search.addAction(icons.icon("search", 14, "text_muted"), QLineEdit.ActionPosition.LeadingPosition)
         self.search.setFixedWidth(230)
         self.search.setFixedHeight(32)
         self.search.setToolTip("Gõ một phần tên file, không cần dấu (\"mua\" ra \"Mưa…\"). Nhiều từ = phải có đủ.\n"
@@ -854,7 +854,7 @@ class ListToolbar(QWidget):
         self.search.textChanged.connect(lst.apply_filter)
         lay.addWidget(self.search)
         self.match = QLabel("")
-        self.match.setObjectName("muted")
+        self.match.setProperty("role", "match")
         self.match.setFixedHeight(32)
         lay.addWidget(self.match)
         lst.filterChanged.connect(self._on_filter)
@@ -873,8 +873,7 @@ class ListToolbar(QWidget):
 
     def _on_filter(self, shown: int, total: int) -> None:
         self.match.setText(f"{shown}/{total} khớp" if self.lst.filtering() else "")
-        color = "#f87171" if self.lst.filtering() and not shown else theme.C["mid"]
-        self.match.setStyleSheet(f"color: {color}; font-weight: 600;")
+        theme.tag(self.match, role="match", tone="danger" if self.lst.filtering() and not shown else "")
 
     def _focus_search(self) -> None:
         if self.isVisible():  # chỉ trang đang mở

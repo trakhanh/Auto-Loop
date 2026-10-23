@@ -8,7 +8,7 @@ from PySide6.QtWidgets import (
 )
 
 from ..core.project import format_hms, parse_hms
-from . import icons
+from . import icons, theme
 from . import widgets as w
 
 MAX_PCT = 200
@@ -96,9 +96,9 @@ class MixerPanel(QGroupBox):
         self.grid.setVerticalSpacing(4)
         self.grid.setColumnStretch(1, 1)
         lay.addLayout(self.grid)
-        self.music = _Channel(self.grid, 0, "music", "#c4b5fd", "Nhạc (playlist)",
+        self.music = _Channel(self.grid, 0, "music", "accent_text", "Nhạc (playlist)",
                               "Âm lượng chung của cả playlist (sau khi chuẩn hoá LUFS)")
-        self.source = _Channel(self.grid, 3, "film", "#93c5fd", "Tiếng gốc clip",
+        self.source = _Channel(self.grid, 3, "film", "info_text", "Tiếng gốc clip",
                                "Tiếng có sẵn trong các clip video (kể cả Intro / Outro nếu giữ tiếng)")
         for ch in (self.music, self.source):
             ch.spin.valueChanged.connect(lambda *_: None if self._loading else self._value_changed())
@@ -135,7 +135,7 @@ class MixerPanel(QGroupBox):
         brow = QHBoxLayout()
         self.play_btn = QPushButton("Nghe thử 20 giây")
         self.play_btn.setObjectName("accentBtn")
-        self.play_btn.setIcon(icons.icon("play", 13, "#ffffff"))
+        self.play_btn.setIcon(icons.icon("play", 13, "accent_text"))
         self.play_btn.setIconSize(QSize(13, 13))
         self.play_btn.setToolTip("Trộn nhanh 20 giây đúng như khi xuất (nhạc + tiếng gốc + tiếng nền) rồi phát trong app")
         self.play_btn.clicked.connect(self._toggle_play)
@@ -198,7 +198,7 @@ class MixerPanel(QGroupBox):
                 r.remove()
             self._amb_rows = []
             for k, (name, _v, _on) in enumerate(layers):
-                ch = _Channel(self.grid, 8 + 3 * k, "waves", "#22d3ee", name, f"Âm lượng lớp tiếng nền “{name}”")
+                ch = _Channel(self.grid, 8 + 3 * k, "waves", "info_text", name, f"Âm lượng lớp tiếng nền “{name}”")
                 ch.spin.valueChanged.connect(lambda v, i=k: None if self._loading else self._amb_changed(i, v))
                 self._amb_rows.append(ch)
         self._loading = True
@@ -278,7 +278,7 @@ class MixerPanel(QGroupBox):
     def _set_play_text(self) -> None:
         playing = self.is_playing()
         self.play_btn.setText("Dừng nghe" if playing else "Nghe thử 20 giây")
-        self.play_btn.setIcon(icons.icon("stop" if playing else "play", 13, "#ffffff"))
+        self.play_btn.setIcon(icons.icon("stop" if playing else "play", 13, "accent_text"))
 
     def play_stems(self, stems: dict[str, bytes], start: float) -> None:
         """Phát các kênh riêng; âm lượng lấy từ các thanh và đổi được ngay trong lúc nghe."""
@@ -347,7 +347,7 @@ class MixerPanel(QGroupBox):
         msg = (f"Đang nghe {format_hms(self._last_start + pos)} ({int(pos)}/20 giây) — kéo thanh âm lượng là "
                "nghe thay đổi ngay.")
         if self._stale:
-            msg += f"<br><span style='color:#fcd34d'>{self._stale}</span>"
+            msg += f"<br><span style='color:{theme.T['warn_text']}'>{self._stale}</span>"
         self.status.setText(msg)
 
     def _on_finished(self) -> None:
@@ -358,7 +358,7 @@ class MixerPanel(QGroupBox):
 
     def show_error(self, text: str) -> None:
         self.set_busy(False)
-        self.status.setText(f"<span style='color:#fca5a5'>{text}</span>")
+        self.status.setText(f"<span style='color:{theme.T['danger_text']}'>{text}</span>")
 
     def stop(self, quiet: bool = False) -> None:
         was = self.is_playing()

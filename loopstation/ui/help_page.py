@@ -20,24 +20,26 @@ from PySide6.QtWidgets import (
 from ..core import ffmpeg_tools as ft
 from . import branding, icons, theme
 from .widgets import FlowLayout, sample_label
-from .theme import APP_NAME, APP_VERSION, AUTHOR, C
+from .theme import APP_NAME, APP_VERSION, AUTHOR
+
+T = theme.T  # token màu (đọc lúc dựng trang; trang hướng dẫn dựng một lần khi mở app)
 
 HELP_DIR = Path(__file__).resolve().parent / "assets"
-ACCENT, BADGE, CARD, CARD2 = "#a78bfa", "#f59e0b", "#171c2b", "#1e2538"
+ACCENT, BADGE, CARD, CARD2 = T["accent_text"], T["warn"], T["panel"], T["raised"]
 
 CSS_TEMPLATE = f"""
-body {{ color: {C['text']}; font-family: 'Segoe UI'; font-size: @BODY@pt; }}
-h1 {{ font-size: @H1@pt; color: white; margin: 0 0 2px 0; }}
-h2 {{ font-size: @H2@pt; color: white; margin: 20px 0 6px 0; }}
-h3 {{ font-size: @H3@pt; color: #c4b5fd; margin: 14px 0 4px 0; }}
+body {{ color: {T['text']}; font-family: 'Segoe UI'; font-size: @BODY@pt; }}
+h1 {{ font-size: @H1@pt; color: {T['text']}; margin: 0 0 2px 0; }}
+h2 {{ font-size: @H2@pt; color: {T['text']}; margin: 20px 0 6px 0; }}
+h3 {{ font-size: @H3@pt; color: {T['accent_soft']}; margin: 14px 0 4px 0; }}
 p, li {{ line-height: 150%; }}
-a {{ color: #93c5fd; text-decoration: none; }}
-code {{ background: #1f2330; color: #fcd34d; font-family: Consolas; }}
+a {{ color: {T['info_text']}; text-decoration: none; }}
+code {{ background: {T['overlay']}; color: {T['warn_text']}; font-family: Consolas; }}
 td {{ vertical-align: top; }}
-.k {{ color: #fcd34d; font-family: Consolas; white-space: nowrap; }}
-.muted {{ color: {C['muted']}; }}
-.cap {{ color: {C['muted']}; font-size: @SMALL@pt; }}
-.big {{ font-size: @H3@pt; font-weight: 700; color: white; }}
+.k {{ color: {T['warn_text']}; font-family: Consolas; white-space: nowrap; }}
+.muted {{ color: {T['text_muted']}; }}
+.cap {{ color: {T['text_muted']}; font-size: @SMALL@pt; }}
+.big {{ font-size: @H3@pt; font-weight: 700; color: {T['text']}; }}
 """
 
 
@@ -57,7 +59,7 @@ CSS = css()
 # ---------------- các khối trình bày ----------------
 def hero(title: str, when: str, actions: tuple = ()) -> str:
     """Tiêu đề chủ đề + "dùng khi nào" + nút đi tới đúng chỗ trong app."""
-    btns = "".join(f'<td bgcolor="{ACCENT}"><a href="{href}"><b><span style="color:#0b0d14;">&nbsp;{label} →&nbsp;'
+    btns = "".join(f'<td bgcolor="{ACCENT}"><a href="{href}"><b><span style="color:{T["bg"]};">&nbsp;{label} →&nbsp;'
                    f'</span></b></a></td><td width="10"></td>' for label, href in actions)
     row = f'<table cellpadding="7" cellspacing="0"><tr>{btns}</tr></table>' if btns else ""
     return (f'<table width="100%" cellpadding="14" cellspacing="0" bgcolor="{CARD}"><tr><td>'
@@ -80,7 +82,7 @@ def steps(items: list[tuple[str, str]]) -> str:
 def legend(items: list[tuple[str, str]]) -> str:
     """Chú thích các số trên ảnh: [số cam] tên — mô tả."""
     rows = "".join(
-        f'<tr><td width="30" align="center" bgcolor="{BADGE}"><b><span style="color:#111827;">{k}</span></b></td>'
+        f'<tr><td width="30" align="center" bgcolor="{BADGE}"><b><span style="color:{T["bg"]};">{k}</span></b></td>'
         f'<td>&nbsp;<b>{name}</b> — {desc}</td></tr>' for k, (name, desc) in enumerate(items, 1))
     return f'<table cellpadding="5" cellspacing="4">{rows}</table>'
 
@@ -94,8 +96,9 @@ def img(name: str, caption: str = "") -> str:
 
 def box(kind: str, text: str) -> str:
     """Khung Mẹo / Lưu ý / Ví dụ."""
-    color, title = {"tip": ("#2c4a7a", "Mẹo"), "warn": ("#7a5a1c", "Lưu ý"), "ex": ("#3b2f6b", "Ví dụ")}[kind]
-    bg = {"tip": "#13233f", "warn": "#3a2a0f", "ex": "#1d1838"}[kind]
+    tone, title = {"tip": ("info", "Mẹo"), "warn": ("warn", "Lưu ý"), "ex": ("accent", "Ví dụ")}[kind]
+    color = theme.mix(T["panel"], T[tone], 0.55)
+    bg = theme.mix(T["panel"], T[tone], 0.14)
     return (f'<table width="100%" cellpadding="10" cellspacing="0" bgcolor="{bg}"><tr>'
             f'<td width="6" bgcolor="{color}"></td><td><b>{title}:</b> {text}</td></tr></table>')
 
@@ -115,19 +118,26 @@ def examples(rows: list[tuple[str, str]], head: tuple[str, str] = ("Gõ", "Nghĩ
 
 def flow_blocks(items: list[tuple[str, str]]) -> str:
     """Dải màu minh hoạ thứ tự phát (ví dụ NỀN ×70 → Cảnh 2 → NỀN ×70 …)."""
-    cells = "".join(f'<td bgcolor="{c}" align="center"><b><span style="color:white;">{t}</span></b></td>'
+    cells = "".join(f'<td bgcolor="{c}" align="center"><b><span style="color:{T["text"]};">{t}</span></b></td>'
                     for t, c in items)
     return f'<table width="100%" cellpadding="8" cellspacing="3"><tr>{cells}</tr></table>'
 
 
-NEN, CANH, CANH2 = "#6d28d9", "#db2777", "#0e7490"
+NEN, CANH, CANH2 = theme.FLOW_COLORS
+GREY, GREY2 = T["line_strong"], T["raised"]
 
 # ---------------- nội dung từng chủ đề ----------------
 TOPICS: list[tuple[str, str, str, str, str]] = []  # (id, nhóm, icon, tiêu đề, html)
 
 
+def _tokens(html: str) -> str:
+    """Thay @c:tên@ trong HTML tĩnh bằng màu theo token."""
+    cols = {"ok_bg": theme.mix(T["panel"], T["success"], 0.30), "raised": T["raised"], "field": T["field"]}
+    return re.sub(r"@c:(\w+)@", lambda m: cols[m.group(1)], html)
+
+
 def topic(tid: str, group: str, icon: str, title: str, html: str) -> None:
-    TOPICS.append((tid, group, icon, title, html))
+    TOPICS.append((tid, group, icon, title, _tokens(html)))
 
 
 topic("batdau", "Bắt đầu", "home", "Bắt đầu trong 3 bước", hero(
@@ -169,9 +179,9 @@ topic("kieu", "Bắt đầu", "video_music", "Chọn kiểu sản phẩm", hero(
 <h2>Bước nào dùng cho kiểu nào?</h2>
 <table cellpadding="7" cellspacing="2">
 <tr><td></td><td class="muted"><b>1. Video</b></td><td class="muted"><b>2. Nhạc &amp; Nền</b></td><td class="muted"><b>3. Xuất</b></td></tr>
-<tr><td><b>Video có nhạc</b></td><td bgcolor="#14532d">✓ clip</td><td bgcolor="#14532d">✓ playlist + tiếng nền</td><td bgcolor="#14532d">✓ .mp4</td></tr>
-<tr><td><b>Chỉ video</b></td><td bgcolor="#14532d">✓ clip</td><td bgcolor="#1e293b">chỉ tiếng nền (tuỳ chọn)</td><td bgcolor="#14532d">✓ .mp4</td></tr>
-<tr><td><b>Chỉ nhạc</b></td><td bgcolor="#1e293b">bỏ qua</td><td bgcolor="#14532d">✓ playlist / tiếng nền + độ dài</td><td bgcolor="#14532d">✓ file nhạc</td></tr>
+<tr><td><b>Video có nhạc</b></td><td bgcolor="@c:ok_bg@">✓ clip</td><td bgcolor="@c:ok_bg@">✓ playlist + tiếng nền</td><td bgcolor="@c:ok_bg@">✓ .mp4</td></tr>
+<tr><td><b>Chỉ video</b></td><td bgcolor="@c:ok_bg@">✓ clip</td><td bgcolor=GREY2>chỉ tiếng nền (tuỳ chọn)</td><td bgcolor="@c:ok_bg@">✓ .mp4</td></tr>
+<tr><td><b>Chỉ nhạc</b></td><td bgcolor=GREY2>bỏ qua</td><td bgcolor="@c:ok_bg@">✓ playlist / tiếng nền + độ dài</td><td bgcolor="@c:ok_bg@">✓ file nhạc</td></tr>
 </table>""" + box("tip", "Muốn video dài <b>đúng bằng</b> một lượt playlist (ví dụ playlist 30 phút → video 30 phút): kiểu "
                          "Video có nhạc → trang Video → thẻ <b>Độ dài</b> → <i>Theo độ dài nhạc</i>."))
 
@@ -258,7 +268,7 @@ topic("xenke", "Làm video", "repeat", "Xen kẽ clip nền", hero(
 <h2>Nhiều clip loop: xếp lần lượt từng loop</h2>
 <p>Thư mục có <b>Content.mp4</b> và <b>Loop1.mp4 … Loop6.mp4</b>, muốn phát Content rồi lần lượt từng loop, mỗi cái
 lặp 60 lần? Bấm <b>Xếp lần lượt…</b> (cạnh nút Xen kẽ clip nền) — kéo cả thư mục vào bảng là app tự gợi ý.</p>""" + flow_blocks([
-    ("Content", CANH2), ("Loop1 ×60", NEN), ("Loop2 ×60", CANH), ("Loop3 ×60", NEN), ("…", "#334155"), ("Loop6 ×60", CANH)]) + examples([
+    ("Content", CANH2), ("Loop1 ×60", NEN), ("Loop2 ×60", CANH), ("Loop3 ×60", NEN), ("…", GREY), ("Loop6 ×60", CANH)]) + examples([
     ("Số lần phát mỗi loop", "<code>60</code> = 60 lần · <code>10p</code> = loop cho đủ 10 phút · <code>50-80</code> = ngẫu nhiên"),
     ("Clip nội dung", "file tên <b>không</b> có chữ loop (Content, Intro…): đặt ở đầu, ở cuối, hoặc cả đầu và cuối"),
     ("Lặp lại cả chuỗi", "phát hết Loop1 → Loop6 rồi lặp lại cả chuỗi N lượt"),
@@ -275,8 +285,8 @@ topic("dodai", "Làm video", "clock", "Độ dài video", hero(
     ("Thời lượng mục tiêu", "Gõ số vào 3 ô <b>giờ · phút · giây</b> (ví dụ <code>10</code> ở ô giờ) hoặc bấm 30p / 1h / 10h → app tự lặp cho đủ.",
      "Lặp cả chuỗi, hoặc chỉ giãn các clip tick “Tự giãn”"),
     ("Theo độ dài nhạc", "Video dài đúng bằng một lượt playlist.", "Không dùng được ở kiểu Chỉ video")]) + """
-<h2>Nhập thời lượng thế nào?</h2>""" + flow_blocks([("10", "#334155"), ("giờ", "#1e293b"), ("30", "#334155"),
-                                                     ("phút", "#1e293b"), ("0", "#334155"), ("giây", "#1e293b")]) + examples([
+<h2>Nhập thời lượng thế nào?</h2>""" + flow_blocks([("10", GREY), ("giờ", GREY2), ("30", GREY),
+                                                     ("phút", GREY2), ("0", GREY), ("giây", GREY2)]) + examples([
     ("10 ở ô giờ", "10 giờ"), ("Tab", "sang ô phút / giây"), ("↑ ↓", "tăng / giảm 1 trong ô đang chọn"),
     ("90 ở ô phút", "tự đổi thành 1 giờ 30 phút")], ("Làm", "Kết quả")) + box(
     "tip", "Bấm vào ô là số được bôi đen sẵn — gõ là thay luôn. Bấm <b>Enter</b> hoặc bấm ra ngoài để áp dụng "
@@ -293,7 +303,7 @@ topic("dodai", "Làm video", "clock", "Độ dài video", hero(
 topic("catdoan", "Làm video", "scissors", "Cắt đoạn, crossfade, Intro / Outro", hero(
     "Cắt đoạn, crossfade, Intro / Outro", "Làm chỗ nối mượt, bỏ phần thừa đầu / cuối clip, thêm đoạn mở đầu / kết thúc cố định.",
     (("Mở trang Video", "app:video"),)) + """
-<h2>Đoạn lấy — chỉ dùng phần giữa clip</h2>""" + flow_blocks([("bỏ 2s đầu", "#334155"), ("dùng 2s → 8s", "#7c3aed"), ("bỏ 2s cuối", "#334155")]) + """
+<h2>Đoạn lấy — chỉ dùng phần giữa clip</h2>""" + flow_blocks([("bỏ 2s đầu", GREY), ("dùng 2s → 8s", T["accent"]), ("bỏ 2s cuối", GREY)]) + """
 <p>Bấm đúp ô <b>Đoạn lấy</b>: hộp thoại có trình phát tự lặp đúng đoạn đã chọn. Kéo 2 tay nắm, hoặc phát tới chỗ muốn cắt
 rồi bấm <i>Đặt điểm đầu tại đây</i> / <i>Đặt điểm cuối tại đây</i> (phím <span class="k">I</span> / <span class="k">O</span>,
 <span class="k">Space</span> phát / dừng). Đoạn cắt áp cho <b>mọi lần</b> loop. Bấm <b>Lưu đoạn cắt</b> để áp dụng.</p>
@@ -457,7 +467,7 @@ topic("hangloat", "Xuất file", "folder", "Xuất hàng loạt theo thư mục"
     "tip", "Kiểu của dự án đang mở được chọn sẵn. Bấm kiểu khác là hộp thoại đổi ngay — thư mục cha, độ dài và âm lượng "
            "đã chọn được giữ nguyên. Khung phía trên luôn ghi rõ mỗi thư mục con cần có gì kèm sơ đồ mẫu.") + """
 <h2>1. Chuẩn bị thư mục</h2>
-<table cellpadding="10" cellspacing="0" bgcolor="#11151f"><tr><td><pre style="font-family:Consolas;">
+<table cellpadding="10" cellspacing="0" bgcolor="@c:field@"><tr><td><pre style="font-family:Consolas;">
 Video-can-lam\\                ← thư mục cha (chọn thư mục này)
 ├─ Video 01 - Mưa đêm\\         → video "Video 01 - Mưa đêm.mp4"
 │    loop_mua.mp4    2_pho.mp4    3_cafe.mp4
@@ -467,7 +477,7 @@ Video-can-lam\\                ← thư mục cha (chọn thư mục này)
 └─ _chung\\                     ← bắt đầu bằng _ = bỏ qua
 </pre></td></tr></table>
 <p>Kiểu <b>Chỉ nhạc</b>: mỗi thư mục con chỉ cần các bài nhạc.</p>
-<table cellpadding="10" cellspacing="0" bgcolor="#11151f"><tr><td><pre style="font-family:Consolas;">
+<table cellpadding="10" cellspacing="0" bgcolor="@c:field@"><tr><td><pre style="font-family:Consolas;">
 Nhac-can-lam\\                 ← thư mục cha
 ├─ Piano đêm\\                  → "Piano đêm.mp3"
 │    bai1.mp3   bai2.mp3

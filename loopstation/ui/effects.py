@@ -6,7 +6,7 @@
 - Shimmer: vệt sáng chạy trên thanh tiến trình trong lúc đang xuất.
 - AccentLine: vạch dải màu dưới thanh trên cùng; đang xuất thì dải màu chạy liên tục.
 
-Màu luôn đọc từ theme.C lúc vẽ, nên đổi bộ màu chủ đạo là các hiệu ứng đổi theo ngay.
+Màu luôn đọc từ theme.T lúc vẽ, nên đổi bộ màu chủ đạo là các hiệu ứng đổi theo ngay.
 Mọi hiệu ứng đều tự tắt khi không cần (không tốn công vẽ lúc đứng yên) để app luôn mượt.
 """
 from __future__ import annotations
@@ -73,7 +73,7 @@ class Glow(QObject):
             rest = self.idle + (0.45 * self._phase if self.breathing() else 0.0)
             t = max(self._hover, min(1.0, rest))
         t = round(t * 16) / 16  # lượng tử hoá: mắt không phân biệt được, nhưng mỗi lần đổi là một lần vẽ lại cả vùng bóng
-        key = (t, self.color or theme.C["accent"])
+        key = (t, self.color or theme.T['accent'])
         if key == self._applied:
             return
         self._applied = key
@@ -152,7 +152,7 @@ class Ripple(QWidget):
         rad = min(12.0, self.height() / 2)
         clip.addRoundedRect(self.rect().adjusted(1, 1, -1, -1), rad, rad)
         p.setClipPath(clip)
-        c = QColor(theme.C["soft"])
+        c = QColor(theme.T['accent_soft'])
         c.setAlpha(int(80 * (1 - self.t)))
         p.setPen(Qt.PenStyle.NoPen)
         p.setBrush(c)
@@ -181,7 +181,7 @@ class FocusGlow(QObject):
     def _apply(self, v) -> None:
         self._t = float(v)
         self.fx.setBlurRadius(16 * self._t)
-        c = QColor(theme.C["accent"])
+        c = QColor(theme.T['accent'])
         c.setAlpha(int(170 * self._t))
         self.fx.setColor(c)
 
@@ -228,8 +228,8 @@ def on_focus(obj, focus_in: bool) -> None:
         glow.go(False)
 
 
-class GradientLabel(QWidget):
-    """Tiêu đề lớn có chữ chuyển màu theo màu chủ đạo (màu → màu thứ hai)."""
+class HeadingLabel(QWidget):
+    """Tiêu đề lớn (cỡ chữ / độ đậm lấy từ QSS theo objectName), tự cắt bằng dấu … khi hẹp."""
 
     def __init__(self, text: str, object_name: str = "homeHero", parent=None):
         super().__init__(parent)
@@ -271,12 +271,7 @@ class GradientLabel(QWidget):
         text = fm.elidedText(self._text, Qt.TextElideMode.ElideRight, self.width() - 2)
         path = QPainterPath()
         path.addText(1, (self.height() + fm.ascent() - fm.descent()) / 2, f, text)
-        w = max(1.0, fm.horizontalAdvance(text))
-        g = QLinearGradient(0, 0, w, 0)
-        g.setColorAt(0.0, QColor("#ffffff"))
-        g.setColorAt(0.45, QColor(theme.C["soft"]))
-        g.setColorAt(1.0, QColor(theme.C["accent2"]).lighter(125))
-        p.fillPath(path, g)
+        p.fillPath(path, theme.qcolor("text"))
 
 
 class Shimmer(QWidget):
@@ -330,15 +325,15 @@ class Shimmer(QWidget):
         band = max(60.0, fill_w * 0.22)
         cx = (self._x - 0.2) * (fill_w + band)
         g = QLinearGradient(cx - band, 0, cx + band, 0)
-        g.setColorAt(0.0, QColor(255, 255, 255, 0))
-        g.setColorAt(0.5, QColor(255, 255, 255, 90))
-        g.setColorAt(1.0, QColor(255, 255, 255, 0))
+        g.setColorAt(0.0, theme.qcolor("white", 0))
+        g.setColorAt(0.5, theme.qcolor("white", 90))
+        g.setColorAt(1.0, theme.qcolor("white", 0))
         p.fillRect(self.rect(), g)
 
 
 class AccentLine(QWidget):
-    """Vạch dải màu chủ đạo dưới thanh trên cùng. Đang xuất: dải màu chạy liên tục + đốm sáng chạy theo — đang ở
-    trang nào cũng biết app đang làm việc."""
+    """Đường kẻ dưới thanh trên cùng. Đang xuất: chuyển màu nhấn + đốm sáng chạy theo — đang ở trang nào cũng biết
+    app đang làm việc (chỉ chạy khi có việc)."""
 
     def __init__(self, parent=None):
         super().__init__(parent)
@@ -365,22 +360,12 @@ class AccentLine(QWidget):
     def paintEvent(self, e) -> None:  # noqa: N802
         p = QPainter(self)
         w = max(1, self.width())
-        a1, a2 = theme.qcolor("accent"), theme.qcolor("accent2")
         run = self.running()
-        if not run:
-            a1.setAlpha(170)
-            a2.setAlpha(170)
-        off = self._phase * w
-        g = QLinearGradient(-off, 0, w - off, 0)
-        g.setSpread(QLinearGradient.Spread.RepeatSpread)  # lặp liền mạch khi trượt
-        g.setColorAt(0.0, a1)
-        g.setColorAt(0.5, a2)
-        g.setColorAt(1.0, a1)
-        p.fillRect(self.rect(), g)
+        p.fillRect(self.rect(), theme.qcolor("accent") if run else theme.qcolor("line"))  # nghỉ: chỉ là một đường kẻ
         if run:
             x = (self._phase * 3 % 1.0) * (w + 200) - 100
             hg = QLinearGradient(x - 90, 0, x + 90, 0)
-            hg.setColorAt(0.0, QColor(255, 255, 255, 0))
-            hg.setColorAt(0.5, QColor(255, 255, 255, 210))
-            hg.setColorAt(1.0, QColor(255, 255, 255, 0))
+            hg.setColorAt(0.0, theme.qcolor("white", 0))
+            hg.setColorAt(0.5, theme.qcolor("white", 210))
+            hg.setColorAt(1.0, theme.qcolor("white", 0))
             p.fillRect(self.rect(), hg)

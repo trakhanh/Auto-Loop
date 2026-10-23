@@ -147,11 +147,11 @@ def human_len(sec: float) -> str:
 
 def _k(text: str) -> str:
     """Tên file / thư mục nổi bật trong khung hướng dẫn (QLabel hiện <code> chữ rất nhỏ)."""
-    return f"<b style='color:{theme.C['soft']}'>{text}</b>"
+    return f"<b style='color:{theme.T['accent_soft']}'>{text}</b>"
 
 
 def _li(items) -> str:
-    return "".join(f"<tr><td style='color:{theme.C['accent']}; padding-right:6px;'>•</td><td>{t}</td></tr>" for t in items)
+    return "".join(f"<tr><td style='color:{theme.T['accent']}; padding-right:6px;'>•</td><td>{t}</td></tr>" for t in items)
 
 
 def kind_card_html(kind: str, audio_ext: str = ".mp3") -> tuple[str, str]:
@@ -163,12 +163,12 @@ def kind_card_html(kind: str, audio_ext: str = ".mp3") -> tuple[str, str]:
         items = ("Các bài nhạc trong thư mục con (kể cả thư mục bên trong) = <b>playlist</b> của file đó.",
                  "Playlist được lặp cho đủ độ dài chọn ở ô <b>Tính theo</b> bên dưới. Video / ảnh trong thư mục bị bỏ qua.",
                  *common)
-        tree = ("Nhac-can-lam\\           <span style='color:#8c96b0'>← chọn thư mục này</span>\n"
-                "├─ Piano-dem\\           <span style='color:#10b981'>→ Piano-dem" + audio_ext + "</span>\n"
+        tree = ("Nhac-can-lam\\           <span style='color:" + theme.T["text_muted"] + "'>← chọn thư mục này</span>\n"
+                "├─ Piano-dem\\           <span style='color:" + theme.T["success_text"] + "'>→ Piano-dem" + audio_ext + "</span>\n"
                 "│    bai1.mp3  bai2.mp3\n"
-                "├─ Lofi-hoc-bai\\        <span style='color:#10b981'>→ Lofi-hoc-bai" + audio_ext + "</span>\n"
+                "├─ Lofi-hoc-bai\\        <span style='color:" + theme.T["success_text"] + "'>→ Lofi-hoc-bai" + audio_ext + "</span>\n"
                 "│    01.mp3  02.mp3  03.mp3\n"
-                "└─ _chung\\              <span style='color:#8c96b0'>← bỏ qua</span>")
+                "└─ _chung\\              <span style='color:" + theme.T["text_muted"] + "'>← bỏ qua</span>")
     else:
         music = kind == "video_music"
         head = "Mỗi thư mục con → <b>một video .mp4" + (" có nhạc" if music else " không nhạc") + "</b>"
@@ -181,13 +181,13 @@ def kind_card_html(kind: str, audio_ext: str = ".mp3") -> tuple[str, str]:
             items.append("<b>Âm thanh</b>: tiếng gốc của clip (+ tiếng nền nếu dự án có). File nhạc trong thư mục "
                          "bị bỏ qua.")
         items += common
-        tree = ("Video-can-lam\\          <span style='color:#8c96b0'>← chọn thư mục này</span>\n"
-                "├─ Mua-dem\\             <span style='color:#10b981'>→ Mua-dem.mp4</span>\n"
+        tree = ("Video-can-lam\\          <span style='color:" + theme.T["text_muted"] + "'>← chọn thư mục này</span>\n"
+                "├─ Mua-dem\\             <span style='color:" + theme.T["success_text"] + "'>→ Mua-dem.mp4</span>\n"
                 "│    loop_mua.mp4  2_pho.mp4  3_cafe.mp4\n"
-                + ("│    Nhac\\ bai1.mp3     <span style='color:#8c96b0'>← không bắt buộc</span>\n" if music else "")
-                + "├─ Rung-xanh\\           <span style='color:#10b981'>→ Rung-xanh.mp4</span>\n"
+                + ("│    Nhac\\ bai1.mp3     <span style='color:" + theme.T["text_muted"] + "'>← không bắt buộc</span>\n" if music else "")
+                + "├─ Rung-xanh\\           <span style='color:" + theme.T["success_text"] + "'>→ Rung-xanh.mp4</span>\n"
                 "│    loop_rung.mp4  2_suoi.mp4\n"
-                "└─ _chung\\              <span style='color:#8c96b0'>← bỏ qua</span>")
+                "└─ _chung\\              <span style='color:" + theme.T["text_muted"] + "'>← bỏ qua</span>")
     left = (f"<div style='font-size:11pt; margin-bottom:4px;'>{head}</div>"
             f"<table cellspacing='0' cellpadding='1'>{_li(items)}</table>")
     right = f"<pre style='font-family:Consolas,monospace; margin:0;'>{tree}</pre>"
@@ -219,8 +219,9 @@ class BatchDialog(QDialog):
         kind_row = QHBoxLayout()
         kind_row.setSpacing(0)
         kl = QLabel("Kiểu xuất:")
-        kl.setStyleSheet("font-weight:600; margin-right:10px;")
+        kl.setProperty("role", "strong")
         kind_row.addWidget(kl)
+        kind_row.addSpacing(10)
         self.kind_group = QButtonGroup(self)
         self.kind_buttons: dict[str, QPushButton] = {}
         for key, ic, tip in KINDS:
@@ -657,7 +658,7 @@ class BatchDialog(QDialog):
         if text and os.path.isdir(text) and batch.is_drive_root(text):
             self.jobs = []
             self._rebuild()
-            self.summary.setText("<span style='color:#f59e0b'>Đây là cả ổ đĩa — hãy chọn đúng <b>thư mục cha</b> chứa "
+            self.summary.setText("<span style='color:" + theme.T["warn_text"] + "'>Đây là cả ổ đĩa — hãy chọn đúng <b>thư mục cha</b> chứa "
                                  "các thư mục video (ví dụ D:\\Video-can-lam\\Tuan-1).</span>")
             return
         self.jobs = batch.scan(text, self.music_only) if os.path.isdir(text) else []
@@ -712,7 +713,7 @@ class BatchDialog(QDialog):
         self._play_btns = {}
         if not self.jobs:
             self.tree.blockSignals(False)
-            self.summary.setText("<span style='color:#f59e0b'>Không thấy thư mục con nào.</span>"
+            self.summary.setText("<span style='color:" + theme.T["warn_text"] + "'>Không thấy thư mục con nào.</span>"
                                  if self.folder.text().strip() else "Chọn thư mục cha để xem danh sách video sẽ tạo.")
             self.ok_btn.setEnabled(False)
             return
@@ -774,13 +775,13 @@ class BatchDialog(QDialog):
                              else Qt.CheckState.Unchecked)
             if not ok:
                 it.setFlags(it.flags() & ~Qt.ItemFlag.ItemIsUserCheckable & ~Qt.ItemFlag.ItemIsEnabled)
-                it.setForeground(C_NOTE, QColor("#f87171"))
+                it.setForeground(C_NOTE, theme.qcolor("danger_text"))
             elif edited or vol_edited:
-                it.setForeground(C_NOTE, QColor(theme.C["mid"]))
+                it.setForeground(C_NOTE, QColor(theme.T['accent_text']))
             elif job.notes or extra:
-                it.setForeground(C_NOTE, QColor("#fbbf24"))
+                it.setForeground(C_NOTE, theme.qcolor("warn_text"))
             else:
-                it.setForeground(C_NOTE, QColor("#6ee7b7"))
+                it.setForeground(C_NOTE, theme.qcolor("success_text"))
             it.setData(C_NAME, Qt.ItemDataRole.UserRole, total)
             self._projects.append(proj)
             self._row_info.append((total, changes))
@@ -1038,9 +1039,9 @@ class BatchDialog(QDialog):
         moved = out and os.path.normcase(out) != os.path.normcase(self.template.export.output_dir or "")
         self.summary.setText(f"Sẽ thêm <b>{len(chosen)}</b> {what}{extra} vào hàng đợi · tổng thời lượng ≈ "
                              f"<b>{w.fmt_dur(total)}</b>"
-                             + (f" · <span style='color:#f87171'>{bad} thư mục bị bỏ qua (xem Ghi chú)</span>"
+                             + (f" · <span style='color:{theme.T['danger_text']}'>{bad} thư mục bị bỏ qua (xem Ghi chú)</span>"
                                 if bad else "")
-                             + (f"<br><span style='color:#fbbf24'>Thư mục lưu nằm trong thư mục cha → file sẽ lưu vào "
+                             + (f"<br><span style='color:{theme.T['warn_text']}'>Thư mục lưu nằm trong thư mục cha → file sẽ lưu vào "
                                 f"<b>{out}</b> để lần quét sau không lẫn với clip.</span>" if moved else ""))
         self.ok_btn.setText(f"Thêm {len(chosen)} {what} vào hàng đợi")
         self.ok_btn.setEnabled(bool(chosen))

@@ -11,31 +11,31 @@ from . import branding, effects, icons, theme
 from .theme import APP_NAME, AUTHOR
 from .widgets import sample_label
 
-# (khoá, biểu tượng, màu biểu tượng, tiêu đề, mô tả, ví dụ)
+# (khoá, biểu tượng, tông ô biểu tượng, tiêu đề, mô tả, ví dụ)
 CARDS = [
-    ("video_music", "video_music", "#a78bfa", "Video có nhạc",
+    ("video_music", "video_music", "accent", "Video có nhạc",
      "Clip loop (Google Flow…) + playlist nhạc → video dài cho YouTube.",
      "Ví dụ: clip nền ×70 xen các cảnh, nhạc tự lặp đủ 1 giờ"),
-    ("video_only", "film", "#60a5fa", "Chỉ video",
+    ("video_only", "film", "info", "Chỉ video",
      "Ghép / loop clip, không dùng playlist (giữ tiếng gốc hoặc thêm tiếng nền).",
      "Ví dụ: video cảnh mưa 3 giờ có tiếng mưa"),
-    ("music_only", "music", "#34d399", "Chỉ nhạc",
+    ("music_only", "music", "success", "Chỉ nhạc",
      "Playlist → một file nhạc dài, hoặc nhiều bản khác thứ tự.",
      "Ví dụ: 10 bài → file MP3 1 giờ, xuất 4 bản"),
-    ("ambient", "waves", "#22d3ee", "Tiếng nền (ASMR)",
+    ("ambient", "waves", "info", "Tiếng nền (ASMR)",
      "Chỉ tiếng mưa, lửa, sóng… phối nhiều lớp, tự lặp liền mạch.",
      "Ví dụ: mưa 70% + lửa 50% → file 8 giờ"),
-    ("batch", "folder", "#fbbf24", "Xuất hàng loạt",
+    ("batch", "folder", "warn", "Xuất hàng loạt",
      "Nhiều video cùng kiểu một lần: mỗi thư mục con = một video.",
      "Dùng dự án đang mở làm khuôn"),
-    ("open", "save", "#f472b6", "Mở dự án đã lưu",
+    ("open", "save", "neutral", "Mở dự án đã lưu",
      "Tiếp tục một dự án .lsproj đã làm trước đó.",
      "Hoặc mở dự án mẫu bên dưới để tập dùng"),
 ]
 
 
 class HomeCard(QPushButton):
-    def __init__(self, ic: str, color: str, title: str, desc: str, example: str, parent=None):
+    def __init__(self, ic: str, tone: str, title: str, desc: str, example: str, parent=None):
         super().__init__(parent)
         self.setObjectName("homeCard")
         self.setCursor(Qt.CursorShape.PointingHandCursor)
@@ -50,7 +50,8 @@ class HomeCard(QPushButton):
         badge.setObjectName("homeBadge")
         badge.setFixedSize(38, 38)
         badge.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        badge.setPixmap(icons.pixmap(ic, 20, color))
+        badge.setProperty("tone", tone)  # chỉ ô biểu tượng mang màu; viền thẻ luôn trung tính
+        badge.setPixmap(icons.pixmap(ic, 20, {"accent": "accent_text", "neutral": "text_2"}.get(tone, tone + "_text")))
         t = QLabel(title)
         t.setObjectName("homeTitle")
         top.addWidget(badge)
@@ -68,18 +69,6 @@ class HomeCard(QPushButton):
         lay.addStretch(1)
         lay.addWidget(ex)
 
-    def tint(self, color: str) -> None:
-        """Mỗi thẻ ánh một màu riêng (màu biểu tượng) ở góc trên trái, rê chuột thì đậm hơn."""
-        c = theme.rgba
-        self.setStyleSheet(
-            f"QPushButton#homeCard {{ background: qlineargradient(x1:0, y1:0, x2:1, y2:1, stop:0 {c(color, 0.20)}, "
-            f"stop:0.55 {c(theme.C['surface'], 0.92)}, stop:1 {c(theme.C['surface'], 0.92)}); "
-            f"border: 1px solid {c(color, 0.30)}; border-radius: 14px; text-align: left; padding: 0; }}"
-            f"QPushButton#homeCard:hover {{ background: qlineargradient(x1:0, y1:0, x2:1, y2:1, stop:0 {c(color, 0.32)}, "
-            f"stop:0.6 {c(theme.C['surface2'], 0.95)}, stop:1 {c(theme.C['surface2'], 0.95)}); border-color: {color}; }}"
-            f"QPushButton#homeCard:pressed {{ background: {c(color, 0.28)}; }}"
-            f"QLabel#homeBadge {{ background: {c(color, 0.18)}; border-radius: 10px; }}")
-
 
 class HomePage(QWidget):
     chosen = Signal(str)  # khoá trong CARDS
@@ -90,7 +79,7 @@ class HomePage(QWidget):
         super().__init__(parent)
         logo = QLabel()
         logo.setPixmap(branding.pixmap(56, self.devicePixelRatioF()))
-        title = effects.GradientLabel("Bạn muốn làm gì hôm nay?")  # chữ chuyển màu theo màu chủ đạo
+        title = effects.HeadingLabel("Bạn muốn làm gì hôm nay?")  # chữ chuyển màu theo màu chủ đạo
         sub = QLabel(f"{APP_NAME} · {AUTHOR} — chọn một việc bên dưới, app tự mở đúng bước. "
                      "Có thể đổi kiểu sản phẩm bất cứ lúc nào ở thanh trên cùng.")
         sub.setObjectName("muted")
@@ -106,7 +95,7 @@ class HomePage(QWidget):
 
         self.resume = QPushButton("")
         self.resume.setObjectName("nextStepBtn")
-        self.resume.setIcon(icons.icon("arrow_right", 14, "#ffffff"))
+        self.resume.setIcon(icons.icon("arrow_right", 14, "text_on_accent"))
         self.resume.setIconSize(QSize(14, 14))
         self.resume.setLayoutDirection(Qt.LayoutDirection.RightToLeft)
         self.resume.clicked.connect(lambda: self.resumeRequested.emit())
@@ -118,8 +107,6 @@ class HomePage(QWidget):
         for k, (key, ic, color, t, d, ex) in enumerate(CARDS):
             card = HomeCard(ic, color, t, d, ex)
             card.clicked.connect(lambda _=False, kk=key: self.chosen.emit(kk))
-            effects.Glow(card, color, blur=34, alpha=120)  # rê chuột: thẻ sáng lên theo màu biểu tượng
-            card.tint(color)
             grid.addWidget(card, k // 3, k % 3)
             self.cards[key] = card
 

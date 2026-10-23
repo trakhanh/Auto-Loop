@@ -182,11 +182,17 @@ _ICON_CACHE: dict[tuple[str, str, int], QIcon] = {}
 _PIX_CACHE: dict[tuple[str, str, int], QPixmap] = {}
 
 
-def pixmap(name: str, size: int | str = 16, color: str | int = "#cbd5e1") -> QPixmap:
+def _res(color) -> str:
+    """Tên token màu ("text_2", "accent_text"…) hoặc mã màu thô → mã màu theo bộ màu đang chọn."""
+    from . import theme
+    return theme.T.get(str(color), str(color))
+
+
+def pixmap(name: str, size: int | str = 16, color: str | int = "text_2") -> QPixmap:
     if isinstance(size, str):
         size, color = (int(color) if isinstance(color, int) else 16), size
     sz = int(size)
-    col = str(color)
+    col = _res(color)
     key = (name, col, sz)
     if key in _PIX_CACHE:
         return _PIX_CACHE[key]
@@ -209,13 +215,13 @@ def pixmap(name: str, size: int | str = 16, color: str | int = "#cbd5e1") -> QPi
     return pm
 
 
-def icon(name: str, size: int | str = 16, color: str = "#cbd5e1", active_color: str = "#ffffff",
-         disabled_color: str = "#475166") -> QIcon:
+def icon(name: str, size: int | str = 16, color: str = "text_2", active_color: str = "white",
+         disabled_color: str = "text_disabled") -> QIcon:
     if isinstance(size, str):
         color = size
         size = 16
     sz = int(size)
-    key = (name, f"{color}|{active_color}|{disabled_color}", sz)
+    key = (name, f"{_res(color)}|{_res(active_color)}|{_res(disabled_color)}", sz)
     if key in _ICON_CACHE:
         return _ICON_CACHE[key]
     ic = QIcon()
@@ -227,7 +233,7 @@ def icon(name: str, size: int | str = 16, color: str = "#cbd5e1", active_color: 
     return ic
 
 
-def btn(button, name: str, color: str = "#cbd5e1", size: int = 15):
+def btn(button, name: str, color: str = "text_2", size: int = 15):
     """Gắn icon vector cho QPushButton và trả về chính nút đó."""
     button.setIcon(icon(name, size=size, color=color))
     button.setIconSize(QSize(size, size))

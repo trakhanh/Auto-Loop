@@ -464,7 +464,7 @@ class InterleaveDialog(QDialog):
         self.preview.clear()
         opt = self._options()
         if opt is None:
-            self.summary.setText("<span style='color:#f59e0b'>Số lần phát của clip nền chưa hợp lệ.</span>")
+            self.summary.setText("<span style='color:" + theme.T["warn_text"] + "'>Số lần phát của clip nền chưa hợp lệ.</span>")
             self.ok_btn.setEnabled(False)
             return
         out = il.build(self.clips, opt)
@@ -482,11 +482,11 @@ class InterleaveDialog(QDialog):
             if not is_base and c.enabled:
                 n_ins += 1
             it = QListWidgetItem(f"{k + 1:>3}.  [{tag}]  {Path(c.path).name}    {plays}    ≈ {w.fmt_dur(sec)}")
-            it.setForeground(QColor(theme.C["mid"]) if is_base else QColor("#64748b") if not c.enabled
-                             else QColor("#eef1f8"))
+            it.setForeground(QColor(theme.T['accent_text']) if is_base else theme.qcolor("text_muted") if not c.enabled
+                             else theme.qcolor("text"))
             self.preview.addItem(it)
         if n_ins == 0:
-            self.summary.setText("<span style='color:#f59e0b'>Chưa có cảnh chèn nào được chọn — tick ít nhất "
+            self.summary.setText("<span style='color:" + theme.T["warn_text"] + "'>Chưa có cảnh chèn nào được chọn — tick ít nhất "
                                  "một cảnh (và Xuất hiện ≥ 1).</span>")
         else:
             rnd = f" · {opt.repeat} lượt mẫu" if opt.repeat > 1 else ""

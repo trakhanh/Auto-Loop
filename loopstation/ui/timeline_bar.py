@@ -17,14 +17,13 @@ from PySide6.QtGui import QBrush, QColor, QFont, QLinearGradient, QPainter, QPai
 from PySide6.QtWidgets import QToolTip, QWidget
 
 from ..core import planner
-from . import icons
+from . import icons, theme
 from .widgets import fmt_dur
 
-PALETTE = ["#7c5cff", "#10b981", "#f59e0b", "#ec4899", "#3b82f6", "#06b6d4", "#84cc16", "#f97316",
-           "#8b5cf6", "#14b8a6"]
-BOOKEND = "#64748b"
-MUSIC = ["#3b5bdb", "#2b6cb0", "#4c51bf", "#2c7a7b"]
-SOURCE = "#334155"
+PALETTE = theme.CLIP_COLORS
+BOOKEND = theme.BOOKEND_COLOR
+MUSIC = theme.MUSIC_COLORS
+SOURCE = theme.SOURCE_COLOR
 MARK_W = 7.0  # bề rộng tối thiểu (px) của clip quá ngắn
 NICE_STEPS = (1, 2, 5, 10, 15, 30, 60, 120, 300, 600, 900, 1800, 3600, 7200, 10800, 21600, 43200)
 
@@ -193,9 +192,9 @@ class TimelineBar(QWidget):
             p.setOpacity(0.35)
         w, h = self.width(), self.height()
         bg = QPainterPath()
-        bg.addRoundedRect(QRectF(0.5, 0.5, w - 1, h - 1), 10, 10)
-        p.fillPath(bg, QColor("#121621"))
-        p.setPen(QPen(QColor("#242b3d"), 1))
+        bg.addRoundedRect(QRectF(0.5, 0.5, w - 1, h - 1), theme.R["lg"], theme.R["lg"])
+        p.fillPath(bg, theme.qcolor("panel"))
+        p.setPen(QPen(theme.qcolor("line"), 1))
         p.drawPath(bg)
         self._hits = []
 
@@ -209,8 +208,8 @@ class TimelineBar(QWidget):
 
         if not self.total:
             p.setFont(small)
-            p.setPen(QColor("#78839e"))
-            pm = icons.pixmap("timeline", 15, "#68728a")
+            p.setPen(theme.qcolor("text_muted"))
+            pm = icons.pixmap("timeline", 15, "text_muted")
             tw = p.fontMetrics().horizontalAdvance(self.note)
             start_x = max(16.0, (w - (tw + 24)) / 2.0)
             p.drawPixmap(int(start_x), int((h - 15) / 2), pm)
@@ -224,18 +223,18 @@ class TimelineBar(QWidget):
         audio_lane_name = self._audio_lane_name()
 
         p.setFont(bold)
-        p.setPen(QColor("#8c96b0"))
-        p.drawPixmap(10, int(top_v + (self.LANE_V - 13) / 2), icons.pixmap("film", 13, "#8c96b0"))
+        p.setPen(theme.qcolor("text_muted"))
+        p.drawPixmap(10, int(top_v + (self.LANE_V - 13) / 2), icons.pixmap("film", 13, "text_muted"))
         p.drawText(QRectF(27, top_v, self.PAD_L - 30, self.LANE_V),
                    Qt.AlignmentFlag.AlignVCenter | Qt.AlignmentFlag.AlignLeft, "CLIP")
-        p.drawPixmap(10, int(top_m + (self.LANE_M - 13) / 2), icons.pixmap("music", 13, "#8c96b0"))
+        p.drawPixmap(10, int(top_m + (self.LANE_M - 13) / 2), icons.pixmap("music", 13, "text_muted"))
         p.drawText(QRectF(27, top_m, self.PAD_L - 30, self.LANE_M),
                    Qt.AlignmentFlag.AlignVCenter | Qt.AlignmentFlag.AlignLeft, audio_lane_name)
 
         for y_lane, h_lane in ((top_v, self.LANE_V), (top_m, self.LANE_M)):
             slot = QPainterPath()
             slot.addRoundedRect(QRectF(self.PAD_L, y_lane, track_w, h_lane), 6, 6)
-            p.fillPath(slot, QColor("#0b0d13"))
+            p.fillPath(slot, theme.qcolor("field"))
 
         p.save()
         p.setClipRect(QRectF(self.PAD_L, 0, track_w, h))
@@ -243,7 +242,7 @@ class TimelineBar(QWidget):
         if self.video:
             self._draw_lane(p, self.video, top_v, self.LANE_V, small, tiny, gradient=True)
         else:
-            p.setPen(QColor("#525a70"))
+            p.setPen(theme.qcolor("text_disabled"))
             msg = "Chế độ Chỉ nhạc — không dùng hình ảnh" if self.music_only else "Chưa có clip video"
             p.drawText(QRectF(self.PAD_L + 10, top_v, track_w - 20, self.LANE_V),
                        Qt.AlignmentFlag.AlignVCenter | Qt.AlignmentFlag.AlignLeft, msg)
@@ -253,7 +252,7 @@ class TimelineBar(QWidget):
         elif self.source:
             self._draw_source(p, top_m, small)
         else:
-            p.setPen(QColor("#525a70"))
+            p.setPen(theme.qcolor("text_disabled"))
             p.drawText(QRectF(self.PAD_L + 10, top_m, track_w - 20, self.LANE_M),
                        Qt.AlignmentFlag.AlignVCenter | Qt.AlignmentFlag.AlignLeft,
                        "Chỉ có tiếng nền" if self.ambient else
@@ -261,14 +260,14 @@ class TimelineBar(QWidget):
                        else "Không có âm thanh (chưa có nhạc, clip không có tiếng gốc)")
         if self.playhead is not None and self.view0 <= self.playhead <= self.view1:
             x = self._x(self.playhead)
-            p.setPen(QPen(QColor("#f8fafc"), 2))
+            p.setPen(QPen(theme.qcolor("text"), 2))
             p.drawLine(QPointF(x, top_v - 4), QPointF(x, top_m + self.LANE_M + 2))
             head = QPainterPath()
             head.moveTo(x - 5, top_v - 7)
             head.lineTo(x + 5, top_v - 7)
             head.lineTo(x, top_v - 1)
             head.closeSubpath()
-            p.fillPath(head, QColor("#f8fafc"))
+            p.fillPath(head, theme.qcolor("text"))
         p.restore()
         self._draw_ruler(p, top_m + self.LANE_M + 4, small, bold)
         if self.playhead is not None and self.view0 <= self.playhead <= self.view1:
@@ -277,8 +276,8 @@ class TimelineBar(QWidget):
             ry = top_m + self.LANE_M + 4
             knob = QPainterPath()
             knob.addRoundedRect(QRectF(x - 5, ry + 1, 10, max(8.0, h - ry - 4)), 3, 3)
-            p.fillPath(knob, QColor("#f8fafc"))
-            p.setPen(QPen(QColor("#f8fafc"), 2))
+            p.fillPath(knob, theme.qcolor("text"))
+            p.setPen(QPen(theme.qcolor("text"), 2))
             p.drawLine(QPointF(x, top_m + self.LANE_M), QPointF(x, ry + 1))
 
     def _draw_lane(self, p: QPainter, blocks: list[Block], top: float, lane_h: float, small, tiny,
@@ -314,12 +313,12 @@ class TimelineBar(QWidget):
             p.setFont(small)
             fm = p.fontMetrics()
             if vis.width() > 40:
-                p.setPen(QColor("white"))
+                p.setPen(theme.qcolor("white"))
                 p.drawText(vis.adjusted(indent, 0, -4, 0), Qt.AlignmentFlag.AlignVCenter | Qt.AlignmentFlag.AlignLeft,
                            fm.elidedText(disp, Qt.TextElideMode.ElideRight, int(vis.width() - indent - 4)))
             elif vis.width() > 14:
                 p.setFont(tiny)
-                p.setPen(QColor("white"))
+                p.setPen(theme.qcolor("white"))
                 p.drawText(vis, Qt.AlignmentFlag.AlignCenter, b.short)
         # clip quá ngắn: vạch nổi có viền + nhãn số phía trên các khối dài
         p.setFont(tiny)
@@ -328,7 +327,7 @@ class TimelineBar(QWidget):
             path = QPainterPath()
             path.addRoundedRect(r, 2.5, 2.5)
             p.fillPath(path, QColor(b.color).lighter(115))
-            p.setPen(QPen(QColor("#f8fafc"), 1.2))
+            p.setPen(QPen(theme.qcolor("text"), 1.2))
             p.drawPath(path)
             self._hits.append((r.adjusted(-4, 0, 4, 0), b.tip))
         # nhãn vẽ sau tất cả các vạch để không bị vạch bên cạnh đè; giữ trong khung, bỏ nhãn khi quá dày
@@ -345,10 +344,10 @@ class TimelineBar(QWidget):
             last_badge_right = badge.right()
             bp = QPainterPath()
             bp.addRoundedRect(badge, 7, 7)
-            p.fillPath(bp, QColor("#0b0d13"))
+            p.fillPath(bp, theme.qcolor("field"))
             p.setPen(QPen(QColor(b.color).lighter(130), 1.2))
             p.drawPath(bp)
-            p.setPen(QColor("#f8fafc"))
+            p.setPen(theme.qcolor("text"))
             p.drawText(badge, Qt.AlignmentFlag.AlignCenter, b.short)
             self._hits.append((badge, b.tip))
 
@@ -362,11 +361,11 @@ class TimelineBar(QWidget):
             path = QPainterPath()
             path.addRoundedRect(r, 4, 4)
             p.fillPath(path, QColor(SOURCE))
-            p.fillPath(path, QBrush(QColor(255, 255, 255, 18), Qt.BrushStyle.BDiagPattern))
+            p.fillPath(path, QBrush(theme.qcolor("white", 18), Qt.BrushStyle.BDiagPattern))
             self._hits.append((r, s.tip))
             vis = r.intersected(QRectF(self.PAD_L, top, self._span_px(), self.LANE_M))
             if vis.width() > 110:
-                p.setPen(QColor("#cbd5e1"))
+                p.setPen(theme.qcolor("text_2"))
                 p.drawText(vis.adjusted(6, 0, -4, 0), Qt.AlignmentFlag.AlignVCenter | Qt.AlignmentFlag.AlignLeft,
                            "Tiếng gốc của clip")
 
@@ -385,7 +384,7 @@ class TimelineBar(QWidget):
         p.setFont(bold)
         right_w = p.fontMetrics().horizontalAdvance(right_label) + 4
         right_x = self.PAD_L + track_w - right_w
-        p.setPen(QColor("#eef1f8"))
+        p.setPen(theme.qcolor("text"))
         p.drawText(QRectF(right_x, y, right_w, h - y - 2), Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter,
                    right_label)
         p.setFont(small)
@@ -393,13 +392,13 @@ class TimelineBar(QWidget):
         while t <= self.view1 + 1e-6:
             x = self._x(t)
             if x >= self.PAD_L - 0.5:
-                p.setPen(QPen(QColor("#2b3346"), 1))
+                p.setPen(QPen(theme.qcolor("line"), 1))
                 p.drawLine(QPointF(x, y - 3), QPointF(x, y))
                 label = fmt_dur(t)
                 lw = fm.horizontalAdvance(label)
                 lx = max(self.PAD_L, x - lw / 2)
                 if lx + lw < right_x - 8:
-                    p.setPen(QColor("#8c96b0"))
+                    p.setPen(theme.qcolor("text_muted"))
                     p.drawText(QRectF(lx, y, lw + 2, h - y - 2), Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignVCenter,
                                label)
             t += step

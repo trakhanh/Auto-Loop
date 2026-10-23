@@ -67,7 +67,7 @@ class StepGuide(QWidget):
     def _set_hint(self, hint: str, ok: bool) -> None:
         if ok != getattr(self, "_ok", None):
             self._ok = ok
-            self.icon.setPixmap(icons.pixmap("check" if ok else "arrow_right", 15, "#34d399" if ok else theme.C["mid"]))
+            self.icon.setPixmap(icons.pixmap("check" if ok else "arrow_right", 15, "success_text" if ok else "accent_text"))
         if hint != self.hint.text():
             self.hint.setText(hint)
             motion.fade_in(self.hint, 200, 0.2)  # việc cần làm vừa đổi: chữ hiện dần

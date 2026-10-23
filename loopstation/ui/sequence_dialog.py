@@ -15,7 +15,7 @@ from PySide6.QtWidgets import (
 
 from ..core import interleave as il
 from ..core.project import ClipItem
-from . import icons
+from . import icons, theme
 from . import widgets as w
 
 LAST_KEY = "sequence/last"
@@ -117,12 +117,12 @@ class SequenceDialog(QDialog):
         self.plays.style().unpolish(self.plays)
         self.plays.style().polish(self.plays)
         if not self.loops:
-            self.summary.setText("<span style='color:#f59e0b'>Không có clip nào tên chứa chữ <b>loop</b> "
+            self.summary.setText("<span style='color:" + theme.T["warn_text"] + "'>Không có clip nào tên chứa chữ <b>loop</b> "
                                  "(hoặc nen / bg) — đặt tên kiểu Loop1.mp4, Loop2.mp4… rồi thử lại.</span>")
             self.ok_btn.setEnabled(False)
             return
         if bad:
-            self.summary.setText("<span style='color:#f59e0b'>Số lần phát chưa đúng — ví dụ 60, 50-80 hoặc 10p.</span>")
+            self.summary.setText("<span style='color:" + theme.T["warn_text"] + "'>Số lần phát chưa đúng — ví dụ 60, 50-80 hoặc 10p.</span>")
             self.ok_btn.setEnabled(False)
             return
         out = [c for c in self._build() if c.enabled]

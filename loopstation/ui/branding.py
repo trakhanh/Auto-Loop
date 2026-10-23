@@ -106,12 +106,12 @@ def apply_window_frame(widget) -> None:
             c = theme.QColor(hex_color)
             return ctypes.c_uint32(c.red() | (c.green() << 8) | (c.blue() << 16))
 
-        border_col = colorref(theme.mix(theme.C["border_light"], theme.C["accent"], 0.35))
+        border_col = colorref(theme.mix(theme.T["line_strong"], theme.T["accent"], 0.35))
         dwm.DwmSetWindowAttribute(hwnd, 34, ctypes.byref(border_col), ctypes.sizeof(border_col))
-        cap_col = colorref(theme.mix(theme.C["bg"], theme.C["accent"], 0.06))
+        cap_col = colorref(theme.mix(theme.T["bg"], theme.T["accent"], 0.06))
         dwm.DwmSetWindowAttribute(hwnd, 35, ctypes.byref(cap_col), ctypes.sizeof(cap_col))
-        # DWMWA_TEXT_COLOR (36) = COLORREF 0x00BBGGRR (#eef1f8 -> 0x00F8F1EE)
-        txt_col = ctypes.c_uint32(0x00F8F1EE)
+        # DWMWA_TEXT_COLOR (36) = COLORREF 0x00BBGGRR
+        txt_col = colorref(theme.T["text"])
         dwm.DwmSetWindowAttribute(hwnd, 36, ctypes.byref(txt_col), ctypes.sizeof(txt_col))
     except Exception:  # noqa: BLE001
         pass

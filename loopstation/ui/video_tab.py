@@ -283,7 +283,7 @@ class VideoTab(QWidget):
         self._hist_timer.timeout.connect(self._push_history)
         preview_btn = QPushButton("Xem thử nối")
         preview_btn.setObjectName("accentBtn")
-        preview_btn.setIcon(icons.icon("play", 13, "#ffffff"))
+        preview_btn.setIcon(icons.icon("play", 13, "accent_text"))
         preview_btn.setIconSize(QSize(13, 13))
         preview_btn.setToolTip("Xuất nhanh đoạn ngắn (clip đang chọn phát 2 lần rồi chuyển sang clip kế) để kiểm tra crossfade")
         preview_btn.clicked.connect(self._preview_seam)
@@ -297,9 +297,9 @@ class VideoTab(QWidget):
         r1 = QHBoxLayout()
         r1.setSpacing(6)
         fast_ic = QLabel()
-        fast_ic.setPixmap(icons.pixmap("sliders", 14, theme.C["mid"]))
+        fast_ic.setPixmap(icons.pixmap("sliders", 14, theme.T['accent_text']))
         lbl_fast = QLabel("Đặt nhanh (dòng chọn):")
-        lbl_fast.setStyleSheet("font-weight: 700; color: #eef1f8;")
+        lbl_fast.setProperty("role", "strong")
         r1.addWidget(fast_ic)
         r1.addWidget(lbl_fast)
         r1.addWidget(QLabel("Số lần phát:"))
@@ -364,7 +364,7 @@ class VideoTab(QWidget):
         r_cut = QHBoxLayout()
         r_cut.setSpacing(6)
         cut_ic = QLabel()
-        cut_ic.setPixmap(icons.pixmap("scissors", 14, theme.C["mid"]))
+        cut_ic.setPixmap(icons.pixmap("scissors", 14, theme.T['accent_text']))
         r_cut.addWidget(cut_ic)
         r_cut.addWidget(QLabel("Cắt đoạn:  Bỏ đầu"))
         r_cut.addWidget(self.bulk_cut_start)
@@ -459,12 +459,10 @@ class VideoTab(QWidget):
         # gợi ý khi vừa thêm file có clip nền (loop…) cùng các cảnh khác
         self.suggest = QFrame()
         self.suggest.setObjectName("suggestBar")
-        self.suggest.setStyleSheet(f"#suggestBar {{ background: {theme.rgba(theme.C['accent'], 0.14)}; "
-                                   f"border: 1px solid {theme.rgba(theme.C['accent'], 0.55)}; border-radius: 8px; }}")
         sg = QHBoxLayout(self.suggest)
         sg.setContentsMargins(10, 6, 6, 6)
         sg_ic = QLabel()
-        sg_ic.setPixmap(icons.pixmap("repeat", 14, theme.C["mid"]))
+        sg_ic.setPixmap(icons.pixmap("repeat", 14, theme.T['accent_text']))
         sg.addWidget(sg_ic)
         self.suggest_text = QLabel()
         self.suggest_text.setWordWrap(True)
@@ -628,8 +626,7 @@ class VideoTab(QWidget):
 
         self.next_btn = QPushButton("Tiếp theo: Chọn nhạc")
         self.next_btn.setObjectName("nextStepBtn")
-        self.next_btn.setIcon(icons.icon("arrow_right", 14, "#ffffff"))
-        effects.Glow(self.next_btn, idle=0.25, blur=24, offset_y=4, alpha=140)  # nút bước tiếp sáng nhẹ
+        self.next_btn.setIcon(icons.icon("arrow_right", 14, "text_on_accent"))
         self.next_btn.setIconSize(QSize(14, 14))
         self.next_btn.setLayoutDirection(Qt.LayoutDirection.RightToLeft)
         self.next_btn.clicked.connect(lambda: self.nextStepRequested.emit())  # clicked(bool) → tín hiệu không đối số
@@ -878,20 +875,20 @@ class VideoTab(QWidget):
         c = self._clip_from_item(it)
         it.setData(0, w.ROLE_DATA, c)
         skipped = not c.enabled or (c.plays_mode == "fixed" and c.count == 0)
-        it.setForeground(COL_NAME, QColor("#646c80") if skipped else QColor("#eef1f8"))
-        it.setForeground(COL_PLAYS, QColor("#646c80") if skipped else QColor(theme.C["soft"]))
+        it.setForeground(COL_NAME, theme.qcolor("text_disabled") if skipped else theme.qcolor("text"))
+        it.setForeground(COL_PLAYS, theme.qcolor("text_disabled") if skipped else QColor(theme.T['accent_soft']))
 
         if not info.ok:
             it.setText(COL_INFO, f"LỖI: {info.error}")
-            it.setForeground(COL_INFO, QColor("#f87171"))
+            it.setForeground(COL_INFO, theme.qcolor("danger_text"))
             return
         if info.is_image:
             it.setText(COL_TRIM, "—")
-            it.setForeground(COL_TRIM, QColor("#4d556a"))
+            it.setForeground(COL_TRIM, theme.qcolor("text_disabled"))
             it.setToolTip(COL_TRIM, "Ảnh tĩnh: không cần cắt đoạn")
             d = self.image_dur.value()
             it.setText(COL_INFO, f"Ảnh {info.width}×{info.height} · {d:g}s/lần")
-            it.setForeground(COL_INFO, QColor("#646c80") if skipped else QColor("#7dd3fc"))
+            it.setForeground(COL_INFO, theme.qcolor("text_disabled") if skipped else theme.qcolor("info_text"))
             it.setToolTip(COL_INFO, "Ảnh tĩnh — thời lượng mỗi lần phát chỉnh ở thẻ Khung & Tiếng")
         else:
             d = info.duration
@@ -901,15 +898,15 @@ class VideoTab(QWidget):
             it.setText(COL_INFO, text)
             differs = ref is not None and (info.width, info.height, info.fps_text()) != (
                 ref.width, ref.height, ref.fps_text())
-            it.setForeground(COL_INFO, QColor("#646c80") if skipped else (
-                QColor("#f59e0b") if differs else QColor("#8c96b0")))
+            it.setForeground(COL_INFO, theme.qcolor("text_disabled") if skipped else (
+                theme.qcolor("warn_text") if differs else theme.qcolor("text_muted")))
             it.setToolTip(COL_INFO, "Khác thông số clip đầu tiên — sẽ được chuẩn hoá tự động khi xuất" if differs else "")
             # đoạn lấy: thời lượng hiệu dụng sau khi bỏ đầu/cuối
             trimmed = c.trim_start > 0 or c.trim_end > 0
             d = max(min(MIN_KEEP, info.duration), info.duration - c.trim_start - c.trim_end)
             it.setText(COL_TRIM, trim_text(info.duration, c.trim_start, c.trim_end))
-            it.setForeground(COL_TRIM, QColor("#646c80") if skipped else (
-                QColor("#fcd34d") if trimmed else QColor("#8c96b0")))
+            it.setForeground(COL_TRIM, theme.qcolor("text_disabled") if skipped else (
+                theme.qcolor("warn_text") if trimmed else theme.qcolor("text_muted")))
             it.setToolTip(COL_TRIM, (f"Bỏ {c.trim_start:g}s đầu, {c.trim_end:g}s cuối → mỗi lần phát dài {d:.1f}s. "
                                      if trimmed else "Lấy toàn bộ clip. ") + "Bấm đúp để chọn đoạn lấy.")
 
@@ -917,22 +914,22 @@ class VideoTab(QWidget):
         single_play = c.plays_mode == "fixed" and c.count <= 1
         if single_play:
             it.setText(COL_LOOPXF, "—")
-            it.setForeground(COL_LOOPXF, QColor("#4d556a"))
+            it.setForeground(COL_LOOPXF, theme.qcolor("text_disabled"))
             it.setToolTip(COL_LOOPXF, "Clip phát 1 lần (không lặp) nên không có Nối loop")
         else:
             it.setText(COL_LOOPXF, w.xf_text(c.loop_xfade))
             if c.loop_xfade > d * 0.5:
-                it.setForeground(COL_LOOPXF, QColor("#ef4444"))
+                it.setForeground(COL_LOOPXF, theme.qcolor("danger_text"))
                 it.setToolTip(COL_LOOPXF, f"Vượt quá 1/2 độ dài clip ({d * 0.5:.1f}s) — sẽ tự giới hạn khi xuất")
             else:
-                it.setForeground(COL_LOOPXF, QColor("#646c80") if skipped else QColor("#eef1f8"))
+                it.setForeground(COL_LOOPXF, theme.qcolor("text_disabled") if skipped else theme.qcolor("text"))
                 it.setToolTip(COL_LOOPXF, "")
 
         if c.next_xfade > d * 0.5:
-            it.setForeground(COL_NEXTXF, QColor("#ef4444"))
+            it.setForeground(COL_NEXTXF, theme.qcolor("danger_text"))
             it.setToolTip(COL_NEXTXF, f"Vượt quá 1/2 độ dài clip ({d * 0.5:.1f}s) — sẽ tự giới hạn khi xuất")
         else:
-            it.setForeground(COL_NEXTXF, QColor("#646c80") if skipped else QColor("#eef1f8"))
+            it.setForeground(COL_NEXTXF, theme.qcolor("text_disabled") if skipped else theme.qcolor("text"))
             it.setToolTip(COL_NEXTXF, "")
 
         x = min(c.loop_xfade, d * 0.45)
@@ -947,7 +944,7 @@ class VideoTab(QWidget):
             lo = c.min * d - max(0, c.min - 1) * x
             hi = c.max * d - max(0, c.max - 1) * x
             it.setText(COL_DUR, f"{w.fmt_dur(lo)}–{w.fmt_dur(hi)}")
-        it.setForeground(COL_DUR, QColor("#646c80") if skipped else QColor("#eef1f8"))
+        it.setForeground(COL_DUR, theme.qcolor("text_disabled") if skipped else theme.qcolor("text"))
 
     def _on_thumb(self, path: str, img) -> None:
         items = self._thumb_waiting.pop(path, None)
