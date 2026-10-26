@@ -69,13 +69,15 @@ class ExportTab(QWidget):
         self.cap = QComboBox()
         for k, v in encoders.BITRATE_CAPS.items():
             self.cap.addItem(v, k)
-        self.cap.setToolTip("Chặn bitrate tối đa của hình để file nhẹ hơn. Cảnh nhiều chi tiết sẽ mềm hơn một chút.")
+        self.cap.setToolTip("Bitrate = số dữ liệu hình mỗi giây, quyết định gần như toàn bộ độ nặng file.\n"
+                            "Chặn thấp hơn → file nhẹ hơn; cảnh nhiều chi tiết sẽ mềm hơn một chút.")
         self.cap_mbps = QDoubleSpinBox()
         self.cap_mbps.setRange(0.5, 200.0)
         self.cap_mbps.setDecimals(1)
         self.cap_mbps.setSingleStep(1.0)
         self.cap_mbps.setSuffix(" Mbps")
         self.cap_mbps.setValue(8.0)
+        self.cap_mbps.setToolTip("Bitrate hình tối đa. Mỗi 1 Mbps ≈ 450 MB cho mỗi giờ video.")
         self.cap_gb = QDoubleSpinBox()
         self.cap_gb.setRange(0.1, 2000.0)
         self.cap_gb.setDecimals(1)
@@ -89,8 +91,18 @@ class ExportTab(QWidget):
         cap_row.addWidget(self.cap, 1)
         cap_row.addWidget(self.cap_mbps)
         cap_row.addWidget(self.cap_gb)
+        self.cap_hint = QLabel("")  # gợi ý số Mbps theo độ phân giải đang xuất (ngay dưới ô chọn)
+        self.cap_hint.setObjectName("muted")
+        self.cap_hint.setWordWrap(True)
+        self.cap_hint.setAlignment(Qt.AlignmentFlag.AlignTop | Qt.AlignmentFlag.AlignLeft)
+        cap_col = QVBoxLayout()
+        cap_col.setContentsMargins(0, 0, 0, 0)
+        cap_col.setSpacing(4)
+        cap_col.addLayout(cap_row)
+        cap_col.addWidget(self.cap_hint)
         cap_box = QWidget()
-        cap_box.setLayout(cap_row)
+        cap_box.setLayout(cap_col)
+        self._fmt = (1920, 1080, 30.0)  # cỡ khung + fps đang xuất (main_window cập nhật theo dòng thời gian)
         self.size_label = QLabel("—")
         self.size_label.setObjectName("sizeEst")
         self.size_label.setProperty("busy", False)
@@ -123,7 +135,10 @@ class ExportTab(QWidget):
                               "192 kbps đã đủ cho YouTube; 320 kbps chỉ thêm khoảng 60 MB mỗi giờ nhưng xuất chậm hơn.")
         f.addRow(lab("Chất lượng hình ảnh"), self.quality)
         f.addRow(lab("Chất lượng âm thanh"), self.audio)
-        f.addRow(lab("Giới hạn dung lượng"), cap_box)
+        bit_lab = lab("Bitrate hình")
+        bit_lab.setAlignment(Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignTop)
+        bit_lab.setContentsMargins(0, 6, 0, 0)  # thẳng hàng với ô chọn (dòng gợi ý nằm dưới)
+        f.addRow(bit_lab, cap_box)
         # tuỳ chọn ít khi cần đổi: gấp lại cho gọn (app tự chọn tốt nhất)
         self.adv_btn = QPushButton("Tuỳ chọn nâng cao")
         self.adv_btn.setObjectName("ghost")
@@ -457,6 +472,7 @@ class ExportTab(QWidget):
         self.cap.currentIndexChanged.connect(self._update_cap_ui)
         for sb in (self.cap_mbps, self.cap_gb):
             sb.valueChanged.connect(self._emit)
+        self.cap_mbps.valueChanged.connect(self._update_cap_ui)
         self._update_cap_ui()
         self.out_dir.textChanged.connect(self._emit)
         self.filename.textChanged.connect(self._emit)
@@ -507,10 +523,39 @@ class ExportTab(QWidget):
             markers=self.markers.isChecked(),
         )
 
+    def set_format(self, width: int, height: int, fps: float) -> None:
+        """Cỡ khung + fps thật của video sẽ xuất: số Mbps gợi ý / mức YouTube tính theo đó."""
+        fmt = (int(width), int(height), float(fps))
+        if fmt != self._fmt and width > 0 and height > 0:
+            self._fmt = fmt
+            self._update_cap_ui()
+
+    def _fmt_name(self) -> str:
+        w_, h_, fps = self._fmt
+        short = min(w_, h_)
+        name = {2160: "4K", 1440: "2K", 1080: "1080p", 720: "720p"}.get(short, f"{w_}×{h_}")
+        return f"{name} · {fps:g} fps"
+
     def _update_cap_ui(self, *_) -> None:
         mode = self.cap.currentData()
         self.cap_mbps.setVisible(mode == "mbps")
         self.cap_gb.setVisible(mode == "size")
+        yt = encoders.youtube_mbps(*self._fmt)
+        i = self.cap.findData("youtube")
+        if i >= 0:
+            self.cap.setItemText(i, f"{encoders.BITRATE_CAPS['youtube']} — {yt:g} Mbps")
+        per_h = encoders.MB_PER_HOUR_PER_MBPS
+        nice, light = max(1, round(yt * 0.6)), max(1, round(yt * 0.35))
+        hint = {
+            "off": f"File nặng? Chọn <b>Tự đặt bitrate</b> — {self._fmt_name()}: {yt:g} Mbps (YouTube khuyên) · "
+                   f"{nice} vẫn đẹp · {light} nhẹ nhất.",
+            "youtube": f"{self._fmt_name()}: hình tối đa {yt:g} Mbps ≈ {yt * per_h / 1000:.1f} GB mỗi giờ video.",
+            "mbps": f"Gợi ý {self._fmt_name()}: {yt:g} Mbps (YouTube khuyên) · {nice} vẫn đẹp · {light} nhẹ nhất. "
+                    f"{self.cap_mbps.value():g} Mbps ≈ {self.cap_mbps.value() * per_h / 1000:.1f} GB mỗi giờ video.",
+            "size": "App tự tính bitrate theo độ dài video để cả file không vượt mức này.",
+        }.get(mode, "")
+        self.cap_hint.setText(hint)
+        self.cap_hint.setVisible(bool(hint))
 
     def set_size(self, text: str, tip: str = "", busy: bool = False, warn: str = "") -> None:
         """Dòng dự đoán dung lượng (busy: đang đo lại → chữ mờ đi; warn: cảnh báo hiện thẳng, vd ổ đĩa đầy)."""

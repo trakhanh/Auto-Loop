@@ -76,8 +76,16 @@ Name: "{autodesktop}\{#AppName}"; Filename: "{app}\{#AppExe}"; Tasks: desktopico
 
 [Run]
 Filename: "{app}\{#AppExe}"; Description: "Mở {#AppName} ngay"; Flags: nowait postinstall skipifsilent
+; cập nhật từ trong app (/SILENT /RELAUNCH=1): cài xong tự mở lại app
+Filename: "{app}\{#AppExe}"; Flags: nowait; Check: ShouldRelaunch
 
 [UninstallDelete]
 ; chỉ xoá video thử xuất trong bộ mẫu; dự án, video đã xuất ở chỗ khác và dữ liệu app (%LOCALAPPDATA%\KTLoopStation)
 ; được giữ nguyên
 Type: filesandordirs; Name: "{app}\Mau-Test\Xuat"
+
+[Code]
+function ShouldRelaunch: Boolean;
+begin
+  Result := WizardSilent and (ExpandConstant('{param:RELAUNCH|0}') = '1');
+end;

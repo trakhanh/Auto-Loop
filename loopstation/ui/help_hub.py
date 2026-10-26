@@ -34,17 +34,14 @@ FIRST_STEPS = (
 )
 # "Có gì mới" của bản đang chạy — hiện ở đầu trang Tổng quan (sửa cùng lúc với APP_VERSION khi ra bản mới)
 WHATS_NEW = (
-    ("eye", "Giao diện mới, gọn và phẳng",
-     "Thanh trên cùng chia 3 nhóm, thanh bước một dòng, dòng thời gian thu gọn được; thẻ cài đặt chữ to, rõ."),
-    ("sliders", "Bố cục tự cân",
-     "Cột cài đặt tự lấy đủ chỗ (không còn ô bị cắt mép), Cài đặt chia 2 cột trên màn hình rộng, hộp Xuất hàng "
-     "loạt tự cuộn trên laptop màn thấp."),
-    ("help", "Hướng dẫn mới",
-     "Trang Tổng quan có ảnh, mỗi chủ đề có nút đi thẳng tới chỗ làm và nút chuyển chủ đề trước / sau."),
-    ("zap", "Nhanh hơn",
-     "Đọc file và ảnh thu nhỏ chạy nền, chuyển trang tức thì, gần như không tốn CPU khi để yên."),
-    ("check", "Sửa lỗi",
-     "Ô giờ / phút / giây không gõ được trên một số máy; nút 30p / 1h… bị ép dẹt trong Xuất hàng loạt."),
+    ("download", "Cập nhật ngay trong app",
+     "Có bản mới thì thanh bên hiện nút Có bản mới → Tải & cài đặt: app tải bộ cài, kiểm tra SHA-256, cài đè rồi tự mở "
+     "lại. Kiểm tra tay ở Cài đặt → Giới thiệu."),
+    ("sliders", "Chỉnh bitrate hình",
+     "Trang Xuất có hàng Bitrate hình: tự đặt số Mbps, có gợi ý sẵn theo độ phân giải (vd 2K: 16 / 10 / 6 Mbps) và "
+     "ước tính số GB mỗi giờ video."),
+    ("eye", "Giao diện 1.7",
+     "Bố cục tự cân, Hướng dẫn có trang Tổng quan, thẻ cài đặt chữ to rõ."),
 )
 SHORTCUTS = (("Space", "Phát / dừng"), ("F1", "Hướng dẫn"), ("Ctrl+S", "Lưu dự án"), ("Ctrl+Z", "Hoàn tác"),
              ("Ctrl+D", "Nhân bản dòng"), ("Ctrl+F", "Tìm"))

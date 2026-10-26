@@ -211,11 +211,12 @@ def encoder_args(encoder: str, quality: str, gop: int, maxrate_kbps: int = 0, st
 
 # ---------- giới hạn bitrate / dung lượng ----------
 BITRATE_CAPS = {
-    "off": "Không giới hạn (theo Chất lượng hình ảnh)",
-    "youtube": "Theo khuyến nghị YouTube (tự theo độ phân giải)",
-    "mbps": "Tự đặt bitrate tối đa (Mbps)",
-    "size": "Theo dung lượng tối đa của file (GB)",
+    "off": "Tự động theo Chất lượng hình ảnh (không chặn)",
+    "youtube": "Mức YouTube khuyên dùng",
+    "mbps": "Tự đặt bitrate",
+    "size": "Theo dung lượng file tối đa (GB)",
 }
+MB_PER_HOUR_PER_MBPS = 450  # 1 Mbps × 3600 giây = 3600 Mb = 450 MB
 
 
 def youtube_mbps(w: int, h: int, fps: float) -> float:

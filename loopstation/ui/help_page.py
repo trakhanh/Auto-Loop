@@ -436,7 +436,7 @@ topic("xemtruoc", "Xuất file", "play", "Trình phát: xem trước video", her
 topic("xuat", "Xuất file", "export", "Trang Xuất & dung lượng", hero(
     "Trang Xuất", "Chọn chất lượng, xem trước dung lượng file, chọn nơi lưu rồi xuất (hoặc thêm vào hàng đợi).",
     (("Mở trang Xuất", "app:export"),)) + img("export") + legend([
-    ("Định dạng &amp; chất lượng", "độ phân giải (theo clip đầu tiên, 720p, 1080p, 2K, 4K, dọc 9:16 cho Shorts / TikTok, vuông 1:1), chất lượng hình, giới hạn dung lượng (GB hoặc Mbps). "
+    ("Định dạng &amp; chất lượng", "độ phân giải (theo clip đầu tiên, 720p, 1080p, 2K, 4K, dọc 9:16 cho Shorts / TikTok, vuông 1:1), chất lượng hình, <b>Bitrate hình</b> (tự đặt số Mbps, mức YouTube, hoặc số GB tối đa — dòng gợi ý bên dưới ghi sẵn số Mbps hợp với độ phân giải). "
                                     "<i>Tuỳ chọn nâng cao ▾</i>: chuẩn nén H.264 / H.265, khung hình / giây, bộ mã hoá, âm thanh AAC 192 (nhanh) / 320."),
     ("Dự đoán dung lượng", "tự cập nhật khi đổi cấu hình — app mã hoá thử vài giây để tính, sai số thường dưới 10%."),
     ("Nơi lưu &amp; file kèm", "thư mục lưu, tên file (để trống = tên dự án + ngày giờ), mỗi video một thư mục riêng, file mốc thời gian, tracklist, bản sao dự án."),
@@ -447,7 +447,7 @@ topic("xuat", "Xuất file", "export", "Trang Xuất & dung lượng", hero(
     ("Hạ độ phân giải", "2K → 1080p nhẹ hơn khoảng 2 lần, YouTube vẫn nét."),
     ("Dùng H.265", "nhẹ hơn khoảng 20–40% (Tuỳ chọn nâng cao)."),
     ("Tiết kiệm dung lượng", "mức chất lượng nhẹ nhất, vẫn đẹp khi xem YouTube."),
-    ("Giới hạn dung lượng", "theo khuyến nghị YouTube, hoặc gõ số GB tối đa.")]) + box(
+    ("Hạ bitrate", "ô <b>Bitrate hình</b> → <b>Tự đặt bitrate</b> rồi gõ số Mbps (ví dụ 2K: 16 → 10 Mbps). Mỗi 1 Mbps ≈ 450 MB mỗi giờ video.")]) + box(
     "tip", "File MP4 không có cách ghi “lặp lại đoạn này 70 lần”: mỗi lần lặp vẫn chiếm dung lượng, nên dung lượng ≈ bitrate × "
            "độ dài. Xem con số <b>Dự đoán dung lượng</b> đổi ngay khi chỉnh.") + box(
     "warn", "Đừng mở file đang xuất bằng trình xem khác, đừng xoá clip / nhạc gốc khi đang xuất."))
@@ -555,7 +555,7 @@ topic("dulieu", "Khác", "folder", "Cài app, cập nhật & dữ liệu", hero(
     ("Next → Install → Finish", "Mở app bằng biểu tượng <b>KT Loop Station</b> trên màn hình nền hoặc menu Start.")]) + """
 <ul>
 <li>Cần <b>Windows 10 / 11 64-bit</b>. Không cần quyền quản trị, không cần cài thêm gì (đã kèm FFmpeg).</li>
-<li><b>Lên bản mới</b>: cài đè bản mới lên bản cũ. Dự án, hàng đợi, cài đặt được giữ nguyên. Số phiên bản ghi ở đầu trang Hướng dẫn này.</li>
+<li><b>Lên bản mới ngay trong app</b>: có bản mới thì thanh bên hiện nút <b>Có bản mới</b> → <b>Tải &amp; cài đặt</b> (app tự đóng, cài đè rồi tự mở lại). Kiểm tra tay: <b>Cài đặt → Giới thiệu → Kiểm tra cập nhật</b>. Dự án, hàng đợi, cài đặt được giữ nguyên.</li>
 <li><b>Gỡ app</b>: Windows Settings → Apps → KT Loop Station → Uninstall. Dữ liệu và video đã xuất <b>không</b> bị xoá.</li>
 </ul>
 <h2>App lưu gì, ở đâu?</h2>""" + examples([
@@ -573,7 +573,7 @@ topic("hoi", "Khác", "help", "Câu hỏi thường gặp", hero(
         ("Nhạc có tự lặp theo video không?", "Có (kiểu Video có nhạc). Nhạc nối tiếp và lặp tới hết video, bài cuối nhỏ dần đúng lúc video kết thúc."),
         ("Chỉ muốn loop video, hoặc chỉ loop nhạc?", "Chọn <b>Chỉ video</b> hoặc <b>Chỉ nhạc</b> ở thanh trên cùng (xem chủ đề Chọn kiểu sản phẩm)."),
         ("Vì sao xuất nhanh vậy?", "Mỗi clip chỉ mã hoá <b>một lần</b>, các lần loop chỉ là sao chép. Video 1 giờ thường khoảng nửa phút, 10 giờ khoảng 10 phút (tuỳ máy). Lần sau còn nhanh hơn nhờ bộ nhớ đệm."),
-        ("Video loop nặng quá?", "Xem chủ đề <a href='topic:xuat'>Trang Xuất &amp; dung lượng</a>: hạ độ phân giải, H.265, Tiết kiệm dung lượng, Giới hạn dung lượng."),
+        ("Video loop nặng quá?", "Xem chủ đề <a href='topic:xuat'>Trang Xuất &amp; dung lượng</a>: hạ độ phân giải, H.265, Tiết kiệm dung lượng, hạ Bitrate hình."),
         ("Ổ đĩa có đủ chỗ không?", "Trang Xuất hiện dung lượng dự đoán và báo đỏ nếu không đủ; trước khi ghép app kiểm tra lại. Video 10 tiếng 1080p thường cần 10–40 GB."),
         ("Mở app hiện “đang mở rồi”?", "App chỉ cho mở một cửa sổ để hàng đợi không bị ghi đè — xem trên thanh tác vụ. Không thấy cửa sổ nào: "
                                        "mở <b>Task Manager</b> (Ctrl+Shift+Esc), tắt <b>KT Loop Station</b> rồi mở lại."),
@@ -585,7 +585,7 @@ topic("hoi", "Khác", "help", "Câu hỏi thường gặp", hero(
         ("Báo lỗi khi xuất?", "Xem <b>Nhật ký</b> ở trang Xuất (đầy đủ trong <i>Thư mục nhật ký</i> ở đầu trang này). Card đồ hoạ lỗi thì app tự "
                               "chuyển sang CPU; vẫn lỗi thì trang Xuất → Tuỳ chọn nâng cao ▾ → Bộ mã hoá: CPU rồi xuất lại. Lỗi bất ngờ của app "
                               "được ghi vào <code>loi-ung-dung.log</code> (Cài đặt → <i>Mở thư mục dữ liệu</i>) — gửi file này cho người hỗ trợ."),
-        ("Cập nhật bản mới thế nào?", "Tải bộ cài mới, cài đè lên bản cũ. Dự án, hàng đợi, cài đặt được giữ nguyên."),
+        ("Cập nhật bản mới thế nào?", "App tự kiểm tra khi mở; có bản mới thì thanh bên hiện nút <b>Có bản mới</b> → <b>Tải &amp; cài đặt</b>: app tải bộ cài, kiểm tra mã SHA-256, tự đóng để cài đè rồi tự mở lại. Kiểm tra tay ở <b>Cài đặt → Giới thiệu → Kiểm tra cập nhật</b>. Dự án, hàng đợi, cài đặt được giữ nguyên."),
         ("File đích đang mở trong VLC?", "App không xoá video vừa xuất: lưu thành tên <code>…_moi.mp4</code> và ghi rõ trong nhật ký."),
     ]))
 

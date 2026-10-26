@@ -78,6 +78,12 @@ class SettingsPage(QWidget):
     prefsChanged = Signal()
     recheckRequested = Signal()
     welcomeRequested = Signal()  # xem lại màn hình chào
+    updateCheckRequested = Signal()  # Giới thiệu → Kiểm tra cập nhật
+
+    def set_update_status(self, text: str, tone: str = "", busy: bool = False) -> None:
+        self.update_status.setText(text)
+        theme.tag(self.update_status, tone=tone)
+        self.update_btn.setEnabled(not busy)
 
     def __init__(self, settings: QSettings, parent=None):
         super().__init__(parent)
@@ -281,6 +287,25 @@ class SettingsPage(QWidget):
         fa.addRow("Ứng dụng", QLabel(f"<b>{APP_NAME}</b>"))
         fa.addRow("Phiên bản", ver)
         fa.addRow("Tác giả", QLabel(AUTHOR.replace("By ", "")))
+        from .update_dialog import AUTO_KEY
+        self.update_btn = QPushButton("Kiểm tra cập nhật")
+        self.update_btn.setObjectName("pill")
+        self.update_btn.setIcon(icons.icon("download", 13))
+        self.update_btn.setIconSize(QSize(13, 13))
+        self.update_btn.setToolTip("Hỏi GitHub xem đã có bản mới chưa; có thì tải và cài ngay trong app")
+        self.update_btn.clicked.connect(self.updateCheckRequested.emit)
+        self.update_status = w.muted("")
+        self.update_status.setWordWrap(True)
+        urow = QHBoxLayout()
+        urow.setContentsMargins(0, 0, 0, 0)
+        urow.setSpacing(theme.SP['md'])
+        urow.addWidget(self.update_btn)
+        urow.addWidget(self.update_status, 1)
+        fa.addRow("Cập nhật", urow)
+        self.update_auto = QCheckBox("Tự kiểm tra bản mới khi mở app")
+        self.update_auto.setChecked(settings.value(AUTO_KEY, "true") in (True, "true"))
+        self.update_auto.toggled.connect(lambda on: settings.setValue(AUTO_KEY, "true" if on else "false"))
+        fa.addRow(self.update_auto)
         fa.addRow(w.muted("Báo lỗi: gửi kèm số phiên bản này và file nhật ký (Thư mục dữ liệu → logs)."))
         # bố cục tự cân: màn hình rộng → 2 cột (trái: tuỳ chọn hay đổi · phải: phần cứng), hẹp → 1 cột;
         # cả khối rộng tối đa 1360 px, căn giữa (không còn một cột hẹp giữa màn hình rộng, hai bên trống trơn)

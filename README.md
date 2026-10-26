@@ -6,7 +6,7 @@
 
 **Ghép và loop clip + nhạc thành video YouTube dài hàng giờ — xem trước ngay trong app, xuất nhanh bằng card đồ hoạ.**
 
-<sub>By Khánh Trà · Ứng dụng Windows · Giao diện tiếng Việt · Bản mới nhất: <b>1.7.0</b></sub>
+<sub>By Khánh Trà · Ứng dụng Windows · Giao diện tiếng Việt · Bản mới nhất: <b>1.8.0</b></sub>
 
 <br>
 
@@ -33,37 +33,25 @@
 
 <br>
 
-## Có gì mới ở 1.7
+## Có gì mới ở 1.8
 
 <table>
 <tr>
 <td width="50%" valign="top">
-<img src="docs/icons/eye.png" width="36"><br>
-<b>Giao diện mới, gọn và phẳng</b><br>
-Thanh trên cùng chia 3 nhóm (dự án · kiểu xuất · tổng thời lượng), thanh bước chỉ một dòng, dòng thời gian thu gọn được. Thẻ cài đặt <b>Độ dài · Khung &amp; Tiếng · Màu &amp; Logo</b> chữ to, rõ, có biểu tượng. 4 bộ màu chủ đạo: <i>Tím neon</i>, <i>Đại dương</i>, <i>Hoàng hôn</i>, <i>Tím xanh</i>.
+<img src="docs/icons/download.png" width="36"><br>
+<b>Cập nhật ngay trong app</b><br>
+App tự kiểm tra bản mới khi mở. Có bản mới thì thanh bên hiện nút <b>Có bản mới</b> → <b>Tải &amp; cài đặt</b>: app tải bộ cài, kiểm tra mã <b>SHA-256</b>, tự đóng để cài đè rồi <b>tự mở lại</b>. Dự án, hàng đợi, cài đặt giữ nguyên. Kiểm tra tay ở <b>Cài đặt → Giới thiệu → Kiểm tra cập nhật</b>.
 </td>
 <td width="50%" valign="top">
 <img src="docs/icons/sliders.png" width="36"><br>
-<b>Bố cục tự cân</b><br>
-Cột cài đặt tự lấy đủ chỗ theo nội dung — không còn ô bị cắt mép, kể cả khi đặt cỡ chữ lớn. Trang <b>Cài đặt</b> chia 2 cột trên màn hình rộng. Hộp <b>Xuất hàng loạt</b> tự cuộn trên laptop màn thấp thay vì ép dẹt các nút.
-</td>
-</tr>
-<tr>
-<td valign="top">
-<img src="docs/icons/help.png" width="36"><br>
-<b>Hướng dẫn trong app làm lại</b><br>
-Mở <kbd>F1</kbd> là thấy trang <b>Tổng quan</b>: có gì mới, 3 bước làm video đầu tiên có ảnh, mọi chủ đề xếp theo nhóm màu, phím tắt hay dùng. Mỗi chủ đề có thanh tiêu đề, nút <b>đi thẳng tới chỗ làm</b> trong app và nút chuyển chủ đề trước / sau.
-</td>
-<td valign="top">
-<img src="docs/icons/zap.png" width="36"><br>
-<b>Nhanh hơn, sửa lỗi</b><br>
-Đọc thông tin file và ảnh thu nhỏ chạy nền (kéo thả trăm clip không đứng hình), chuyển trang tức thì, gần như không tốn CPU khi để yên. Sửa: ô <b>giờ / phút / giây</b> không gõ được trên một số máy, nút <b>30p / 1h…</b> bị ép dẹt trong Xuất hàng loạt.
+<b>Chỉnh bitrate hình</b><br>
+Trang <b>Xuất</b> có hàng <b>Bitrate hình</b>: chọn <i>Tự đặt bitrate</i> rồi gõ số Mbps. Dòng gợi ý ghi sẵn số hợp với độ phân giải đang xuất (ví dụ 2K: 16 Mbps theo YouTube · 10 vẫn đẹp · 6 nhẹ nhất) và ước tính số GB mỗi giờ video — file 2K hết nặng.
 </td>
 </tr>
 </table>
 
-<p align="center"><img src="docs/screenshots/08-huong-dan.png" width="820" alt="Trang Hướng dẫn mới: Tổng quan với có gì mới, 3 bước có ảnh và lưới chủ đề"></p>
-<p align="center"><sub><b>Hướng dẫn (F1) → Tổng quan</b> — bấm một thẻ là mở đúng chủ đề</sub></p>
+<p align="center"><img src="docs/screenshots/04-xuat.png" width="820" alt="Trang Xuất với hàng Bitrate hình và dòng gợi ý số Mbps"></p>
+<p align="center"><sub><b>Trang Xuất → Bitrate hình</b> — mỗi 1 Mbps ≈ 450 MB cho mỗi giờ video</sub></p>
 
 <br>
 
@@ -101,7 +89,7 @@ Mưa, sóng biển, gió, lửa củi, white / pink / brown noise có sẵn, l�
 <td valign="top">
 <img src="docs/icons/zap.png" width="36"><br>
 <b>Xuất nhanh bằng card đồ hoạ</b><br>
-NVIDIA / Intel / AMD (không có card thì dùng CPU). Video 10 giờ chỉ vài phút. Dự đoán dung lượng trước khi xuất.
+NVIDIA / Intel / AMD (không có card thì dùng CPU). Video 10 giờ chỉ vài phút. Dự đoán dung lượng trước khi xuất, chỉnh được bitrate (Mbps) hoặc số GB tối đa.
 </td>
 </tr>
 <tr>
@@ -158,7 +146,7 @@ Tracklist (dán làm Chapters), mốc thời gian đoạn LOOP / THƯỜNG (<cod
 - Windows 10 / 11 64-bit. Cài vào tài khoản đang dùng, **không cần quyền quản trị**.
 - Card đồ hoạ NVIDIA / Intel / AMD giúp xuất nhanh hơn nhiều; không có card thì app tự dùng CPU.
 - Cảnh báo *“Windows protected your PC”* xuất hiện vì bộ cài chưa ký số — bấm **More info → Run anyway** để cài.
-- **Lên bản mới**: tải bộ cài mới, cài đè lên bản cũ; dự án, hàng đợi, cài đặt được giữ nguyên.
+- **Lên bản mới**: từ bản 1.8, bấm nút **Có bản mới** ở thanh bên (hoặc **Cài đặt → Giới thiệu → Kiểm tra cập nhật**) — app tự tải, cài đè và mở lại. Bản cũ hơn: tải bộ cài mới, cài đè lên bản cũ. Dự án, hàng đợi, cài đặt luôn được giữ nguyên.
 - Gỡ cài đặt: *Settings → Apps → KT Loop Station → Uninstall*.
 - Dự án tự lưu, hàng đợi, bộ nhớ đệm nằm ở `%LOCALAPPDATA%\KTLoopStation` (Cài đặt → *Mở thư mục dữ liệu*).
 
@@ -210,7 +198,7 @@ Chọn **kiểu xuất** ở thanh trên cùng: **Video có nhạc** (`.mp4`) ·
 <td width="50%"><img src="docs/screenshots/03-nhac-bang-tron-am.png"><p align="center"><sub><b>Trang Nhạc</b> — playlist, Bảng trộn âm, tiếng nền</sub></p></td>
 </tr>
 <tr>
-<td><img src="docs/screenshots/04-xuat.png"><p align="center"><sub><b>Trang Xuất</b> — chất lượng, dự đoán dung lượng, hàng đợi</sub></p></td>
+<td><img src="docs/screenshots/08-huong-dan.png"><p align="center"><sub><b>Hướng dẫn (F1)</b> — Tổng quan: có gì mới, 3 bước, mọi chủ đề</sub></p></td>
 <td><img src="docs/screenshots/07-cai-dat.png"><p align="center"><sub><b>Cài đặt</b> — 2 cột: giao diện &amp; tuỳ chọn · phần cứng &amp; card đồ hoạ</sub></p></td>
 </tr>
 <tr>
@@ -223,10 +211,11 @@ Chọn **kiểu xuất** ở thanh trên cùng: **Video có nhạc** (`.mp4`) ·
 </table>
 
 <details>
-<summary><b>Các bản trước</b> (1.6 · 1.5)</summary>
+<summary><b>Các bản trước</b> (1.7 · 1.6 · 1.5)</summary>
 
 <br>
 
+- **1.7** — giao diện mới gọn và phẳng, bố cục tự cân (không còn ô bị cắt mép, Cài đặt chia 2 cột), Hướng dẫn (F1) có trang Tổng quan, đọc file chạy nền, sửa ô giờ / phút / giây không gõ được.
 - **1.6** — chọn được màu chủ đạo, màn hình chào lần đầu, bảng quy chuẩn khoảng cách / cỡ chữ dùng chung mọi trang.
 - **1.5** — Trình phát ngay trong app (xem thử không phải xuất), bố cục kiểu CapCut / Premiere, **Xếp lần lượt** (Content → Loop1 ×60 → …), Xuất hàng loạt có 3 kiểu xuất và trình phát nhúng, chung một bộ từ ngữ ở mọi trang, <kbd>Ctrl</kbd>+<kbd>C</kbd> / <kbd>V</kbd> / <kbd>D</kbd> cho bảng clip và playlist.
 

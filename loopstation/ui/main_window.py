@@ -18,6 +18,7 @@ from PySide6.QtWidgets import (
 )
 
 from ..core import encoders, ffmpeg_tools, planner, power, probe, render, render_queue as rq, size_estimate, sysinfo, timeline
+from ..core import updater
 from ..core.ffmpeg_tools import CancelledError
 from ..core.project import PROJECT_EXT, ClipItem, Project
 from ..core.render import RenderJob, clean_filename, default_output_name, output_path, strip_ext
@@ -25,6 +26,7 @@ from . import branding, effects, icons, motion, theme, widgets as w
 from .export_tab import ExportTab
 from .help_page import HelpPage
 from .settings_page import SettingsPage
+from .update_dialog import UpdateChecker, UpdateDialog, status_text as update_status_text
 from .music_tab import MusicTab
 from .theme import APP_NAME, APP_VERSION, AUTHOR, SETTINGS_ORG
 from .video_tab import VideoTab
@@ -177,6 +179,9 @@ class MainWindow(QMainWindow):
         self.setCentralWidget(self._build_shell())
         self.settings_page.welcomeRequested.connect(self.show_welcome)
         self._welcome = None
+        self.updates = UpdateChecker(self.settings, self)  # cập nhật trong app (GitHub Releases)
+        self.updates.checked.connect(self._on_update_checked)
+        self.settings_page.updateCheckRequested.connect(self._check_updates)
         self.viewer.positionChanged.connect(self.video_tab.timeline.set_playhead)
         from .preview_player import SpaceToggle
         self._space = SpaceToggle(self, lambda: self.viewer)  # Space = Phát / Dừng ở mọi chỗ (trừ khi đang gõ chữ)
@@ -218,6 +223,7 @@ class MainWindow(QMainWindow):
         QTimer.singleShot(20, self._load_initial_project)
         QTimer.singleShot(450, self._maybe_welcome)  # lần đầu mở app: màn hình chào (sau khi cửa sổ đã hiện)
         QTimer.singleShot(250, self._detect_encoders)
+        QTimer.singleShot(5000, self.updates.maybe_auto)  # sau khi app đã mở xong, không tranh lúc khởi động
 
     def show_welcome(self) -> None:
         """Màn hình chào: cách làm 3 bước + chọn Đơn giản / Đầy đủ (tự mở lần đầu; mở lại ở Cài đặt)."""
@@ -230,6 +236,52 @@ class MainWindow(QMainWindow):
             self.settings.setValue("ui/welcome_done", "1")
 
         self._welcome = show_welcome(self, done, self.open_project_path)
+
+    # ---------- cập nhật trong app ----------
+    def _check_updates(self) -> None:
+        self.settings_page.set_update_status("Đang kiểm tra…", busy=True)
+        self.updates.check(manual=True)
+
+    def _on_update_checked(self, rel, err: str, manual: bool) -> None:
+        if self._closing:
+            return
+        self.updates.on_result(rel, err)
+        text, tone = update_status_text(rel, err)
+        self.settings_page.set_update_status(text if manual or not err else "", tone)
+        if self.updates.is_update(rel, include_skipped=manual):
+            self._update_text = f"  Có bản mới {rel.version}"
+            self.update_btn.setText("" if self._compact else self._update_text)
+            self.update_btn.setToolTip(f"Bản {rel.version} đã có — bấm để xem có gì mới và cài")
+            self.update_btn.show()
+            if manual:
+                self._show_update()
+            else:
+                self.notify(f"Có bản mới {rel.version} — bấm nút “Có bản mới” ở thanh bên để cập nhật.", "ok", 7000)
+        elif manual and not err:
+            self.notify(f"Bạn đang dùng bản mới nhất ({APP_VERSION}).", "ok")
+
+    def _show_update(self) -> None:
+        rel = self.updates.latest
+        if rel is None:
+            return
+        dlg = UpdateDialog(rel, self.settings, self)
+        dlg.exec()
+        if dlg.skipped:
+            self.update_btn.hide()
+        if dlg.install_path:
+            self._install_update(dlg.install_path)
+
+    def _install_update(self, path: str) -> None:
+        """Đóng app như bình thường (lưu dự án, hỏi nếu đang xuất) rồi chạy bộ cài; cài xong bộ cài tự mở lại app."""
+        self.close()
+        if self.isVisible():  # người dùng chọn không huỷ lượt đang xuất
+            self.notify("Chưa cài bản mới — xuất xong bấm “Có bản mới” để cài (bộ cài đã tải sẵn).", "warn", 7000)
+            return
+        try:
+            updater.launch_installer(Path(path))
+        except OSError as e:
+            QMessageBox.warning(None, "Chưa cài được", f"Không chạy được bộ cài:\n{e}\n\nFile ở: {path}")
+        QApplication.quit()
 
     def _maybe_welcome(self) -> None:
         if not self._closing and not self.settings.value("ui/welcome_done"):
@@ -347,6 +399,17 @@ class MainWindow(QMainWindow):
             b.clicked.connect(fn)
             self._side_buttons.append((b, ic_name, text))
             sv.addWidget(b)
+
+        self._update_text = ""
+        self.update_btn = QPushButton()  # chỉ hiện khi có bản mới
+        self.update_btn.setObjectName("updateBtn")
+        theme.tag(self.update_btn, variant="tonal")
+        self.update_btn.setIcon(icons.icon("download", 15, "accent_text"))
+        self.update_btn.setIconSize(QSize(15, 15))
+        self.update_btn.clicked.connect(self._show_update)
+        self.update_btn.hide()
+        sv.addSpacing(6)
+        sv.addWidget(self.update_btn)
 
         sv.addSpacing(8)
         hw_card = QWidget()
@@ -637,6 +700,7 @@ class MainWindow(QMainWindow):
         self.util_label.setVisible(not compact)
         self.project_label.setVisible(not compact)
         self.hw_card.setVisible(not compact)
+        self.update_btn.setText("" if compact else self._update_text)
         for b, _ic, text in self._side_buttons:
             b.setText("" if compact else f"  {text}")
 
@@ -1084,6 +1148,7 @@ class MainWindow(QMainWindow):
         if tl.warnings:
             lines.append("<span style='color:" + theme.T["warn_text"] + "'>Lưu ý: " + "<br>Lưu ý: ".join(tl.warnings) + "</span>")
         self.export_tab.set_summary("<br>".join(lines))
+        self.export_tab.set_format(tl.width, tl.height, float(tl.fps))
         self._schedule_size(proj, tl)
 
     # ---------- dự đoán dung lượng ----------
@@ -1156,7 +1221,8 @@ class MainWindow(QMainWindow):
         if encoders.PRESETS[ex.preset].codec == "h264":
             tips.append("Mẹo: chuẩn nén H.265/HEVC nhẹ hơn khoảng 20–40% với cùng độ nét.")
         if ex.quality in ("high", "very_high") and ex.bitrate_cap == "off":
-            tips.append("Mẹo: chất lượng <b>Tiết kiệm dung lượng</b> hoặc <b>Giới hạn dung lượng</b> cho file nhẹ hơn.")
+            tips.append("Mẹo: chất lượng <b>Tiết kiệm dung lượng</b> hoặc <b>Bitrate hình</b> → Tự đặt bitrate "
+                        "cho file nhẹ hơn.")
         tips.append(f"Đo thử bằng {est.encoder} trên {est.measured} clip · sai số thường dưới 10%.")
         self.export_tab.set_size(text, "<br>".join(tips[:3] + tips[-1:] if len(tips) > 4 else tips),
                                  warn=warn)
