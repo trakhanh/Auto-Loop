@@ -1224,13 +1224,15 @@ class ThumbLoader(QObject):
             st = os.stat(path)
         except OSError:
             return
-        key = hashlib.sha1(f"{path}|{st.st_size}|{st.st_mtime_ns}".encode("utf-8")).hexdigest()[:20]
+        from ..core.video_build import color_fix, color_key, tone_chain
+        key = hashlib.sha1(f"{path}|{st.st_size}|{st.st_mtime_ns}|{color_key(path)}".encode("utf-8")).hexdigest()[:20]
         out = ft.cache_dir("thumbs") / f"{key}.jpg"
         if not out.is_file():
             is_img = Path(path).suffix.lower() in IMAGE_EXTS
             seek = [] if is_img else ["-ss", "1"]
-            vf = (f"scale={self.W * 2}:{self.H * 2}:force_original_aspect_ratio=decrease,"
-                  f"pad={self.W * 2}:{self.H * 2}:(ow-iw)/2:(oh-ih)/2:color=0x11141b")
+            # cùng cách hiểu màu như lúc xuất (clip HDR → SDR), nếu không ảnh nhỏ của clip HDR xỉn hẳn
+            vf = (f"{color_fix(path)}scale={self.W * 2}:{self.H * 2}:force_original_aspect_ratio=decrease,"
+                  f"{tone_chain(path)}pad={self.W * 2}:{self.H * 2}:(ow-iw)/2:(oh-ih)/2:color=0x11141b")
             try:
                 ft.run([ft.ffmpeg(), "-v", "error", "-y", *seek, "-i", path, "-frames:v", "1", "-vf", vf,
                         "-q:v", "4", str(out)], timeout=30)

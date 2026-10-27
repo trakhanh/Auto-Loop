@@ -53,6 +53,45 @@ RESOLUTIONS = {
     "square": ("Vuông 1:1 — 1080×1080", 1080, 1080),
 }
 
+def res_name(w: int, h: int) -> str:
+    name = {(3840, 2160): "4K", (2560, 1440): "2K", (1920, 1080): "1080p", (1280, 720): "720p"}.get((max(w, h), min(w, h)))
+    return (f"{name} dọc" if h > w else name) if name else f"{w}×{h}"
+
+
+def res_key(w: int, h: int) -> str:
+    """Khoá RESOLUTIONS đúng bằng w×h; không có thì "source" (theo clip đầu tiên)."""
+    for k, (_, rw, rh) in RESOLUTIONS.items():
+        if (rw, rh) == (w, h):
+            return k
+    return "source"
+
+
+def output_advice(src_w: int, src_h: int, src_fps: float, out_w: int, out_h: int, out_fps: float) -> tuple[str, str, bool]:
+    """Gợi ý ngay dưới ô Độ phân giải: (chữ, tone "warn"/"success"/"", có nên bấm "Theo clip gốc").
+    Đổi độ phân giải / fps là làm lại từng khung: phóng to không nét hơn, tăng fps chỉ lặp khung."""
+    if min(src_w, src_h) <= 0 or min(out_w, out_h) <= 0:
+        return "", "", False
+    src, out = res_name(src_w, src_h), res_name(out_w, out_h)
+    r = min(out_w, out_h) / min(src_w, src_h)
+    parts, warn = [], False
+    if r > 1.15:
+        parts.append(f"Clip gốc {src}: xuất {out} <b>không nét hơn</b>, file nặng gấp ~{out_w * out_h / (src_w * src_h):.1f} lần")
+        warn = True
+    elif r < 0.87:
+        parts.append(f"Clip gốc {src}, thu nhỏ còn {out}: file nhẹ hơn, vẫn nét")
+    else:
+        parts.append(f"✓ Bằng clip gốc ({src}): giữ nguyên độ nét")
+    fps_off = False
+    if src_fps > 0 and out_fps > src_fps + 0.5:
+        parts.append(f"{out_fps:g} fps chỉ lặp khung của clip {src_fps:g} fps, <b>không mượt hơn</b>")
+        warn = fps_off = True
+    elif src_fps > 0 and out_fps < src_fps - 0.5:
+        parts.append(f"{src_fps:g} → {out_fps:g} fps: bỏ bớt khung, chuyển động kém mượt hơn chút")
+        warn = fps_off = True
+    same = 0.87 <= r <= 1.15 and not fps_off
+    return " · ".join(parts) + ".", "warn" if warn else ("success" if same else ""), not same
+
+
 FPS_CHOICES = {"source": "Theo clip chính (phát lâu nhất)", "24": "24", "25": "25", "30": "30", "50": "50", "60": "60"}
 
 

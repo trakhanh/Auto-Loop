@@ -154,12 +154,13 @@ class _Grabber(QObject):
 
     def grab(self, tag: str, path: str, t: float) -> None:
         def work():
-            key = hashlib.sha1(f"{path}|{t:.2f}".encode("utf-8")).hexdigest()[:20]
+            from ..core.video_build import color_fix, color_key, tone_chain
+            key = hashlib.sha1(f"{path}|{t:.2f}|{color_key(path)}".encode("utf-8")).hexdigest()[:20]
             out = ft.cache_dir("thumbs") / f"trim_{key}.jpg"
             if not out.is_file():
                 try:
                     ft.run([ft.ffmpeg(), "-v", "error", "-y", "-ss", f"{t:.3f}", "-i", path, "-frames:v", "1",
-                            "-vf", "scale=320:-2", "-q:v", "4", str(out)], timeout=30)
+                            "-vf", f"{color_fix(path)}scale=320:-2,{tone_chain(path)}null", "-q:v", "4", str(out)], timeout=30)
                 except Exception:  # noqa: BLE001
                     return
             if out.is_file():

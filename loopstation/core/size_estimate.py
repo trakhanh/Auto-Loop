@@ -67,7 +67,7 @@ def _sample(runner: ft.Runner, path: str, is_image: bool, start: float, dur: flo
     """Mã hoá thử → (bit của 1 khung gốc I-frame, bit trung bình của 1 khung thường)."""
     n = max(1, round(dur * float(fps)))
     key = vb._key("est3", vb._file_id(path), f"{start:.2f}", n, fps, w, h, fit, encoder, quality, maxrate, gop,
-                  *(["strict"] if strict and maxrate else []))
+                  *(["strict"] if strict and maxrate else []), *vb.color_key(path))
     with _lock:
         if key in _cache:
             return _cache[key]

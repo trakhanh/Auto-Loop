@@ -113,8 +113,10 @@ def preview_frame(path: str, is_image: bool, at: float, w: int, h: int, fit: str
                   out: str, timeout: float = 30) -> bool:
     """Ảnh xem trước một khung hình (đã chỉnh màu + logo) ở kích thước nhỏ w×h. Trả về True nếu tạo được."""
     from . import ffmpeg_tools as ft
-    from .video_build import color_fix, fit_chain
-    chain = f"[0:v]{'' if is_image else color_fix(path)}{fit_chain(fit, w, h)}[pre]"  # màu giống hệt lúc xuất
+    from .video_build import color_fix, fit_chain, tone_chain
+    tone = "" if is_image else tone_chain(path).rstrip(",")
+    chain = (f"[0:v]{'' if is_image else color_fix(path)}{fit_chain(fit, w, h)}"
+             f"{',' + tone if tone else ''}[pre]")  # màu giống hệt lúc xuất (kể cả HDR → SDR)
     if look is not None and look.active:
         chain += ";" + graph(look, "pre", "lk", w, h, "pv")
         label = "[lk]"

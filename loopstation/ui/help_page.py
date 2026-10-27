@@ -443,6 +443,15 @@ topic("xuat", "Xuất file", "export", "Trang Xuất & dung lượng", hero(
     ("Bắt đầu xuất", "xuất ngay dự án đang mở. Đang xuất có nút <b>Huỷ xuất</b>; xong thì <b>Hiện file vừa xuất</b>. File cùng tên đã có thì app hỏi ghi đè."),
     ("Thêm vào hàng đợi", "xếp dự án này vào hàng đợi để xuất nhiều video liền nhau (xem chủ đề Hàng đợi)."),
     ("Hàng đợi", "danh sách việc chờ xuất; chuột phải mục lỗi → Chạy lại.")]) + """
+<h2>Độ phân giải &amp; khung hình/giây: nên để bằng clip gốc</h2>""" + box(
+    "tip", "Đổi độ phân giải / fps là <b>làm lại từng khung hình</b>, không chỉ đổi thông tin file. Ngay dưới ô "
+           "<b>Độ phân giải</b> app ghi so với clip gốc (clip phát nhiều nhất); lệch thì bấm <b>Theo clip gốc</b>.") + legend([
+    ("Lớn hơn clip gốc", "ví dụ clip 1080p xuất 2K: hình to ra nhưng <b>không nét thêm</b>, file nặng gấp ~1,8 lần. "
+                         "(Mẹo YouTube: bản 2K được YouTube nén tốt hơn — chỉ chọn khi cố ý, nhớ hạ Bitrate hình.)"),
+    ("Nhỏ hơn clip gốc", "ví dụ 4K xuất 1080p: file nhẹ hơn, vẫn nét."),
+    ("fps cao hơn clip gốc", "24 → 60 fps chỉ lặp lại khung cũ, <b>không mượt hơn</b>, file nặng hơn. Để <b>Theo clip chính</b>."),
+    ("fps thấp hơn clip gốc", "bỏ bớt khung: chuyển động kém mượt hơn chút."),
+    ("Chất lượng thật", "do <b>Chất lượng hình ảnh</b> và <b>Bitrate hình</b> quyết định — mỗi đoạn luôn được nén lại một lần.")]) + """
 <h2>Video loop nặng? Làm nhẹ theo thứ tự hiệu quả</h2>""" + steps([
     ("Hạ độ phân giải", "2K → 1080p nhẹ hơn khoảng 2 lần, YouTube vẫn nét."),
     ("Dùng H.265", "nhẹ hơn khoảng 20–40% (Tuỳ chọn nâng cao)."),
@@ -574,6 +583,10 @@ topic("hoi", "Khác", "help", "Câu hỏi thường gặp", hero(
         ("Chỉ muốn loop video, hoặc chỉ loop nhạc?", "Chọn <b>Chỉ video</b> hoặc <b>Chỉ nhạc</b> ở thanh trên cùng (xem chủ đề Chọn kiểu sản phẩm)."),
         ("Vì sao xuất nhanh vậy?", "Mỗi clip chỉ mã hoá <b>một lần</b>, các lần loop chỉ là sao chép. Video 1 giờ thường khoảng nửa phút, 10 giờ khoảng 10 phút (tuỳ máy). Lần sau còn nhanh hơn nhờ bộ nhớ đệm."),
         ("Video loop nặng quá?", "Xem chủ đề <a href='topic:xuat'>Trang Xuất &amp; dung lượng</a>: hạ độ phân giải, H.265, Tiết kiệm dung lượng, hạ Bitrate hình."),
+        ("Ghép xong màu bị lệch, xỉn, tối hơn?", "Thường do clip <b>HDR</b> (điện thoại quay HDR — iPhone bật mặc định — hoặc HDR10). "
+                                               "Từ bản 1.8.1 app tự nhận clip HDR (cột thông tin ghi <b>HDR</b>) và chuyển sang màu thường khi xem "
+                                               "trước và khi xuất. Clip thường (kể cả clip AI không ghi hệ màu) không bị đổi màu khi ghép. "
+                                               "Hai clip vốn khác tông thì dùng thẻ <b>Màu &amp; Logo</b> cho đều."),
         ("Ổ đĩa có đủ chỗ không?", "Trang Xuất hiện dung lượng dự đoán và báo đỏ nếu không đủ; trước khi ghép app kiểm tra lại. Video 10 tiếng 1080p thường cần 10–40 GB."),
         ("Mở app hiện “đang mở rồi”?", "App chỉ cho mở một cửa sổ để hàng đợi không bị ghi đè — xem trên thanh tác vụ. Không thấy cửa sổ nào: "
                                        "mở <b>Task Manager</b> (Ctrl+Shift+Esc), tắt <b>KT Loop Station</b> rồi mở lại."),

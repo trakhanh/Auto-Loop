@@ -22,6 +22,7 @@ class Timeline:
     width: int = 1920
     height: int = 1080
     clip_infos: dict[int, MediaInfo] = field(default_factory=dict)
+    main_info: MediaInfo | None = None  # clip chiếm nhiều thời lượng nhất (gợi ý độ phân giải / fps theo clip gốc)
     frames: dict[int, int] = field(default_factory=dict)
     video: planner.VideoPlan | None = None
     track_infos: dict[int, MediaInfo] = field(default_factory=dict)
@@ -96,10 +97,11 @@ def build(project: Project) -> Timeline:
         return tl
     videos = [tl.clip_infos[k] for k in sorted(tl.clip_infos) if not tl.clip_infos[k].is_image]
     first = videos[0] if videos else None
+    main = _main_clip(vs, tl.clip_infos)
+    tl.main_info = main
     if ex.fps != "source":
         tl.fps = Fraction(int(ex.fps))
     else:
-        main = _main_clip(vs, tl.clip_infos)
         tl.fps = snap_fps(main.fps) if main else Fraction(30)
     _, w, h = RESOLUTIONS.get(ex.resolution, RESOLUTIONS["1080p"])
     if not w:  # theo clip đầu tiên (ảnh nếu không có video)

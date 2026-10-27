@@ -34,14 +34,18 @@ FIRST_STEPS = (
 )
 # "Có gì mới" của bản đang chạy — hiện ở đầu trang Tổng quan (sửa cùng lúc với APP_VERSION khi ra bản mới)
 WHATS_NEW = (
+    ("palette", "Sửa màu clip HDR bị lệch",
+     "Clip điện thoại quay HDR (iPhone bật mặc định, HDR10) trước đây ghép ra bị xỉn, tối. Giờ app tự nhận (cột thông tin "
+     "ghi HDR) và chuyển sang màu thường khi xem trước và khi xuất."),
+    ("sliders", "Gợi ý độ phân giải / fps theo clip gốc",
+     "Trang Xuất ghi ngay dưới ô Độ phân giải: bằng clip gốc, phóng to (không nét hơn, nặng file) hay tăng fps (không "
+     "mượt hơn). Bấm Theo clip gốc là đặt lại đúng."),
     ("download", "Cập nhật ngay trong app",
      "Có bản mới thì thanh bên hiện nút Có bản mới → Tải & cài đặt: app tải bộ cài, kiểm tra SHA-256, cài đè rồi tự mở "
      "lại. Kiểm tra tay ở Cài đặt → Giới thiệu."),
     ("sliders", "Chỉnh bitrate hình",
      "Trang Xuất có hàng Bitrate hình: tự đặt số Mbps, có gợi ý sẵn theo độ phân giải (vd 2K: 16 / 10 / 6 Mbps) và "
      "ước tính số GB mỗi giờ video."),
-    ("eye", "Giao diện 1.7",
-     "Bố cục tự cân, Hướng dẫn có trang Tổng quan, thẻ cài đặt chữ to rõ."),
 )
 SHORTCUTS = (("Space", "Phát / dừng"), ("F1", "Hướng dẫn"), ("Ctrl+S", "Lưu dự án"), ("Ctrl+Z", "Hoàn tác"),
              ("Ctrl+D", "Nhân bản dòng"), ("Ctrl+F", "Tìm"))

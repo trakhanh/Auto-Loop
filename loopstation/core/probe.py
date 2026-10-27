@@ -11,6 +11,7 @@ from fractions import Fraction
 from . import ffmpeg_tools as ft
 
 IMAGE_EXTS = {".jpg", ".jpeg", ".png", ".webp", ".bmp", ".tif", ".tiff"}
+HDR_TRANSFERS = ("arib-std-b67", "smpte2084")  # HLG, PQ
 
 
 @dataclass
@@ -35,6 +36,16 @@ class MediaInfo:
     @property
     def ok(self) -> bool:
         return self.error is None
+
+    @property
+    def hdr(self) -> bool:
+        """Clip HDR (HLG — điện thoại quay mặc định, hoặc PQ / HDR10): phải chuyển sang SDR, nếu không hình xỉn, tối."""
+        return self.color_transfer in HDR_TRANSFERS
+
+    @property
+    def wide_gamut(self) -> bool:
+        """Gam màu rộng bt2020 (HDR hoặc SDR 10-bit): phải đổi gam màu sang bt709."""
+        return self.hdr or self.color_primaries == "bt2020"
 
     def fps_text(self) -> str:
         if not self.fps:

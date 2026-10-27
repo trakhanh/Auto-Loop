@@ -1149,6 +1149,9 @@ class MainWindow(QMainWindow):
             lines.append("<span style='color:" + theme.T["warn_text"] + "'>Lưu ý: " + "<br>Lưu ý: ".join(tl.warnings) + "</span>")
         self.export_tab.set_summary("<br>".join(lines))
         self.export_tab.set_format(tl.width, tl.height, float(tl.fps))
+        m = tl.main_info
+        self.export_tab.set_source((m.width, m.height, float(timeline.snap_fps(m.fps))) if m else None,
+                                   (tl.width, tl.height, float(tl.fps)))
         self._schedule_size(proj, tl)
 
     # ---------- dự đoán dung lượng ----------

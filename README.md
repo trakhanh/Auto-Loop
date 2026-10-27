@@ -6,7 +6,7 @@
 
 **Ghép và loop clip + nhạc thành video YouTube dài hàng giờ — xem trước ngay trong app, xuất nhanh bằng card đồ hoạ.**
 
-<sub>By Khánh Trà · Ứng dụng Windows · Giao diện tiếng Việt · Bản mới nhất: <b>1.8.0</b></sub>
+<sub>By Khánh Trà · Ứng dụng Windows · Giao diện tiếng Việt · Bản mới nhất: <b>1.8.1</b></sub>
 
 <br>
 
@@ -36,6 +36,18 @@
 ## Có gì mới ở 1.8
 
 <table>
+<tr>
+<td width="50%" valign="top">
+<img src="docs/icons/palette.png" width="36"><br>
+<b>1.8.1 · Sửa màu clip HDR bị lệch</b><br>
+Clip quay HDR (iPhone bật mặc định, điện thoại quay HDR10, hoặc chỉnh trên CapCut / VN rồi xuất HDR) trước đây ghép ra bị <b>xỉn, tối hẳn</b>. Giờ app tự nhận ra (cột thông tin ghi <b>HDR</b>) và chuyển sang màu thường khi xem trước, khi xuất và ở ảnh thu nhỏ. Clip thường (kể cả clip AI không ghi hệ màu) vẫn giữ đúng màu như trước: đo lệch dưới 1/255.
+</td>
+<td width="50%" valign="top">
+<img src="docs/icons/clock.png" width="36"><br>
+<b>1.8.1 · Gợi ý độ phân giải / fps theo clip gốc</b><br>
+Đổi độ phân giải / fps là làm lại từng khung hình: phóng to <b>không nét hơn</b> (chỉ nặng file), tăng fps <b>không mượt hơn</b> (chỉ lặp khung). Ngay dưới ô <b>Độ phân giải</b> app ghi so với clip gốc; lệch thì bấm <b>Theo clip gốc</b>.
+</td>
+</tr>
 <tr>
 <td width="50%" valign="top">
 <img src="docs/icons/download.png" width="36"><br>

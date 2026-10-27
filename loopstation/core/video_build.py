@@ -71,7 +71,13 @@ def color_fix(path: str) -> str:
         return ""
     from .probe import probe
     info = probe(path)
-    if not info.ok or not (max(info.width, info.height) >= 1280 or min(info.width, info.height) >= 720):
+    if not info.ok:
+        return ""
+    if info.wide_gamut:  # HDR / bt2020 thiếu nhãn phụ: điền theo bt2020 (không phải bt709) để tone_chain đổi đúng
+        parts = [f"{k}={v}" for k, v, have in (("colorspace", "bt2020nc", info.color_space),
+                                                ("color_primaries", "bt2020", info.color_primaries)) if not have]
+        return f"setparams={':'.join(parts)}," if parts else ""
+    if not (max(info.width, info.height) >= 1280 or min(info.width, info.height) >= 720):
         return ""  # SD: giữ cách hiểu mặc định (bt601)
     parts = [f"{k}=bt709" for k, have in (("colorspace", info.color_space), ("color_primaries", info.color_primaries),
                                           ("color_trc", info.color_transfer)) if not have]
@@ -80,9 +86,34 @@ def color_fix(path: str) -> str:
     return f"setparams={':'.join(parts)}," if parts else ""
 
 
+SDR_WHITE_NITS = 203  # BT.2408: trắng chuẩn của HDR = trắng 100 % của SDR
+TONE_VERSION = "t1"  # đổi khi đổi cách chuyển HDR → SDR (khối cũ trong bộ nhớ đệm không còn dùng)
+
+
+def tone_chain(path: str) -> str:
+    """Clip HDR (HLG / PQ) hoặc gam màu rộng bt2020 → SDR bt709 (kết thúc bằng dấu phẩy; "" = clip thường).
+    Không chuyển thì hình bị xỉn, tối, lệch màu hẳn: điểm ảnh HDR bị hiểu như SDR. Trắng chuẩn HDR (203 nit) thành
+    trắng SDR, vùng sáng hơn được nén mềm (mobius, giữ nguyên dưới 80 %) — màu sát bản gốc nhất khi đo thử.
+    Đặt SAU bước đổi cỡ khung: chuyển ở độ phân giải xuất nhanh hơn ~3 lần so với ở khung 4K gốc."""
+    if not path or os.path.splitext(path)[1].lower() in IMAGE_EXTS:
+        return ""
+    from .probe import probe
+    info = probe(path)
+    if not info.ok or not info.wide_gamut:
+        return ""
+    lin = f"zscale=t=linear:npl={SDR_WHITE_NITS},format=gbrpf32le,zscale=p=bt709,"
+    tm = "tonemap=mobius:param=0.8:desat=0," if info.hdr else ""
+    return f"{lin}{tm}zscale=t=bt709:m=bt709:r=tv,format=yuv420p,"
+
+
+def color_key(*paths: str) -> list[str]:
+    """Phần thêm vào khoá bộ nhớ đệm: chỉ clip phải chuyển màu (HDR) mới đổi khoá — khối của clip thường giữ nguyên."""
+    return [TONE_VERSION] if any(tone_chain(p) for p in paths) else []
+
+
 def _norm(fit: str, w: int, h: int, fps: Fraction, p: str = "", path: str = "") -> str:
-    """Chuỗi chuẩn hoá chung: khung hình, fps cố định, đệm frame cuối để luôn đủ frame."""
-    return (f"{color_fix(path)}setpts=PTS-STARTPTS,{fit_chain(fit, w, h, p)},"
+    """Chuỗi chuẩn hoá chung: hệ màu, khung hình, HDR → SDR, fps cố định, đệm frame cuối để luôn đủ frame."""
+    return (f"{color_fix(path)}setpts=PTS-STARTPTS,{fit_chain(fit, w, h, p)},{tone_chain(path)}"
             f"fps={fps.numerator}/{fps.denominator},tpad=stop_mode=clone:stop_duration=5")
 
 
@@ -187,7 +218,8 @@ def encode_segment(
     ids = [_file_id(paths[seg.clip])] + ([_file_id(paths[seg.clip_b])] if seg.kind == "xfade" else [])
     key = _key(BLOCK_VERSION, seg.kind, *ids, seg.start + off_a, seg.end + off_a, off_b, fps, width, height,
                fit, encoder, quality, f"{fade:.3f}", *([f"max{maxrate}{'s' if strict_cap else ''}"] if maxrate else []),
-               *([f"look{look.key()}"] if look is not None else []), *([f"side{side}"] if side else []))
+               *([f"look{look.key()}"] if look is not None else []), *([f"side{side}"] if side else []),
+               *color_key(*(paths[seg.clip], *([paths[seg.clip_b]] if seg.kind == "xfade" else []))))
     pix = encoders.pix_fmt(encoder)
     gop = max(1, round(float(fps) * 2))
     tail = (["-frames:v", str(n), *encoders.encoder_args(encoder, quality, gop, maxrate, strict_cap),

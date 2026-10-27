@@ -973,12 +973,20 @@ class VideoTab(QWidget):
             text = f"{info.width}×{info.height} · {info.fps_text()} fps · {info.duration:.1f}s"
             if info.has_audio:
                 text += " · Có tiếng"
+            if info.hdr:
+                text += " · HDR"
             it.setText(COL_INFO, text)
             differs = ref is not None and (info.width, info.height, info.fps_text()) != (
                 ref.width, ref.height, ref.fps_text())
             it.setForeground(COL_INFO, theme.qcolor("text_disabled") if skipped else (
-                theme.qcolor("warn_text") if differs else theme.qcolor("text_muted")))
-            it.setToolTip(COL_INFO, "Khác thông số clip đầu tiên — sẽ được chuẩn hoá tự động khi xuất" if differs else "")
+                theme.qcolor("warn_text") if differs else
+                theme.qcolor("info_text") if info.wide_gamut else theme.qcolor("text_muted")))
+            tips = (["Khác thông số clip đầu tiên — sẽ được chuẩn hoá tự động khi xuất"] if differs else []) + (
+                ["Clip HDR (điện thoại quay HDR / HDR10): app tự chuyển sang màu thường (SDR) khi xem trước và khi "
+                 "xuất, nên màu không bị xỉn, tối. Xuất chậm hơn clip thường một chút."] if info.hdr else
+                ["Clip gam màu rộng (bt2020): app tự đổi sang gam màu thường (bt709) khi xuất."] if info.wide_gamut
+                else [])
+            it.setToolTip(COL_INFO, "\n".join(tips))
             # đoạn lấy: thời lượng hiệu dụng sau khi bỏ đầu/cuối
             trimmed = c.trim_start > 0 or c.trim_end > 0
             d = max(min(MIN_KEEP, info.duration), info.duration - c.trim_start - c.trim_end)

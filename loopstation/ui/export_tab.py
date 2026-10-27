@@ -126,7 +126,37 @@ class ExportTab(QWidget):
         g_fmt = QGroupBox("Định dạng && Chất lượng Video")
         f = form(g_fmt)
         f.addRow(lab("Chuẩn nén (Codec)"), self.preset)
-        f.addRow(lab("Độ phân giải"), self.resolution)
+        # gợi ý theo clip gốc: đổi độ phân giải / fps là làm lại từng khung (phóng to không nét hơn, tăng fps chỉ lặp khung)
+        self.fmt_hint = QLabel("")
+        self.fmt_hint.setObjectName("muted")
+        self.fmt_hint.setWordWrap(True)
+        self.fmt_hint.setAlignment(Qt.AlignmentFlag.AlignTop | Qt.AlignmentFlag.AlignLeft)
+        self.fmt_hint.setToolTip("Đổi độ phân giải / khung hình mỗi giây là làm lại từng khung hình:\n"
+                                 "• lớn hơn clip gốc: hình to ra nhưng không nét thêm, file nặng hơn\n"
+                                 "• fps cao hơn clip gốc: chỉ lặp lại khung cũ, không mượt hơn\n"
+                                 "Mẹo YouTube: tải bản 2K thì YouTube nén tốt hơn — chỉ chọn khi cố ý (nhớ hạ bitrate).")
+        self.match_btn = QPushButton("Theo clip gốc")
+        theme.tag(self.match_btn, variant="tonal")
+        self.match_btn.setToolTip("Đặt độ phân giải và khung hình/giây bằng clip gốc (clip phát nhiều nhất)")
+        self.match_btn.clicked.connect(self._match_source)
+        self.match_btn.hide()
+        self._src = None  # (rộng, cao, fps) của clip chính — main_window cập nhật
+        hint_row = QHBoxLayout()
+        hint_row.setContentsMargins(0, 0, 0, 0)
+        hint_row.setSpacing(theme.SP['md'])
+        hint_row.addWidget(self.fmt_hint, 1)
+        hint_row.addWidget(self.match_btn, 0, Qt.AlignmentFlag.AlignTop)
+        res_col = QVBoxLayout()
+        res_col.setContentsMargins(0, 0, 0, 0)
+        res_col.setSpacing(4)
+        res_col.addWidget(self.resolution)
+        res_col.addLayout(hint_row)
+        res_box = QWidget()
+        res_box.setLayout(res_col)
+        res_lab = lab("Độ phân giải")
+        res_lab.setAlignment(Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignTop)
+        res_lab.setContentsMargins(0, 6, 0, 0)
+        f.addRow(res_lab, res_box)
         f.addRow(lab("Khung hình/giây"), self.fps)
         f.addRow(lab("Bộ mã hoá (GPU/CPU)"), self.encoder)
         self.quality.setToolTip("Độ nét phần HÌNH ẢNH của video. Không ảnh hưởng tới âm thanh.\n"
@@ -522,6 +552,25 @@ class ExportTab(QWidget):
             own_folder=self.own_folder.isChecked(),
             markers=self.markers.isChecked(),
         )
+
+    def set_source(self, src: tuple[int, int, float] | None, out: tuple[int, int, float]) -> None:
+        """Clip gốc (clip phát nhiều nhất) so với cỡ / fps sẽ xuất → dòng gợi ý dưới ô Độ phân giải."""
+        self._src = src
+        text, tone, mismatch = encoders.output_advice(*src, *out) if src else ("", "", False)
+        self.fmt_hint.setText(text)
+        self.fmt_hint.setVisible(bool(text))
+        theme.tag(self.fmt_hint, tone=tone)
+        self.match_btn.setVisible(mismatch)
+        if src:
+            self.match_btn.setToolTip(f"Đặt độ phân giải {encoders.res_name(src[0], src[1])} và {src[2]:g} fps "
+                                      "bằng clip gốc (clip phát nhiều nhất)")
+
+    def _match_source(self) -> None:
+        if not self._src:
+            return
+        w_, h_, _ = self._src
+        set_combo(self.resolution, encoders.res_key(w_, h_))
+        set_combo(self.fps, "source")
 
     def set_format(self, width: int, height: int, fps: float) -> None:
         """Cỡ khung + fps thật của video sẽ xuất: số Mbps gợi ý / mức YouTube tính theo đó."""
