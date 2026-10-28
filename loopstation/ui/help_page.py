@@ -290,12 +290,15 @@ lặp 60 lần? Bấm <b>Xếp lần lượt…</b> (cạnh nút Xen kẽ clip n
 <h2>Thư viện mẫu: xem mọi mẫu, tự tạo mẫu mới</h2>
 <p>Bấm <b>Thư viện mẫu…</b> (trên bảng clip, cạnh Xếp lần lượt). Mỗi mẫu có <b>dải màu ví dụ kết quả</b> — app áp thật
 mẫu lên bộ tên file ví dụ, mỗi clip 10 giây — kèm tổng thời lượng. Bấm <b>Dùng mẫu này</b> để áp vào bảng.</p>""" + examples([
+    ("Loop A ×57 kẹp Loop B (bảng clip)", "STT_loopB → STT_loopA ×57 → STT_loopB → STT_loopA; 1_… đến 10_… nối thành 1 video"),
     ("Nền ×70 xen từng cảnh", "Nền ×70 → Cảnh 2 → Nền ×70 → Cảnh 3 → … → Nền ×70"),
     ("Nền 10 phút xen từng cảnh", "như trên, mỗi lần nền loop đủ 10 phút"),
     ("Nền ×70 xen cảnh — lặp cả mẫu 4 lượt", "chuỗi nền / cảnh trên lặp 4 lượt"),
     ("Nền 5 phút, cảnh ngẫu nhiên — lặp 6 lượt", "6 lượt, mỗi lượt cảnh xáo thứ tự khác"),
     ("Từng loop ×60, clip nội dung ở đầu", "Content → Loop1 ×60 → Loop2 ×60 → …"),
-    ("Từng loop ×60, clip nội dung ở cuối", "Loop1 ×60 → Loop2 ×60 → … → Content")], ("6 mẫu có sẵn", "Kết quả")) + """
+    ("Từng loop ×60, clip nội dung ở cuối", "Loop1 ×60 → Loop2 ×60 → … → Content")], ("7 mẫu có sẵn", "Kết quả")) + box(
+    "tip", "Mẫu có sẵn nằm trong app nên <b>máy nào cài cũng có</b>. Mẫu bạn tự lưu chỉ nằm trên máy đã lưu. Muốn đổi "
+            "mẫu có sẵn: bấm <b>Sửa</b> → app tạo <i>bản của bạn</i>, mẫu gốc vẫn còn.") + """
 <h2>Mẫu bảng clip của bạn: dùng lại cho video khác</h2>
 <p>Bảng tự xếp (ví dụ <b>5_loopB ×1 → 5_loopA ×57 → 5_loopB ×1 → 5_loopA ×1</b>) dùng lại cho video 6, 7…: trong
 Thư viện mẫu bấm <b>Lưu bảng hiện tại thành mẫu…</b>, hoặc <b>Tạo mẫu mới…</b> để tự gõ từng dòng (vai + số lần phát +

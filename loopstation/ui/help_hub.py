@@ -35,7 +35,8 @@ FIRST_STEPS = (
 # "Có gì mới" của bản đang chạy — hiện ở đầu trang Tổng quan (sửa cùng lúc với APP_VERSION khi ra bản mới)
 WHATS_NEW = (
     ("queue", "Thư viện mẫu + mẫu bảng clip",
-     "Xem 6 mẫu có sẵn kèm ví dụ kết quả, tự tạo mẫu mới. Lưu cả bảng (STT_loopB ×1 → STT_loopA ×57 → …) "
+     "Xem 7 mẫu có sẵn kèm ví dụ kết quả (có mẫu bảng Loop A ×57 kẹp Loop B — máy nào cài cũng có), tự tạo mẫu "
+     "mới. Lưu cả bảng (STT_loopB ×1 → STT_loopA ×57 → …) "
      "thành mẫu theo tên file, áp cho video khác (6_loopA, 6_loopB…), "
      "nối 10 tình huống (1_… → 10_…) thành một video, hoặc dùng ở Xuất hàng loạt. Nút Thư viện mẫu… ở trang Video."),
     ("info", "Nhắc Intro / Outro mẫu",

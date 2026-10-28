@@ -72,3 +72,21 @@ def test_library_examples_for_every_preset():
     assert [b[0] for b in blocks[:3]] == ["Nền", "Cảnh 2", "Nền"] and blocks[0][1] == "×70"
     blocks, total, _ = example({"kind": "table", "rows": tp.from_clips(_table("5"))})
     assert [b[1] for b in blocks] == ["×1", "×57", "×1", "×1"] and total == 600
+
+
+def test_builtin_table_preset_ships_with_app():
+    """Mẫu "Loop A ×57 kẹp Loop B" nằm trong app: máy mới (chưa lưu gì) vẫn có, áp được cho 1_… đến 10_…."""
+    from PySide6.QtCore import QSettings
+    from loopstation.ui.interleave_dialog import TABLE_BUILTIN, all_presets, all_table_presets, save_table_presets
+    st = QSettings("KTLoopStation-Test", "builtin-table")
+    st.clear()
+    p = next(x for x in all_presets(st) if x["name"] == "Loop A ×57 kẹp Loop B")
+    assert p["kind"] == "table" and not p.get("user")
+    assert tp.summary(p["rows"]) == "STT_loopB ×1 → STT_loopA ×57 → STT_loopB ×1 → STT_loopA ×1"
+    clips, missing = tp.build(p["rows"], [f"D:/f/{n}_loop{r}.mp4" for n in range(1, 11) for r in "AB"])
+    assert not missing and len(clips) == 40 and clips[1].path.endswith("1_loopA.mp4") and clips[1].count == 57
+    save_table_presets(st, [{"name": "Loop A ×57 kẹp Loop B", "rows": p["rows"][:2]}])  # bản của bạn trùng tên: thay mẫu có sẵn
+    mine = [x for x in all_table_presets(st) if x["name"] == "Loop A ×57 kẹp Loop B"]
+    assert len(mine) == 1 and mine[0].get("user") and len(mine[0]["rows"]) == 2
+    assert len(TABLE_BUILTIN[0]["rows"]) == 4  # mẫu gốc không đổi
+    st.clear()

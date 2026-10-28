@@ -48,6 +48,18 @@ SEQUENCE_PRESETS = [
 ]
 
 
+
+def _table_builtin(name: str, plays: list[tuple[str, int]]) -> dict:
+    from ..core import table_preset as tp
+    return {"name": name, "kind": "table", "rows": tp.from_clips([ClipItem(f"1_{r}.mp4", count=n) for r, n in plays])}
+
+
+# mẫu bảng clip dựng sẵn: đóng gói trong app → máy nào cài cũng có (mẫu tự lưu chỉ nằm trên máy đã lưu)
+TABLE_BUILTIN = [
+    _table_builtin("Loop A ×57 kẹp Loop B", [("loopB", 1), ("loopA", 57), ("loopB", 1), ("loopA", 1)]),
+]
+
+
 class InterleaveDialog(QDialog):
     """durations: path (normcase) → độ dài một lần phát (đã trừ phần cắt) để ước tính tổng thời lượng."""
 
@@ -543,7 +555,7 @@ def all_presets(settings: QSettings | None) -> list[dict]:
             users = [dict(p, user=True) for p in data if isinstance(p, dict) and p.get("name")]
         except (TypeError, ValueError):
             users = []
-    return [dict(p) for p in BUILTIN] + [dict(p) for p in SEQUENCE_PRESETS] + users + table_presets(settings)
+    return [dict(p) for p in BUILTIN] + [dict(p) for p in SEQUENCE_PRESETS] + users + all_table_presets(settings)
 
 
 def table_presets(settings: QSettings | None) -> list[dict]:
@@ -556,6 +568,13 @@ def table_presets(settings: QSettings | None) -> list[dict]:
         return []
     return [dict(p, kind="table", user=True) for p in data
             if isinstance(p, dict) and p.get("name") and isinstance(p.get("rows"), list)]
+
+
+def all_table_presets(settings: QSettings | None) -> list[dict]:
+    """Mẫu bảng clip có sẵn + mẫu người dùng đã lưu (mẫu tự lưu trùng tên thay cho mẫu có sẵn)."""
+    users = table_presets(settings)
+    mine = {p["name"] for p in users}
+    return [dict(p) for p in TABLE_BUILTIN if p["name"] not in mine] + users
 
 
 def save_table_presets(settings: QSettings, presets: list[dict]) -> None:

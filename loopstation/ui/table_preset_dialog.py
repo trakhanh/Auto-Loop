@@ -14,7 +14,7 @@ from ..core import table_preset as tp
 from ..core.project import ClipItem
 from . import icons, theme
 from . import widgets as w
-from .interleave_dialog import save_table_presets, table_presets
+from .interleave_dialog import all_table_presets, save_table_presets, table_presets
 
 C_NO, C_ROLE, C_PLAYS, C_LOOP, C_NEXT, C_TRIM, C_FILE = range(7)
 LAST_KEY = "table/last"  # mẫu dùng lần trước: mở hộp thoại là chọn sẵn
@@ -118,7 +118,7 @@ class TablePresetDialog(QDialog):
 
     # ---------- dữ liệu ----------
     def _presets(self) -> list[dict]:
-        return table_presets(self.settings)
+        return all_table_presets(self.settings)
 
     def _load(self, select: str = "") -> None:
         self.preset.blockSignals(True)
@@ -135,7 +135,8 @@ class TablePresetDialog(QDialog):
 
     def _show(self, *_) -> None:
         p = self.preset.currentData()
-        self.del_btn.setEnabled(p is not None)
+        self.del_btn.setEnabled(bool(p and p.get("user")))  # mẫu có sẵn không xoá được
+        self.del_btn.setToolTip("Xoá mẫu đang chọn" if p is None or p.get("user") else "Mẫu có sẵn — không xoá được")
         self.tree.setVisible(p is not None)
         self.empty.setVisible(p is None)
         self.tree.clear()
@@ -201,7 +202,7 @@ class TablePresetDialog(QDialog):
         name = name.strip()
         if not ok or not name:
             return
-        presets = self._presets()
+        presets = table_presets(self.settings)
         if any(p["name"] == name for p in presets):
             if QMessageBox.question(self, "Lưu mẫu", f"Đã có mẫu “{name}”. Ghi đè?") != QMessageBox.StandardButton.Yes:
                 return
@@ -216,7 +217,7 @@ class TablePresetDialog(QDialog):
         if p is None or QMessageBox.question(self, "Xoá mẫu", f"Xoá mẫu “{p['name']}”?") \
                 != QMessageBox.StandardButton.Yes:
             return
-        save_table_presets(self.settings, [x for x in self._presets() if x["name"] != p["name"]])
+        save_table_presets(self.settings, [x for x in table_presets(self.settings) if x["name"] != p["name"]])
         self._load()
 
     def _apply(self) -> None:

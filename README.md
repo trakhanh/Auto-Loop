@@ -6,7 +6,7 @@
 
 **Ghép và loop clip + nhạc thành video YouTube dài hàng giờ — xem trước ngay trong app, xuất nhanh bằng card đồ hoạ.**
 
-<sub>By Khánh Trà · Ứng dụng Windows · Giao diện tiếng Việt · Bản mới nhất: <b>1.8.2</b></sub>
+<sub>By Khánh Trà · Ứng dụng Windows · Giao diện tiếng Việt · Bản mới nhất: <b>1.8.3</b></sub>
 
 <br>
 
@@ -35,12 +35,14 @@
 
 ## Có gì mới ở 1.8
 
+> **1.8.3** · Mẫu bảng <b>Loop A ×57 kẹp Loop B</b> (<code>STT_loopB ×1 → STT_loopA ×57 → STT_loopB ×1 → STT_loopA ×1</code>) giờ <b>có sẵn trong app</b>: cài trên máy nào cũng có, không cần lưu lại. Thư viện mẫu có 7 mẫu dựng sẵn. Muốn đổi mẫu có sẵn thì bấm <b>Sửa</b> — app tạo bản của bạn, mẫu gốc vẫn còn. Mẫu tự lưu vẫn chỉ nằm trên máy đã lưu.
+
 <table>
 <tr>
 <td width="50%" valign="top">
 <img src="docs/icons/queue.png" width="36"><br>
 <b>1.8.2 · Thư viện mẫu xếp clip</b><br>
-Nút <b>Thư viện mẫu…</b> ở trang Video liệt kê <b>6 mẫu có sẵn</b> và các mẫu bạn tạo, mỗi mẫu có <b>dải màu ví dụ kết quả</b> (tính thật trên bộ file ví dụ) và tổng thời lượng. <b>Tạo mẫu mới…</b>: tự gõ từng dòng — vai (loopA), số lần phát (57 · 10p · 50-80), nối loop.
+Nút <b>Thư viện mẫu…</b> ở trang Video liệt kê các mẫu có sẵn và các mẫu bạn tạo, mỗi mẫu có <b>dải màu ví dụ kết quả</b> (tính thật trên bộ file ví dụ) và tổng thời lượng. <b>Tạo mẫu mới…</b>: tự gõ từng dòng — vai (loopA), số lần phát (57 · 10p · 50-80), nối loop.
 </td>
 <td width="50%" valign="top">
 <img src="docs/icons/repeat.png" width="36"><br>

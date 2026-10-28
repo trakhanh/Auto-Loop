@@ -21,7 +21,8 @@ from ..core.project import ClipItem
 from . import icons, theme
 from . import widgets as w
 from .interleave_dialog import (
-    BUILTIN, SEQUENCE_PRESETS, USER_PREFIX, all_presets, arrange_from_preset, save_table_presets, table_presets,
+    BUILTIN, SEQUENCE_PRESETS, TABLE_BUILTIN, USER_PREFIX, all_presets, arrange_from_preset, save_table_presets,
+    table_presets,
 )
 
 EXAMPLE_SEC = 10.0  # mỗi clip ví dụ dài 10 giây
@@ -44,6 +45,9 @@ def describe(p: dict) -> str:
     if k == "sequence":
         pos = {"start": "ở đầu", "end": "ở cuối", "both": "ở đầu và cuối"}.get(p.get("content", "start"), "ở đầu")
         return f"Phát lần lượt từng clip loop, mỗi cái <b>×{p.get('base', '60')}</b>; clip nội dung {pos}."
+    if k == "table" and not p.get("user"):
+        return ("Mỗi tình huống: <b>" + tp.summary(p.get("rows") or []) + "</b>. Thư mục có 1_… đến 10_… thì "
+                "10 tình huống nối thành 1 video. Có sẵn trong app — máy nào cài cũng có.")
     if k == "table":
         return "Bảng tự lưu theo tên file, giữ nguyên số lần phát / nối loop / cắt đoạn của từng dòng."
     base = str(p.get("base", "70"))
@@ -272,14 +276,16 @@ class PresetLibraryDialog(QDialog):
                 wd.deleteLater()
         everything = all_presets(self.settings)
         users_il = [p for p in everything if p.get("user") and kind_of(p) == "interleave"]
-        users_tb = [p for p in everything if kind_of(p) == "table"]
-        n_builtin = len(BUILTIN) + len(SEQUENCE_PRESETS)
+        users_tb = [p for p in everything if p.get("user") and kind_of(p) == "table"]
+        builtin_tb = [p for p in everything if not p.get("user") and kind_of(p) == "table"]
+        n_builtin = len(TABLE_BUILTIN) + len(BUILTIN) + len(SEQUENCE_PRESETS)
         n_user = len(users_il) + len(users_tb)
         self.count.setText(f"App có <b>{n_builtin} mẫu dựng sẵn</b> · bạn đã tạo <b>{n_user} mẫu</b>. "
                            "Dải màu là ví dụ kết quả thật khi áp mẫu.")
         sections = [
             ("Mẫu của bạn — bảng clip", users_tb, True, True),
             ("Mẫu của bạn — xen kẽ clip nền", users_il, False, True),
+            ("Bảng clip (có sẵn)", builtin_tb, False, False),
             ("Xen kẽ clip nền (có sẵn)", [dict(p) for p in BUILTIN], False, False),
             ("Xếp lần lượt từng loop (có sẵn)", [dict(p) for p in SEQUENCE_PRESETS], False, False),
         ]
@@ -293,8 +299,8 @@ class PresetLibraryDialog(QDialog):
                 self.body_lay.addWidget(w.muted("Chưa có — bấm <b>Tạo mẫu mới…</b> hoặc <b>Lưu bảng hiện tại thành "
                                                 "mẫu…</b> ở trên."))
             for p in items:
-                self.body_lay.addWidget(PresetCard(p, self._use, self._edit if editable else None,
-                                                   self._delete if deletable else None))
+                edit = self._edit if editable else (self._edit_copy if kind_of(p) == "table" else None)
+                self.body_lay.addWidget(PresetCard(p, self._use, edit, self._delete if deletable else None))
         self.body_lay.addStretch(1)
 
     def _use(self, p: dict) -> None:
@@ -310,6 +316,10 @@ class PresetLibraryDialog(QDialog):
         dlg = PresetEditor(self.settings, p, self)
         if dlg.exec():
             self._fill()
+
+    def _edit_copy(self, p: dict) -> None:
+        """Mẫu có sẵn không sửa trực tiếp: sửa thành bản của bạn (mẫu có sẵn vẫn còn)."""
+        self._edit({"name": f"{p['name']} (bản của bạn)", "rows": [dict(r) for r in p.get("rows") or []]})
 
     def _delete(self, p: dict) -> None:
         if QMessageBox.question(self, "Xoá mẫu", f"Xoá mẫu “{p['name']}”?") != QMessageBox.StandardButton.Yes:
