@@ -6,7 +6,7 @@
 
 **Ghép và loop clip + nhạc thành video YouTube dài hàng giờ — xem trước ngay trong app, xuất nhanh bằng card đồ hoạ.**
 
-<sub>By Khánh Trà · Ứng dụng Windows · Giao diện tiếng Việt · Bản mới nhất: <b>1.8.1</b></sub>
+<sub>By Khánh Trà · Ứng dụng Windows · Giao diện tiếng Việt · Bản mới nhất: <b>1.8.2</b></sub>
 
 <br>
 
@@ -38,6 +38,18 @@
 <table>
 <tr>
 <td width="50%" valign="top">
+<img src="docs/icons/queue.png" width="36"><br>
+<b>1.8.2 · Thư viện mẫu xếp clip</b><br>
+Nút <b>Thư viện mẫu…</b> ở trang Video liệt kê <b>6 mẫu có sẵn</b> và các mẫu bạn tạo, mỗi mẫu có <b>dải màu ví dụ kết quả</b> (tính thật trên bộ file ví dụ) và tổng thời lượng. <b>Tạo mẫu mới…</b>: tự gõ từng dòng — vai (loopA), số lần phát (57 · 10p · 50-80), nối loop.
+</td>
+<td width="50%" valign="top">
+<img src="docs/icons/repeat.png" width="36"><br>
+<b>1.8.2 · Mẫu bảng clip theo tên STT_loopA / STT_loopB</b><br>
+Lưu cả bảng (ví dụ <code>5_loopB ×1 → 5_loopA ×57 → 5_loopB ×1 → 5_loopA ×1</code>) thành mẫu, áp cho video khác (<code>6_loopA</code>, <code>6_loopB</code>…). Thư mục có <code>1_… → 10_…</code> thì <b>10 tình huống nối thành một video</b>. Dùng được ở Xuất hàng loạt. Ô Intro / Outro ghi <b>· MẪU</b> và app hỏi trước khi xuất nếu lỡ để intro mẫu.
+</td>
+</tr>
+<tr>
+<td width="50%" valign="top">
 <img src="docs/icons/palette.png" width="36"><br>
 <b>1.8.1 · Sửa màu clip HDR bị lệch</b><br>
 Clip quay HDR (iPhone bật mặc định, điện thoại quay HDR10, hoặc chỉnh trên CapCut / VN rồi xuất HDR) trước đây ghép ra bị <b>xỉn, tối hẳn</b>. Giờ app tự nhận ra (cột thông tin ghi <b>HDR</b>) và chuyển sang màu thường khi xem trước, khi xuất và ở ảnh thu nhỏ. Clip thường (kể cả clip AI không ghi hệ màu) vẫn giữ đúng màu như trước: đo lệch dưới 1/255.
@@ -62,8 +74,11 @@ Trang <b>Xuất</b> có hàng <b>Bitrate hình</b>: chọn <i>Tự đặt bitrat
 </tr>
 </table>
 
-<p align="center"><img src="docs/screenshots/04-xuat.png" width="820" alt="Trang Xuất với hàng Bitrate hình và dòng gợi ý số Mbps"></p>
-<p align="center"><sub><b>Trang Xuất → Bitrate hình</b> — mỗi 1 Mbps ≈ 450 MB cho mỗi giờ video</sub></p>
+<p align="center"><img src="docs/screenshots/10-thu-vien-mau.png" width="820" alt="Thư viện mẫu xếp clip: mẫu có sẵn và mẫu của bạn, mỗi mẫu có dải màu ví dụ kết quả"></p>
+<p align="center"><sub><b>Thư viện mẫu</b> — mỗi mẫu có ví dụ kết quả thật; mẫu của bạn sửa / xoá được, dùng được ở Xuất hàng loạt</sub></p>
+
+<p align="center"><img src="docs/screenshots/04-xuat.png" width="820" alt="Trang Xuất với hàng Bitrate hình và gợi ý độ phân giải theo clip gốc"></p>
+<p align="center"><sub><b>Trang Xuất</b> — gợi ý độ phân giải / fps theo clip gốc, Bitrate hình (mỗi 1 Mbps ≈ 450 MB cho mỗi giờ video)</sub></p>
 
 <br>
 

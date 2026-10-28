@@ -15,7 +15,7 @@ from PySide6.QtWidgets import (
 )
 
 from ..core.probe import MediaInfo
-from ..core.project import ClipItem, VideoSettings, format_hms, parse_hms
+from ..core.project import ClipItem, VideoSettings, format_hms, is_sample_file, parse_hms
 from . import effects, icons, motion, theme
 from . import widgets as w
 from .timeline_bar import TimelineBar
@@ -160,8 +160,11 @@ class BookendRow(QWidget):
     def set_path(self, path: str) -> None:
         self._path = path
         has_file = bool(path)
-        self.path.setText(Path(path).name if has_file else "")
-        self.path.setToolTip(path)
+        sample = has_file and is_sample_file(path)
+        self.path.setText((f"{Path(path).name} · MẪU" if sample else Path(path).name) if has_file else "")
+        self.path.setToolTip((f"{self.title} MẪU để tập dùng (màn hình chữ “KT Loop Station”) — bấm thùng rác để bỏ, "
+                              f"hoặc Chọn… để thay bằng {self.title.lower()} của kênh.\n" if sample else "") + path)
+        theme.tag(self.path, sample="true" if sample else "false")
         self.clear.setEnabled(has_file)
         self.xf.setEnabled(has_file)
         self.changed.emit()
@@ -482,6 +485,14 @@ class VideoTab(QWidget):
                                      "cái lặp N lần, clip nội dung (không có chữ 'loop') ở đầu / cuối")
         self.sequence_btn.clicked.connect(self._open_sequence)
         top_bar.addWidget(self.sequence_btn)
+        self.table_preset_btn = QPushButton("Thư viện mẫu…")
+        self.table_preset_btn.setObjectName("pill")
+        self.table_preset_btn.setIcon(icons.icon("queue", 13))
+        self.table_preset_btn.setIconSize(QSize(13, 13))
+        self.table_preset_btn.setToolTip("Mọi mẫu xếp clip (có sẵn + của bạn) kèm ví dụ kết quả · tạo mẫu mới tuỳ biến · "
+                                         "lưu bảng hiện tại thành mẫu theo tên file (STT_loopB ×1 → STT_loopA ×57 → …)")
+        self.table_preset_btn.clicked.connect(self._open_library)
+        top_bar.addWidget(self.table_preset_btn)
         lv.addLayout(top_bar)
         lv.addWidget(self.toolbar)
         # gợi ý khi vừa thêm file có clip nền (loop…) cùng các cảnh khác
@@ -1394,6 +1405,48 @@ class VideoTab(QWidget):
         if not dlg.exec() or not dlg.result_clips:
             return
         self._apply_arranged(dlg.result_clips, infos, "Đã xếp lần lượt")
+
+    def _open_library(self) -> None:
+        from .preset_library import PresetLibraryDialog, interleave_key, kind_of
+        clips, infos, durations = self._table_media()
+        dlg = PresetLibraryDialog(clips, self.settings, self)
+        if not dlg.exec() or not dlg.choice:
+            return
+        p = dlg.choice
+        k = kind_of(p)
+        if k == "table":
+            self.settings.setValue("table/last", p["name"])
+            self._open_table_preset()
+            return
+        if not clips:
+            QMessageBox.information(self, "Thư viện mẫu", "Thêm clip vào bảng trước, rồi chọn lại mẫu này.")
+            return
+        if k == "sequence":
+            from .sequence_dialog import SequenceDialog
+            sd = SequenceDialog(clips, durations, self.settings, self)
+            sd.plays.setText(str(p.get("base", "60")))
+            sd.pos.setCurrentIndex(max(0, sd.pos.findData(p.get("content", "start"))))
+            if sd.exec() and sd.result_clips:
+                self._apply_arranged(sd.result_clips, infos, "Đã xếp lần lượt")
+            return
+        if len({os.path.normcase(c.path) for c in clips}) < 2:
+            QMessageBox.information(self, "Xen kẽ clip nền", "Cần ít nhất 2 file khác nhau trong bảng: 1 clip nền "
+                                    "(loop_….mp4) và các cảnh chèn (2_….mp4, 3_….mp4…).")
+            return
+        idlg = InterleaveDialog(clips, durations, self.settings, self, preset_name=interleave_key(p))
+        if idlg.exec() and idlg.result_clips:
+            self._apply_arranged(idlg.result_clips, infos, "Đã xen kẽ")
+
+    def _open_table_preset(self) -> None:
+        from .table_preset_dialog import TablePresetDialog
+        clips, infos, _durations = self._table_media()
+        dlg = TablePresetDialog(clips, self.settings, self)
+        if not dlg.exec() or not dlg.result_clips:
+            return
+        new = [c.path for c in dlg.result_clips if os.path.normcase(c.path) not in infos]
+        for path, info in zip(new, w.probe.probe_many(new)):  # file lấy từ thư mục khác: đọc thông tin
+            infos[os.path.normcase(path)] = info
+        self._apply_arranged(dlg.result_clips, infos, "Đã áp mẫu bảng")
 
     def _apply_arranged(self, result: list[ClipItem], infos: dict, what: str) -> None:
         """Thay bảng clip bằng bảng đã xếp (Hoàn tác được)."""

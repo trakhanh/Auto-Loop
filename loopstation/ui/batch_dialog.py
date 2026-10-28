@@ -7,7 +7,8 @@ from pathlib import Path
 
 from PySide6.QtCore import QSettings, QSize, Qt, QTimer
 from PySide6.QtWidgets import (
-    QApplication, QButtonGroup, QCheckBox, QComboBox, QMenu, QDialog, QDialogButtonBox, QDoubleSpinBox, QFormLayout,
+    QApplication, QButtonGroup, QCheckBox, QComboBox, QMenu, QMessageBox, QDialog, QDialogButtonBox, QDoubleSpinBox,
+    QFormLayout,
     QFrame, QHBoxLayout, QHeaderView, QLabel, QLineEdit, QPushButton, QSpinBox, QTreeWidget, QTreeWidgetItem,
     QVBoxLayout, QWidget,
 )
@@ -293,15 +294,16 @@ class BatchDialog(QDialog):
         self.preset = QComboBox()
         for p in all_presets(settings):
             p = dict(p, key=(USER_PREFIX if p.get("user") else "") + p["name"])
-            feature = "Xếp lần lượt" if p.get("kind") == "sequence" else "Xen kẽ clip nền"
+            feature = {"sequence": "Xếp lần lượt", "table": "Mẫu bảng clip"}.get(p.get("kind", ""), "Xen kẽ clip nền")
             self.preset.addItem(f"{feature}: {p['key']}", p)
         self.preset.addItem("Không xếp — phát theo thứ tự tên file", None)
         last = settings.value("batch/preset", "")
         idx = next((k for k in range(self.preset.count())
                     if (self.preset.itemData(k) or {}).get("key", self.preset.itemText(k)) == last), -1) if last else -1
         self.preset.setCurrentIndex(idx if idx >= 0 else 0)
-        self.preset.setToolTip("Giống 2 nút ở trang Video: Xen kẽ clip nền (một clip nền xen giữa các cảnh) và Xếp lần "
-                               "lượt (Loop1 → Loop2 … mỗi cái lặp N lần). Cách xếp tự lưu cũng có ở đây.")
+        self.preset.setToolTip("Giống các nút ở trang Video: Xen kẽ clip nền (một clip nền xen giữa các cảnh), Xếp lần "
+                               "lượt (Loop1 → Loop2 … mỗi cái lặp N lần) và Mẫu bảng clip (bảng tự lưu theo tên "
+                               "STT_loopA / STT_loopB…). Cách xếp tự lưu cũng có ở đây.")
         # crossfade không bắt buộc: 0 = "Cắt" (nối thẳng, không hoà hình) — giống ô crossfade ở trang Video
         self.loop_xf = w.xf_spin()
         self.loop_xf.setValue(float(settings.value("batch/loop_xf", 1.0)))
@@ -843,6 +845,11 @@ class BatchDialog(QDialog):
                                                        else info.duration)
         ov = self._overrides.get(job.folder)
         p = self.preset.currentData() or {}
+        if p.get("kind") == "table":
+            QMessageBox.information(self, "Mẫu bảng clip",
+                                    "Mẫu bảng clip dựng bảng theo tên file (STT_loopA, STT_loopB…). Muốn đổi số lần phát "
+                                    "hay thứ tự: sửa bảng ở trang Video rồi lưu lại mẫu (Thư viện mẫu… → Sửa).")
+            return
         if p.get("kind") == "sequence":  # mẫu "lần lượt từng loop": chỉnh bằng hộp thoại Xếp lần lượt
             self._edit_sequence(row, clips, durations, p, ov)
             return

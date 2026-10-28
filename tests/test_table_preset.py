@@ -1,0 +1,74 @@
+from loopstation.core import batch, table_preset as tp
+from loopstation.core.project import ClipItem, Project, is_sample_file
+from loopstation.ui.interleave_dialog import arrange_from_preset
+
+
+def _table(prefix: str) -> list[ClipItem]:
+    """Bảng giống ảnh chụp của người dùng: STT_loopB ×1 → STT_loopA ×57 → STT_loopB ×1 → STT_loopA ×1."""
+    return [ClipItem(f"D:/v/{prefix}_loopB.mp4", count=1),
+            ClipItem(f"D:/v/{prefix}_loopA.mp4", count=57, loop_xfade=0.0, next_xfade=1.0, trim_start=2.0),
+            ClipItem(f"D:/v/{prefix}_loopB.mp4", count=1),
+            ClipItem(f"D:/v/{prefix}_loopA.mp4", count=1)]
+
+
+def test_role_ignores_number_prefix():
+    assert tp.role_of("D:/a/5_loopB.mp4") == "loopb"
+    assert tp.role_of("12 - LoopA.MOV") == "loopa"
+    assert tp.role_of("Content.mp4") == "content"
+    assert tp.role_label("5_loopB.mp4") == "STT_loopB"
+
+
+def test_save_and_apply_to_other_video():
+    rows = tp.from_clips(_table("5"))
+    assert tp.summary(rows) == "STT_loopB ×1 → STT_loopA ×57 → STT_loopB ×1 → STT_loopA ×1"
+    clips, missing = tp.build(rows, ["E:/x/6_loopA.mp4", "E:/x/6_loopB.mp4", "E:/x/ghi-chu.txt"])
+    assert not missing
+    assert [(c.path.rsplit("/", 1)[-1], c.count) for c in clips] == [
+        ("6_loopB.mp4", 1), ("6_loopA.mp4", 57), ("6_loopB.mp4", 1), ("6_loopA.mp4", 1)]
+    assert clips[1].next_xfade == 1.0 and clips[1].trim_start == 2.0  # giữ thông số của dòng
+
+
+def test_missing_role_drops_rows():
+    rows = tp.from_clips(_table("5"))
+    clips, missing = tp.build(rows, ["E:/x/7_loopA.mp4"])
+    assert missing == ["loopb"] and [c.count for c in clips] == [57, 1]
+
+
+def test_batch_uses_table_preset():
+    preset = {"name": "A57", "kind": "table", "rows": tp.from_clips(_table("5"))}
+    arrange = arrange_from_preset(preset)
+    job = batch.FolderJob(folder="E:/x/Video 06", name="Video 06", clips=["E:/x/6_loopA.mp4", "E:/x/6_loopB.mp4"])
+    proj = batch.build_project(Project(), job, arrange=arrange, loop_xfade=1.0, next_xfade=0.5)
+    assert [c.count for c in proj.video.clips] == [1, 57, 1, 1]
+    assert proj.video.clips[1].next_xfade == 1.0  # mẫu bảng giữ nối của mẫu, không bị crossfade chung đè
+    assert proj.video.order == "list"
+
+
+def test_is_sample_file():
+    assert is_sample_file(r"C:\Program Files\KT Loop Station\Mau-Test\Intro-Outro\Intro.mp4")
+    assert not is_sample_file(r"D:\Kenh\Intro.mp4")
+
+
+def test_many_situations_in_one_folder_stack_into_one_video():
+    rows = tp.from_clips(_table("5"))
+    paths = [f"D:/f/{n}_loop{r}.mp4" for n in range(1, 11) for r in "AB"]
+    clips, missing = tp.build(rows, paths)
+    assert not missing and len(clips) == 40
+    names = [c.path.rsplit("/", 1)[-1] for c in clips]
+    assert names[:4] == ["1_loopB.mp4", "1_loopA.mp4", "1_loopB.mp4", "1_loopA.mp4"]
+    assert names[4] == "2_loopB.mp4" and names[-1] == "10_loopA.mp4"  # 2 trước 10, không theo kiểu chữ
+    assert [c.count for c in clips[:4]] * 10 == [c.count for c in clips]
+    _items, missing, used = tp.plan(rows, [p for p in paths if p != "D:/f/7_loopB.mp4"])
+    assert missing == ["7_loopb"] and used == list(range(1, 11))
+
+
+def test_library_examples_for_every_preset():
+    from loopstation.ui.interleave_dialog import BUILTIN, SEQUENCE_PRESETS
+    from loopstation.ui.preset_library import example
+    for p in [*BUILTIN, *SEQUENCE_PRESETS, {"name": "t", "kind": "table", "rows": tp.from_clips(_table("5"))}]:
+        blocks, total, files = example(dict(p))
+        assert blocks and total > 0 and files, p["name"]
+    blocks, total, _ = example(dict(BUILTIN[0]))
+    assert [b[0] for b in blocks[:3]] == ["Nền", "Cảnh 2", "Nền"] and blocks[0][1] == "×70"
+    blocks, total, _ = example({"kind": "table", "rows": tp.from_clips(_table("5"))})
+    assert [b[1] for b in blocks] == ["×1", "×57", "×1", "×1"] and total == 600

@@ -286,7 +286,43 @@ lặp 60 lần? Bấm <b>Xếp lần lượt…</b> (cạnh nút Xen kẽ clip n
     "tip", "Xuất hàng loạt cũng có mẫu này: ô <b>Cách xếp clip</b> → <i>Xếp lần lượt: từng loop ×60, clip nội dung ở đầu / ở cuối</i>. "
            "Mọi clip loop đều nhận crossfade <b>Nối loop</b> của hộp thoại.") + box(
     "tip", "Content và các loop khác fps (ví dụ 30 và 24)? App xuất theo fps của clip phát lâu nhất (các loop) "
-           "để phần lớn video không bị giật."))
+           "để phần lớn video không bị giật.") + """
+<h2>Thư viện mẫu: xem mọi mẫu, tự tạo mẫu mới</h2>
+<p>Bấm <b>Thư viện mẫu…</b> (trên bảng clip, cạnh Xếp lần lượt). Mỗi mẫu có <b>dải màu ví dụ kết quả</b> — app áp thật
+mẫu lên bộ tên file ví dụ, mỗi clip 10 giây — kèm tổng thời lượng. Bấm <b>Dùng mẫu này</b> để áp vào bảng.</p>""" + examples([
+    ("Nền ×70 xen từng cảnh", "Nền ×70 → Cảnh 2 → Nền ×70 → Cảnh 3 → … → Nền ×70"),
+    ("Nền 10 phút xen từng cảnh", "như trên, mỗi lần nền loop đủ 10 phút"),
+    ("Nền ×70 xen cảnh — lặp cả mẫu 4 lượt", "chuỗi nền / cảnh trên lặp 4 lượt"),
+    ("Nền 5 phút, cảnh ngẫu nhiên — lặp 6 lượt", "6 lượt, mỗi lượt cảnh xáo thứ tự khác"),
+    ("Từng loop ×60, clip nội dung ở đầu", "Content → Loop1 ×60 → Loop2 ×60 → …"),
+    ("Từng loop ×60, clip nội dung ở cuối", "Loop1 ×60 → Loop2 ×60 → … → Content")], ("6 mẫu có sẵn", "Kết quả")) + """
+<h2>Mẫu bảng clip của bạn: dùng lại cho video khác</h2>
+<p>Bảng tự xếp (ví dụ <b>5_loopB ×1 → 5_loopA ×57 → 5_loopB ×1 → 5_loopA ×1</b>) dùng lại cho video 6, 7…: trong
+Thư viện mẫu bấm <b>Lưu bảng hiện tại thành mẫu…</b>, hoặc <b>Tạo mẫu mới…</b> để tự gõ từng dòng (vai + số lần phát +
+nối loop). Mẫu nhớ file theo <b>tên bỏ số thứ tự ở đầu</b>, nên áp được cho bộ file khác cùng cách đặt tên.</p>""" + flow_blocks([
+    ("STT_loopB ×1", CANH), ("STT_loopA ×57", NEN), ("STT_loopB ×1", CANH), ("STT_loopA ×1", NEN)]) + examples([
+    ("5_loopB.mp4, 6_loopB.mp4, 12 - loopB.mov", "cùng vai <b>STT_loopB</b>"),
+    ("5_loopA.mp4, 6_loopA.mp4", "cùng vai <b>STT_loopA</b>"),
+    ("Content.mp4 (không có số đầu)", "vai <b>Content</b> — cũng dùng được")], ("Tên file", "App hiểu là")) + """
+<h3>Tạo mẫu (làm một lần)</h3>""" + steps([
+    ("Cách 1 — từ bảng đang có", "xếp bảng của 1 video đúng ý (số lần phát, nối loop, cắt đoạn) → <b>Thư viện mẫu…</b> → "
+                                 "<b>Lưu bảng hiện tại thành mẫu…</b>."),
+    ("Cách 2 — tự gõ", "<b>Thư viện mẫu…</b> → <b>Tạo mẫu mới…</b>: mỗi dòng gõ vai (loopA), số lần phát (57 · 10p · 50-80), "
+                       "nối loop; ▲ ▼ đổi thứ tự. Dải màu bên dưới cho thấy kết quả ngay."),
+    ("Đặt tên và Lưu mẫu", "ví dụ <i>Loop A ×57 kẹp Loop B</i>. Mẫu của bạn sửa / xoá được ngay trong Thư viện.")]) + """
+<h3>Dùng mẫu (mỗi video mới)</h3>""" + steps([
+    ("Thư viện mẫu… → Dùng mẫu này", "mở hộp thoại áp mẫu; bảng giữa hộp thoại là đúng bảng sẽ tạo."),
+    ("Chọn file", "thêm file video mới vào bảng trước, hoặc bấm <b>Lấy file từ thư mục khác…</b> trong hộp thoại."),
+    ("Xem cột Sẽ dùng file rồi Áp dụng vào bảng", "dòng tím = bắt đầu tình huống mới; chữ cam ở dưới báo file còn thiếu. "
+                                                   "Không ưng thì Ctrl+Z.")]) + legend([
+    ("Mẫu lưu gì", "thứ tự dòng, số lần phát (×57, 10 phút, ngẫu nhiên), nối loop, sang clip, cắt đoạn, bật / tắt từng dòng."),
+    ("Áp dụng", "lấy file trong bảng hiện tại, hoặc <i>Lấy file từ thư mục khác…</i> (thư mục video 6). Cột <b>Sẽ dùng file</b> "
+                "cho thấy file nào khớp; vai thiếu file thì dòng đó bị bỏ. Ctrl+Z để quay lại."),
+    ("Nhiều tình huống một thư mục", "thư mục có <b>1_loopA, 1_loopB … 10_loopA, 10_loopB</b>: mẫu lặp cho từng số 1 → 10 "
+                                     "(2 trước 10) rồi nối tiếp thành <b>một video</b>. File không có số ở đầu "
+                                     "(Content.mp4…) dùng chung cho mọi tình huống."),
+    ("Xuất hàng loạt", "ô <b>Cách xếp clip</b> → <i>Mẫu bảng clip: tên mẫu</i>: mỗi thư mục con (5_…, 6_…) dựng bảng theo mẫu, "
+                       "giữ đúng nối loop của mẫu.")]))
 
 topic("dodai", "Làm video", "clock", "Độ dài video", hero(
     "Độ dài video", "Trang Video → thẻ Độ dài. Mặc định video dài đúng theo bảng clip.",
@@ -583,6 +619,9 @@ topic("hoi", "Khác", "help", "Câu hỏi thường gặp", hero(
         ("Chỉ muốn loop video, hoặc chỉ loop nhạc?", "Chọn <b>Chỉ video</b> hoặc <b>Chỉ nhạc</b> ở thanh trên cùng (xem chủ đề Chọn kiểu sản phẩm)."),
         ("Vì sao xuất nhanh vậy?", "Mỗi clip chỉ mã hoá <b>một lần</b>, các lần loop chỉ là sao chép. Video 1 giờ thường khoảng nửa phút, 10 giờ khoảng 10 phút (tuỳ máy). Lần sau còn nhanh hơn nhờ bộ nhớ đệm."),
         ("Video loop nặng quá?", "Xem chủ đề <a href='topic:xuat'>Trang Xuất &amp; dung lượng</a>: hạ độ phân giải, H.265, Tiết kiệm dung lượng, hạ Bitrate hình."),
+        ("Video có màn hình “KT Loop Station” ở đầu?", "Đó là <b>Intro / Outro mẫu</b> của bộ tập dùng (thường do làm tiếp từ "
+                                                       "dự án mẫu). Ô Intro / Outro ghi <b>· MẪU</b> và app hỏi trước khi xuất — "
+                                                       "bấm thùng rác cạnh ô để bỏ, hoặc Chọn… để thay bằng intro của kênh."),
         ("Ghép xong màu bị lệch, xỉn, tối hơn?", "Thường do clip <b>HDR</b> (điện thoại quay HDR — iPhone bật mặc định — hoặc HDR10). "
                                                "Từ bản 1.8.1 app tự nhận clip HDR (cột thông tin ghi <b>HDR</b>) và chuyển sang màu thường khi xem "
                                                "trước và khi xuất. Clip thường (kể cả clip AI không ghi hệ màu) không bị đổi màu khi ghép. "

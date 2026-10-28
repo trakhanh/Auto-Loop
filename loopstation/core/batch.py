@@ -112,14 +112,15 @@ def build_project(template: Project, job: FolderJob, music_mode: str = "auto",
         else:
             clips = [ClipItem(path) for path in job.clips]
             base_i = next((i for i, c in enumerate(clips) if base and c.path == base), None)
-            if arrange is not None and getattr(arrange, "kind", "") == "sequence":
-                clips = arrange(clips, -1)  # lần lượt từng loop: không cần clip nền
+            if arrange is not None and getattr(arrange, "kind", "") in ("sequence", "table"):
+                clips = arrange(clips, -1)  # lần lượt từng loop / mẫu bảng clip: không cần clip nền
                 p.video.order = "list"
             elif base_i is not None and arrange is not None:
                 clips = arrange(clips, base_i)
                 p.video.order = "list"
         seq = arrange is not None and getattr(arrange, "kind", "") == "sequence"
-        for c in clips:  # crossfade chung của hộp thoại hàng loạt (áp cả cho bảng chỉnh tay)
+        table = clips_override is None and arrange is not None and getattr(arrange, "kind", "") == "table"
+        for c in clips if not table else ():  # mẫu bảng clip: giữ nối loop / sang clip đã lưu trong mẫu  # crossfade chung của hộp thoại hàng loạt (áp cả cho bảng chỉnh tay)
             if (base and os.path.normcase(c.path) == os.path.normcase(base)) or (seq and il.looks_like_base(c.path)):
                 c.loop_xfade = loop_xfade
             c.next_xfade = next_xfade

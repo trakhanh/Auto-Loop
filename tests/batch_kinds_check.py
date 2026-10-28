@@ -180,6 +180,8 @@ check("MO: dự án gốc không đổi", tpl.music.export_mode == "target")
 # ---- cửa sổ chính: đang ở kiểu Video có nhạc, đổi sang Chỉ nhạc trong hộp thoại → hàng đợi nhận file nhạc ----
 from loopstation.ui import batch_dialog as bdm  # noqa: E402
 from loopstation.ui import main_window as mw  # noqa: E402
+# dự án mẫu dùng Intro / Outro trong Mau-Test: hộp hỏi “Intro mẫu” là modal, không ai bấm khi chạy ngầm
+mw.MainWindow._confirm_sample_bookends = lambda self: True
 
 from PySide6.QtCore import QSettings as _QS  # noqa: E402
 from loopstation.ui.theme import APP_NAME as _APP, SETTINGS_ORG as _ORG  # noqa: E402

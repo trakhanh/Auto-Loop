@@ -27,6 +27,7 @@ COL_NAME, COL_APPEAR, COL_PLAYS = range(3)
 PRESET_KEY = "interleave/presets"
 USER_PREFIX = "Mẫu riêng: "  # tiền tố tên mẫu do người dùng lưu
 LAST_KEY = "interleave/last"
+TABLE_KEY = "table/presets"  # mẫu bảng clip (core.table_preset): lưu cả bảng theo vai file STT_loopA / STT_loopB
 
 # mẫu dựng sẵn: chỉ chứa quy tắc, không chứa tên file → dùng được cho mọi dự án
 BUILTIN = [
@@ -542,12 +543,38 @@ def all_presets(settings: QSettings | None) -> list[dict]:
             users = [dict(p, user=True) for p in data if isinstance(p, dict) and p.get("name")]
         except (TypeError, ValueError):
             users = []
-    return [dict(p) for p in BUILTIN] + [dict(p) for p in SEQUENCE_PRESETS] + users
+    return [dict(p) for p in BUILTIN] + [dict(p) for p in SEQUENCE_PRESETS] + users + table_presets(settings)
+
+
+def table_presets(settings: QSettings | None) -> list[dict]:
+    """Mẫu bảng clip người dùng đã lưu (kind = "table")."""
+    if settings is None:
+        return []
+    try:
+        data = json.loads(settings.value(TABLE_KEY, "[]") or "[]")
+    except (TypeError, ValueError):
+        return []
+    return [dict(p, kind="table", user=True) for p in data
+            if isinstance(p, dict) and p.get("name") and isinstance(p.get("rows"), list)]
+
+
+def save_table_presets(settings: QSettings, presets: list[dict]) -> None:
+    keep = [{"name": p["name"], "rows": p["rows"]} for p in presets]
+    settings.setValue(TABLE_KEY, json.dumps(keep, ensure_ascii=False))
 
 
 def arrange_from_preset(preset: dict):
     """Hàm (clips, chỉ số clip nền) → bảng clip đã xếp theo mẫu. None nếu số lần phát của nền không hợp lệ.
-    Mẫu "lần lượt từng loop" (kind = sequence) không cần clip nền: hàm có thuộc tính `kind = "sequence"`."""
+    Mẫu "lần lượt từng loop" (kind = sequence) không cần clip nền: hàm có thuộc tính `kind = "sequence"`.
+    Mẫu bảng clip (kind = table): dựng lại cả bảng theo vai file (STT_loopA…), giữ nguyên số lần phát / nối loop."""
+    if preset.get("kind") == "table":
+        from ..core import table_preset as tp
+        rows = list(preset.get("rows") or [])
+
+        def arrange_table(clips: list[ClipItem], _base_i: int = -1) -> list[ClipItem]:
+            return tp.build(rows, [c.path for c in clips])[0]
+        arrange_table.kind = "table"
+        return arrange_table
     parsed = w.parse_plays(str(preset.get("base", "70")))
     if parsed is None:
         return None

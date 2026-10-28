@@ -10,6 +10,15 @@ PROJECT_VERSION = 1
 PROJECT_EXT = ".lsproj"
 
 
+SAMPLE_DIR = "mau-test"  # bộ mẫu cài kèm app để tập dùng (Intro / Outro mẫu có chữ "KT Loop Station")
+
+
+def is_sample_file(path: str) -> bool:
+    """File nằm trong bộ mẫu Mau-Test — dùng để nhắc khi lỡ để intro / outro mẫu trong video thật."""
+    parts = [x.lower() for x in path.replace("\\", "/").split("/")]
+    return SAMPLE_DIR in parts[:-1]
+
+
 @dataclass
 class ClipItem:
     path: str

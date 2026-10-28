@@ -25,6 +25,8 @@ app = QApplication([])
 from loopstation.ui import theme  # noqa: E402
 theme.apply(app, 10)
 import loopstation.ui.main_window as mw  # noqa: E402
+# dự án mẫu dùng Intro / Outro trong Mau-Test: hộp hỏi “Intro mẫu” là modal, không ai bấm khi chạy ngầm
+mw.MainWindow._confirm_sample_bookends = lambda self: True
 from loopstation.core.project import Project  # noqa: E402
 
 ini = os.path.join(scratch, "settings.ini")

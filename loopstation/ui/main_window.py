@@ -20,7 +20,7 @@ from PySide6.QtWidgets import (
 from ..core import encoders, ffmpeg_tools, planner, power, probe, render, render_queue as rq, size_estimate, sysinfo, timeline
 from ..core import updater
 from ..core.ffmpeg_tools import CancelledError
-from ..core.project import PROJECT_EXT, ClipItem, Project
+from ..core.project import PROJECT_EXT, ClipItem, Project, is_sample_file
 from ..core.render import RenderJob, clean_filename, default_output_name, output_path, strip_ext
 from . import branding, effects, icons, motion, theme, widgets as w
 from .export_tab import ExportTab
@@ -1466,6 +1466,8 @@ class MainWindow(QMainWindow):
             return
         if not self._check_ready():
             return
+        if not self._confirm_sample_bookends():
+            return
         proj = self.collect_project()
         tl = timeline.build(proj)
         if not tl.ok:
@@ -1535,7 +1537,31 @@ class MainWindow(QMainWindow):
                             "audio")
 
     # ---------- hàng đợi ----------
+    def _confirm_sample_bookends(self) -> bool:
+        """Intro / Outro đang là file MẪU (chữ “KT Loop Station”) — hay gặp khi làm từ dự án mẫu: hỏi trước khi xuất."""
+        vt = self.video_tab
+        rows = [r for r in (vt.intro, vt.outro) if r.value() and is_sample_file(r.value())]
+        if not rows or self.mode == "music_only":
+            return True
+        names = " và ".join(r.title for r in rows)
+        box = QMessageBox(QMessageBox.Icon.Warning, f"{names} mẫu",
+                          f"Video đang dùng <b>{names} MẪU</b> của bộ tập dùng — màn hình chữ "
+                          "<b>“KT Loop Station · By Khánh Trà”</b> sẽ nằm trong video xuất ra.<br><br>"
+                          "Thường là do làm tiếp từ dự án mẫu.", parent=self)
+        drop = box.addButton(f"Bỏ {names.lower()} mẫu rồi xuất", QMessageBox.ButtonRole.AcceptRole)
+        keep = box.addButton("Vẫn giữ", QMessageBox.ButtonRole.DestructiveRole)
+        box.addButton("Huỷ", QMessageBox.ButtonRole.RejectRole)
+        box.setDefaultButton(drop)
+        box.exec()
+        if box.clickedButton() is drop:
+            for r in rows:
+                r.set_path("")
+            return True
+        return box.clickedButton() is keep
+
     def add_to_queue(self, kind: str) -> None:
+        if kind == "video" and not self._confirm_sample_bookends():
+            return
         proj = self.collect_project()
         if kind == "audio" and self._multi_version(proj):
             items = self._audio_versions(proj)
@@ -1571,6 +1597,8 @@ class MainWindow(QMainWindow):
     def batch_from_folders(self) -> None:
         """Mỗi thư mục con = một video, dựng theo dự án đang mở làm khuôn rồi thêm cả loạt vào hàng đợi."""
         from .batch_dialog import BatchDialog
+        if not self._confirm_sample_bookends():  # cả loạt lấy Intro / Outro theo dự án đang mở
+            return
         template = self.collect_project()
         if not template.export.output_dir:
             QMessageBox.warning(self, "Thiếu thư mục lưu", "Chọn thư mục lưu ở trang Xuất trước — cả loạt sẽ "

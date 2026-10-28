@@ -140,6 +140,19 @@ wait(0.8)
 sd.grab().save(str(OUT / "06-xep-lan-luot.png"))
 sd.reject()
 
+# Thư viện mẫu: 6 mẫu có sẵn + một mẫu bảng clip tự lưu (5_loopB ×1 → 5_loopA ×57 → 5_loopB ×1 → 5_loopA ×1)
+from loopstation.core import table_preset as tp  # noqa: E402
+from loopstation.ui.interleave_dialog import save_table_presets  # noqa: E402
+from loopstation.ui.preset_library import PresetLibraryDialog  # noqa: E402
+demo = [ClipItem("5_loopB.mp4"), ClipItem("5_loopA.mp4", count=57), ClipItem("5_loopB.mp4"), ClipItem("5_loopA.mp4")]
+save_table_presets(st, [{"name": "Loop A ×57 kẹp Loop B", "rows": tp.from_clips(demo)}])
+lib = PresetLibraryDialog(demo, st, win)
+lib.resize(980, 760)
+lib.show()
+wait(0.8)
+lib.grab().save(str(OUT / "10-thu-vien-mau.png"))
+lib.reject()
+
 win._closing = True
 win.close()
 wait(0.3)
