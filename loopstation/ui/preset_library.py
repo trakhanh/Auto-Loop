@@ -32,7 +32,8 @@ KIND_ICON = {"interleave": "repeat", "sequence": "sort", "table": "save"}
 KIND_FILES = {
     "interleave": "Cần: 1 clip nền tên có chữ <b>loop</b> (loop_mua.mp4) + các cảnh đánh số <b>2_…, 3_…</b>",
     "sequence": "Cần: clip nội dung (<b>Content.mp4</b>) + các clip <b>Loop1, Loop2, Loop3…</b>",
-    "table": "Cần: file đặt tên theo vai — {roles}",
+    "table": "Nhận <b>2 kiểu tên file</b>: <b>STT_Vai</b> — {plain} · hoặc <b>Tập_STT_Vai</b> — {tap} "
+             "(mỗi tập một video). Hoa / thường, dấu cách, _ đều được.",
 }
 
 
@@ -46,8 +47,8 @@ def describe(p: dict) -> str:
         pos = {"start": "ở đầu", "end": "ở cuối", "both": "ở đầu và cuối"}.get(p.get("content", "start"), "ở đầu")
         return f"Phát lần lượt từng clip loop, mỗi cái <b>×{p.get('base', '60')}</b>; clip nội dung {pos}."
     if k == "table" and not p.get("user"):
-        return ("Mỗi tình huống: <b>" + tp.summary(p.get("rows") or []) + "</b>. Thư mục có 1_… đến 10_… thì "
-                "10 tình huống nối thành 1 video. Có sẵn trong app — máy nào cài cũng có.")
+        return ("Mỗi tình huống: <b>" + tp.summary(p.get("rows") or []) + "</b>. Tình huống 1 → 10 nối thành "
+                "1 video, <b>mỗi tập một video</b>. Có sẵn trong app — máy nào cài cũng có.")
     if k == "table":
         return "Bảng tự lưu theo tên file, giữ nguyên số lần phát / nối loop / cắt đoạn của từng dòng."
     base = str(p.get("base", "70"))
@@ -57,12 +58,20 @@ def describe(p: dict) -> str:
     return f"1 clip nền <b>{base_t}</b> nằm giữa mọi cảnh{extra}."
 
 
+def _loud(label: str) -> str:
+    """"STT_loopB" → "LOOP B" (cách viết tên file của nhân viên)."""
+    return re.sub(r"(?i)^loop[\s_\-]*", "LOOP ", label.removeprefix("STT_")).upper()
+
+
 def example(p: dict) -> tuple[list[tuple[str, str, int, float]], float, str]:
     """(khối [(tên, số lần, nhóm màu, giây)], tổng giây, dòng file ví dụ) — áp mẫu thật lên bộ tên file ví dụ."""
     k = kind_of(p)
     if k == "table":
         rows = p.get("rows") or []
-        names = [f"5_{(r.get('label') or r.get('role', '')).removeprefix('STT_')}.mp4" for r in rows]
+        if p.get("user"):
+            names = [f"5_{(r.get('label') or r.get('role', '')).removeprefix('STT_')}.mp4" for r in rows]
+        else:  # mẫu có sẵn: ví dụ theo cách đặt tên Tập_STT_Vai của nhân viên (33_1_LOOP B.mp4)
+            names = [f"33_1_{_loud(r.get('label') or r.get('role', ''))}.mp4" for r in rows]
         clips = tp.build(rows, list(dict.fromkeys(names)))[0]
         files = ", ".join(dict.fromkeys(os.path.basename(c.path) for c in clips))
     else:
@@ -206,9 +215,11 @@ class PresetCard(QFrame):
         strip = FlowStrip()
         strip.set_blocks(blocks)
         lay.addWidget(strip)
-        roles = ", ".join(dict.fromkeys(f"<b>{(r.get('label') or r.get('role'))}</b>" for r in p.get("rows") or []))
+        vai = list(dict.fromkeys((r.get("label") or r.get("role", "")).removeprefix("STT_") for r in p.get("rows") or []))
+        plain = ", ".join(f"<b>5_{v}.mp4</b>" for v in vai)
+        tap = ", ".join(f"<b>33_4_{_loud(v)}.mp4</b>" for v in vai)
         foot = w.muted(f"Ví dụ ({files}, mỗi clip {EXAMPLE_SEC:g} giây) → video dài <b>{_fmt(total)}</b>, "
-                       f"{len(blocks)} dòng. " + KIND_FILES[k].format(roles=roles))
+                       f"{len(blocks)} dòng.<br>" + KIND_FILES[k].format(plain=plain, tap=tap))
         foot.setWordWrap(True)
         lay.addWidget(foot)
 
@@ -283,9 +294,9 @@ class PresetLibraryDialog(QDialog):
         self.count.setText(f"App có <b>{n_builtin} mẫu dựng sẵn</b> · bạn đã tạo <b>{n_user} mẫu</b>. "
                            "Dải màu là ví dụ kết quả thật khi áp mẫu.")
         sections = [
+            ("Bảng clip (có sẵn)", builtin_tb, False, False),  # mẫu nhân viên dùng nhiều nhất: luôn ở trên cùng
             ("Mẫu của bạn — bảng clip", users_tb, True, True),
             ("Mẫu của bạn — xen kẽ clip nền", users_il, False, True),
-            ("Bảng clip (có sẵn)", builtin_tb, False, False),
             ("Xen kẽ clip nền (có sẵn)", [dict(p) for p in BUILTIN], False, False),
             ("Xếp lần lượt từng loop (có sẵn)", [dict(p) for p in SEQUENCE_PRESETS], False, False),
         ]

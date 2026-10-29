@@ -34,6 +34,9 @@ FIRST_STEPS = (
 )
 # "Có gì mới" của bản đang chạy — hiện ở đầu trang Tổng quan (sửa cùng lúc với APP_VERSION khi ra bản mới)
 WHATS_NEW = (
+    ("repeat", "Tên Tập_STT_Vai — mỗi tập một video",
+     "Mẫu bảng clip nhận thêm tên 33_4_LOOP A.mp4 (tập 33, tình huống 4; LOOP A = loopA). Xuất hàng loạt tự tách "
+     "thư mục có 33_…, 34_… thành Tập 33, Tập 34 — mỗi tập một video; hộp Mẫu bảng clip có ô Tập để chọn."),
     ("queue", "Thư viện mẫu + mẫu bảng clip",
      "Xem 7 mẫu có sẵn kèm ví dụ kết quả (có mẫu bảng Loop A ×57 kẹp Loop B — máy nào cài cũng có), tự tạo mẫu "
      "mới. Lưu cả bảng (STT_loopB ×1 → STT_loopA ×57 → …) "
@@ -51,9 +54,6 @@ WHATS_NEW = (
     ("download", "Cập nhật ngay trong app",
      "Có bản mới thì thanh bên hiện nút Có bản mới → Tải & cài đặt: app tải bộ cài, kiểm tra SHA-256, cài đè rồi tự mở "
      "lại. Kiểm tra tay ở Cài đặt → Giới thiệu."),
-    ("sliders", "Chỉnh bitrate hình",
-     "Trang Xuất có hàng Bitrate hình: tự đặt số Mbps, có gợi ý sẵn theo độ phân giải (vd 2K: 16 / 10 / 6 Mbps) và "
-     "ước tính số GB mỗi giờ video."),
 )
 SHORTCUTS = (("Space", "Phát / dừng"), ("F1", "Hướng dẫn"), ("Ctrl+S", "Lưu dự án"), ("Ctrl+Z", "Hoàn tác"),
              ("Ctrl+D", "Nhân bản dòng"), ("Ctrl+F", "Tìm"))

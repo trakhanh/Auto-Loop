@@ -1,3 +1,5 @@
+import os
+
 from loopstation.core import batch, table_preset as tp
 from loopstation.core.project import ClipItem, Project, is_sample_file
 from loopstation.ui.interleave_dialog import arrange_from_preset
@@ -90,3 +92,55 @@ def test_builtin_table_preset_ships_with_app():
     assert len(mine) == 1 and mine[0].get("user") and len(mine[0]["rows"]) == 2
     assert len(TABLE_BUILTIN[0]["rows"]) == 4  # mẫu gốc không đổi
     st.clear()
+
+
+def test_episode_names_tap_stt_role():
+    """Tên Tập_STT_Vai: "33_4_LOOP A.mp4" = tập 33, tình huống 4, vai loopA (hoa / thường, dấu cách không quan trọng)."""
+    assert (tp.episode_of("33_4_LOOP A.mp4"), tp.stt_of("33_4_LOOP A.mp4"), tp.role_of("33_4_LOOP A.mp4")) == (33, 4, "loopa")
+    assert tp.role_of("33_10_Loop_B.mov") == tp.role_of("5_loopB.mp4") == tp.role_of("loop-b.mp4") == "loopb"
+    assert (tp.episode_of("5_loopB.mp4"), tp.stt_of("5_loopB.mp4")) == (None, 5)  # kiểu cũ giữ nguyên
+    assert tp.role_label("33_4_LOOP A.mp4") == "STT_LOOP A"
+    old = [dict(r, role="loop_a" if r["role"] == "loopa" else r["role"]) for r in tp.from_clips(_table("5"))]
+    assert len(tp.build(old, ["D:/x/33_1_LOOP A.mp4", "D:/x/33_1_LOOP B.mp4"])[0]) == 4  # mẫu cũ ghi "loop_a" vẫn khớp
+
+
+def test_each_episode_is_its_own_video():
+    from loopstation.ui.interleave_dialog import TABLE_BUILTIN
+    rows = TABLE_BUILTIN[0]["rows"]
+    paths = [f"D:/m/{e}_{n}_LOOP {r}.mp4" for e in (34, 33) for n in range(1, 11) for r in "AB"]
+    assert tp.episodes(paths) == [33, 34]
+    for ep in (33, 34):
+        clips, missing = tp.build(rows, paths, ep)
+        names = [c.path.rsplit("/", 1)[-1] for c in clips]
+        assert not missing and len(clips) == 40
+        assert names[:5] == [f"{ep}_1_LOOP B.mp4", f"{ep}_1_LOOP A.mp4", f"{ep}_1_LOOP B.mp4", f"{ep}_1_LOOP A.mp4",
+                             f"{ep}_2_LOOP B.mp4"]
+        assert names[-1] == f"{ep}_10_LOOP A.mp4" and all(n.startswith(f"{ep}_") for n in names)
+        assert clips[1].count == 57
+    assert tp.build(rows, paths)[0][0].path.endswith("33_1_LOOP B.mp4")  # không chọn tập: tập nhỏ nhất
+    gap = [p for p in paths if not p.endswith("33_7_LOOP B.mp4")]
+    clips, missing = tp.build(rows, gap, 33)
+    assert len(clips) == 38 and missing == ["33_7_loopb"]
+    assert tp.missing_names(rows, missing, gap) == ["33_7_LOOP B"]
+    assert len(tp.build(rows, gap, 34)[0]) == 40  # tập khác không bị ảnh hưởng
+
+
+def test_batch_splits_episodes(tmp_path):
+    from loopstation.ui.interleave_dialog import TABLE_BUILTIN
+    season = tmp_path / "Mua 3"
+    season.mkdir()
+    for e in (33, 34):
+        for n in range(1, 11):
+            for r in "AB":
+                (season / f"{e}_{n}_LOOP {r}.mp4").write_bytes(b"")
+    jobs = batch.scan(str(season))  # chọn thẳng thư mục chứa file: chính nó là một việc
+    assert [j.name for j in jobs] == ["Mua 3"] and len(jobs[0].clips) == 40
+    split = batch.split_episodes(jobs)
+    assert [j.name for j in split] == ["Tập 33", "Tập 34"] and len({j.folder for j in split}) == 2
+    arrange = arrange_from_preset(dict(TABLE_BUILTIN[0]))
+    for j, ep in zip(split, (33, 34)):
+        proj = batch.build_project(Project(), j, arrange=arrange)
+        assert len(proj.video.clips) == 40 and proj.export.filename == f"Tập {ep}"
+        assert all(os.path.basename(c.path).startswith(f"{ep}_") for c in proj.video.clips)
+    plain = batch.FolderJob(folder="x", name="Video 6", clips=["E:/x/6_loopA.mp4", "E:/x/6_loopB.mp4"])
+    assert batch.split_episodes([plain]) == [plain]  # tên kiểu cũ: không tách

@@ -306,7 +306,10 @@ nối loop). Mẫu nhớ file theo <b>tên bỏ số thứ tự ở đầu</b>, 
     ("STT_loopB ×1", CANH), ("STT_loopA ×57", NEN), ("STT_loopB ×1", CANH), ("STT_loopA ×1", NEN)]) + examples([
     ("5_loopB.mp4, 6_loopB.mp4, 12 - loopB.mov", "cùng vai <b>STT_loopB</b>"),
     ("5_loopA.mp4, 6_loopA.mp4", "cùng vai <b>STT_loopA</b>"),
-    ("Content.mp4 (không có số đầu)", "vai <b>Content</b> — cũng dùng được")], ("Tên file", "App hiểu là")) + """
+    ("33_4_LOOP A.mp4, 33_10_Loop_A.mov", "<b>tập 33</b>, tình huống 4 / 10, vai <b>STT_loopA</b>"),
+    ("Content.mp4 (không có số đầu)", "vai <b>Content</b> — cũng dùng được")], ("Tên file", "App hiểu là")) + box(
+    "tip", "Vai không phân biệt cách viết: <b>LOOP A</b> = <b>Loop_A</b> = <b>loopA</b> (bỏ qua hoa / thường, dấu cách, "
+           "_ và -).") + """
 <h3>Tạo mẫu (làm một lần)</h3>""" + steps([
     ("Cách 1 — từ bảng đang có", "xếp bảng của 1 video đúng ý (số lần phát, nối loop, cắt đoạn) → <b>Thư viện mẫu…</b> → "
                                  "<b>Lưu bảng hiện tại thành mẫu…</b>."),
@@ -324,8 +327,11 @@ nối loop). Mẫu nhớ file theo <b>tên bỏ số thứ tự ở đầu</b>, 
     ("Nhiều tình huống một thư mục", "thư mục có <b>1_loopA, 1_loopB … 10_loopA, 10_loopB</b>: mẫu lặp cho từng số 1 → 10 "
                                      "(2 trước 10) rồi nối tiếp thành <b>một video</b>. File không có số ở đầu "
                                      "(Content.mp4…) dùng chung cho mọi tình huống."),
+    ("Tên Tập_STT_Vai", "tên có hai số ở đầu (<b>33_4_LOOP A</b>): số đầu là <b>tập</b>, số sau là <b>tình huống</b>. "
+                        "Mỗi tập là <b>một video riêng</b>. Thư mục có nhiều tập thì hộp thoại có ô <b>Tập</b> để chọn."),
     ("Xuất hàng loạt", "ô <b>Cách xếp clip</b> → <i>Mẫu bảng clip: tên mẫu</i>: mỗi thư mục con (5_…, 6_…) dựng bảng theo mẫu, "
-                       "giữ đúng nối loop của mẫu.")]))
+                       "giữ đúng nối loop của mẫu. Thư mục có nhiều tập (33_…, 34_…) tự tách thành <b>Tập 33</b>, "
+                       "<b>Tập 34</b> — mỗi tập một video. Chọn thẳng thư mục chứa file (không có thư mục con) cũng được.")]))
 
 topic("dodai", "Làm video", "clock", "Độ dài video", hero(
     "Độ dài video", "Trang Video → thẻ Độ dài. Mặc định video dài đúng theo bảng clip.",

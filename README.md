@@ -6,7 +6,7 @@
 
 **Ghép và loop clip + nhạc thành video YouTube dài hàng giờ — xem trước ngay trong app, xuất nhanh bằng card đồ hoạ.**
 
-<sub>By Khánh Trà · Ứng dụng Windows · Giao diện tiếng Việt · Bản mới nhất: <b>1.8.3</b></sub>
+<sub>By Khánh Trà · Ứng dụng Windows · Giao diện tiếng Việt · Bản mới nhất: <b>1.8.4</b></sub>
 
 <br>
 
@@ -35,6 +35,8 @@
 
 ## Có gì mới ở 1.8
 
+> **1.8.4** · Nhận thêm tên kiểu <b>Tập_STT_Vai</b>: <code>33_4_LOOP A.mp4</code> = tập 33, tình huống 4, vai loopA (<code>LOOP A</code> = <code>Loop_A</code> = <code>loopA</code>). <b>Mỗi tập ra một video riêng</b>: Xuất hàng loạt tự tách thư mục có <code>33_…</code>, <code>34_…</code> thành <b>Tập 33</b>, <b>Tập 34</b> (chọn thẳng thư mục chứa file cũng được); hộp Mẫu bảng clip có ô <b>Tập</b> để chọn. Thiếu file thì app ghi rõ, ví dụ <i>Thiếu 33_7_LOOP B</i>.
+>
 > **1.8.3** · Mẫu bảng <b>Loop A ×57 kẹp Loop B</b> (<code>STT_loopB ×1 → STT_loopA ×57 → STT_loopB ×1 → STT_loopA ×1</code>) giờ <b>có sẵn trong app</b>: cài trên máy nào cũng có, không cần lưu lại. Thư viện mẫu có 7 mẫu dựng sẵn. Muốn đổi mẫu có sẵn thì bấm <b>Sửa</b> — app tạo bản của bạn, mẫu gốc vẫn còn. Mẫu tự lưu vẫn chỉ nằm trên máy đã lưu.
 
 <table>

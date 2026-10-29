@@ -9,7 +9,7 @@ from PySide6.QtCore import QSettings, QSize, Qt, QTimer
 from PySide6.QtWidgets import (
     QApplication, QButtonGroup, QCheckBox, QComboBox, QMenu, QMessageBox, QDialog, QDialogButtonBox, QDoubleSpinBox,
     QFormLayout,
-    QFrame, QHBoxLayout, QHeaderView, QLabel, QLineEdit, QPushButton, QSpinBox, QTreeWidget, QTreeWidgetItem,
+    QFrame, QHBoxLayout, QHeaderView, QLabel, QLineEdit, QPushButton, QSizePolicy, QSpinBox, QTreeWidget, QTreeWidgetItem,
     QVBoxLayout, QWidget,
 )
 
@@ -206,6 +206,7 @@ class BatchDialog(QDialog):
         self._project_kind = template.output_kind
         self.result_projects: list[Project] = []
         self.jobs: list[batch.FolderJob] = []
+        self._scanned_jobs: list[batch.FolderJob] = []  # đúng như quét được; `jobs` = sau khi tách tập (mẫu bảng clip)
         # thư mục → (bảng clip đã chỉnh tay, trạng thái hộp thoại để mở lại đúng như lúc bấm OK)
         self._overrides: dict[str, tuple[list, dict]] = {}
         self._unchecked: set[str] = set()
@@ -302,8 +303,8 @@ class BatchDialog(QDialog):
                     if (self.preset.itemData(k) or {}).get("key", self.preset.itemText(k)) == last), -1) if last else -1
         self.preset.setCurrentIndex(idx if idx >= 0 else 0)
         self.preset.setToolTip("Giống các nút ở trang Video: Xen kẽ clip nền (một clip nền xen giữa các cảnh), Xếp lần "
-                               "lượt (Loop1 → Loop2 … mỗi cái lặp N lần) và Mẫu bảng clip (bảng tự lưu theo tên "
-                               "STT_loopA / STT_loopB…). Cách xếp tự lưu cũng có ở đây.")
+                               "lượt (Loop1 → Loop2 … mỗi cái lặp N lần) và Mẫu bảng clip (bảng theo tên "
+                               "5_loopA / 33_4_LOOP A…). Cách xếp tự lưu cũng có ở đây.")
         # crossfade không bắt buộc: 0 = "Cắt" (nối thẳng, không hoà hình) — giống ô crossfade ở trang Video
         self.loop_xf = w.xf_spin()
         self.loop_xf.setValue(float(settings.value("batch/loop_xf", 1.0)))
@@ -408,6 +409,16 @@ class BatchDialog(QDialog):
         self.len_val_box = self._wrap(val_row)
         form.addRow(self.len_val_label, self.len_val_box)
         form.addRow("Cách xếp clip:", self.preset)
+        # mẫu bảng clip: ghi rõ 2 kiểu tên file app nhận
+        self.table_hint = w.muted("Nhận 2 kiểu tên file: <b>5_loopA.mp4</b> (STT_Vai) · <b>33_4_LOOP A.mp4</b> "
+                                  "(Tập_STT_Vai — <b>mỗi tập một video</b>)")
+        self.table_hint.setWordWrap(False)  # một dòng: chữ tự xuống dòng làm hàng trong form giãn cao
+        self.table_hint.setSizePolicy(QSizePolicy.Policy.Ignored, QSizePolicy.Policy.Fixed)
+        self.table_hint.setToolTip("STT_Vai: 5_loopB.mp4, 5_loopA.mp4 — số đầu là tình huống.\n"
+                                   "Tập_STT_Vai: 33_4_LOOP B.mp4, 33_4_LOOP A.mp4 — tập 33, tình huống 4.\n"
+                                   "Thư mục có nhiều tập (33_…, 34_…) tự tách thành Tập 33, Tập 34.\n"
+                                   "Vai không phân biệt hoa / thường, dấu cách, _ : LOOP A = loopA = Loop_A.")
+        form.addRow("", self.table_hint)
         form.addRow("Hoà hình:", self.xf_box)
         form.addRow("Tiếng gốc clip:", self.source)
         form.addRow("Nhạc:", self.music)
@@ -680,12 +691,12 @@ class BatchDialog(QDialog):
             return
         self._scanned = text
         if text and os.path.isdir(text) and batch.is_drive_root(text):
-            self.jobs = []
+            self._scanned_jobs = []
             self._rebuild()
             self.summary.setText("<span style='color:" + theme.T["warn_text"] + "'>Đây là cả ổ đĩa — hãy chọn đúng <b>thư mục cha</b> chứa "
                                  "các thư mục video (ví dụ D:\\Video-can-lam\\Tuan-1).</span>")
             return
-        self.jobs = batch.scan(text, self.music_only) if os.path.isdir(text) else []
+        self._scanned_jobs = batch.scan(text, self.music_only) if os.path.isdir(text) else []
         self._rebuild()
 
     def _out_dir(self) -> str:
@@ -722,6 +733,11 @@ class BatchDialog(QDialog):
         return proj
 
     def _rebuild(self) -> None:
+        p = self.preset.currentData() if not self.music_only else None
+        # mẫu bảng clip + tên Tập_STT_Vai (33_4_LOOP A): thư mục có nhiều tập → mỗi tập một video
+        table = (p or {}).get("kind") == "table"
+        self.jobs = batch.split_episodes(self._scanned_jobs) if table else list(self._scanned_jobs)
+        self.form.setRowVisible(self.table_hint, table)
         # giữ lựa chọn bỏ tick của người dùng khi dựng lại bảng
         for i in range(self.tree.topLevelItemCount()):
             it = self.tree.topLevelItem(i)
@@ -760,6 +776,13 @@ class BatchDialog(QDialog):
             proj, total, note = None, 0.0, job.error
             changes: list[float] = []
             extra: list[str] = []  # ghi chú của riêng lần dựng bảng này
+            p = self.preset.currentData() if not self.music_only else None
+            if not job.error and (p or {}).get("kind") == "table" and job.folder not in self._overrides:
+                from ..core import table_preset as tp
+                _items, missing, _used = tp.plan(p["rows"], job.clips)
+                if missing:
+                    extra.append("Thiếu file: " + ", ".join(tp.missing_names(p["rows"], missing, job.clips))
+                                 + " — dòng đó bị bỏ")
             if not job.error:
                 proj = self._build(job)
                 tl = timeline.build_audio(proj) if self.music_only else timeline.build(proj)
@@ -847,7 +870,8 @@ class BatchDialog(QDialog):
         p = self.preset.currentData() or {}
         if p.get("kind") == "table":
             QMessageBox.information(self, "Mẫu bảng clip",
-                                    "Mẫu bảng clip dựng bảng theo tên file (STT_loopA, STT_loopB…). Muốn đổi số lần phát "
+                                    "Mẫu bảng clip dựng bảng theo tên file — 5_loopA.mp4 (STT_Vai) hoặc 33_4_LOOP A.mp4 "
+                                    "(Tập_STT_Vai). Muốn đổi số lần phát "
                                     "hay thứ tự: sửa bảng ở trang Video rồi lưu lại mẫu (Thư viện mẫu… → Sửa).")
             return
         if p.get("kind") == "sequence":  # mẫu "lần lượt từng loop": chỉnh bằng hộp thoại Xếp lần lượt

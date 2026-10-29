@@ -43,8 +43,11 @@ class TablePresetDialog(QDialog):
         self.source_dir = ""
 
         intro = w.muted("Lưu cả bảng clip (thứ tự, số lần phát, nối loop, cắt đoạn) thành <b>mẫu</b>. Mẫu nhớ "
-                        "file theo <b>tên bỏ số thứ tự ở đầu</b>: <b>5_loopB.mp4</b> → <b>STT_loopB</b>, nên áp được "
-                        "cho video khác (<b>6_loopA</b>, <b>6_loopB</b>…) và cho từng thư mục ở Xuất hàng loạt.")
+                        "file theo <b>vai</b> (tên bỏ số ở đầu), nên áp được cho video khác và cho từng thư mục ở Xuất "
+                        "hàng loạt. App nhận <b>2 kiểu tên file</b>:<br>"
+                        "• <b>STT_Vai</b> — <b>5_loopB.mp4</b>, <b>5_loopA.mp4</b> (tình huống 5)<br>"
+                        "• <b>Tập_STT_Vai</b> — <b>33_4_LOOP B.mp4</b>, <b>33_4_LOOP A.mp4</b> (tập 33, tình huống 4; "
+                        "mỗi tập một video)<br>Vai không phân biệt hoa / thường, dấu cách, _ : LOOP A = loopA = Loop_A.")
         intro.setWordWrap(True)
 
         self.preset = QComboBox()
@@ -88,8 +91,16 @@ class TablePresetDialog(QDialog):
         pick.setIconSize(QSize(14, 14))
         pick.setToolTip("Ví dụ thư mục video 6 có 6_loopA.mp4, 6_loopB.mp4 — mẫu tự khớp theo tên")
         pick.clicked.connect(self._pick_folder)
+        # tên kiểu Tập_STT_Vai (33_4_LOOP A): mỗi tập là một video — thư mục có nhiều tập thì chọn tập ở đây
+        self.ep_label = QLabel("Tập:")
+        self.episode = QComboBox()
+        self.episode.setToolTip("Thư mục có nhiều tập (33_…, 34_…): mỗi tập là một video riêng.\n"
+                                "Xuất hàng loạt tự tách mỗi tập thành một video.")
+        self.episode.currentIndexChanged.connect(self._show)
         src_row = QHBoxLayout()
         src_row.addWidget(self.src_label, 1)
+        src_row.addWidget(self.ep_label)
+        src_row.addWidget(self.episode)
         src_row.addWidget(pick)
 
         self.note = w.muted("")
@@ -114,6 +125,7 @@ class TablePresetDialog(QDialog):
         lay.addLayout(bb)
 
         self.preset.currentIndexChanged.connect(self._show)
+        self._fill_episodes()
         self._load()
 
     # ---------- dữ liệu ----------
@@ -133,6 +145,21 @@ class TablePresetDialog(QDialog):
         self.preset.blockSignals(False)
         self._show()
 
+    def _fill_episodes(self) -> None:
+        eps = tp.by_episode(self.paths)
+        keep = self.episode.currentData()
+        self.episode.blockSignals(True)
+        self.episode.clear()
+        for ep, files in eps.items():
+            self.episode.addItem(f"Tập {ep} ({len(files)} file)", ep)
+        self.episode.setCurrentIndex(max(0, self.episode.findData(keep)))
+        self.episode.blockSignals(False)
+        for wd in (self.ep_label, self.episode):
+            wd.setVisible(len(eps) > 1)
+
+    def _episode(self) -> int | None:
+        return self.episode.currentData() if self.episode.count() else None
+
     def _show(self, *_) -> None:
         p = self.preset.currentData()
         self.del_btn.setEnabled(bool(p and p.get("user")))  # mẫu có sẵn không xoá được
@@ -150,7 +177,8 @@ class TablePresetDialog(QDialog):
             return
         rows = p["rows"]
         # nhiều số thứ tự (1_loopA … 10_loopB): mẫu lặp cho từng số, nối tiếp thành MỘT video — hiện đúng bảng sẽ tạo
-        items, missing, used = tp.plan(rows, self.paths)
+        ep = self._episode()
+        items, missing, used = tp.plan(rows, self.paths, ep)
         many = len(used) > 1
         last_g = object()
         for k, (r, path, g) in enumerate(items, 1):
@@ -162,24 +190,20 @@ class TablePresetDialog(QDialog):
             it.setForeground(C_FILE, theme.qcolor("text_muted"))
             if many and g != last_g:  # dòng đầu của mỗi tình huống: tô đậm số thứ tự
                 it.setForeground(C_FILE, theme.qcolor("accent_text"))
-                it.setToolTip(C_FILE, f"Tình huống {g}")
+                it.setToolTip(C_FILE, (f"Tập {ep} · " if ep is not None else "") + f"Tình huống {g}")
             last_g = g
             if not r.get("enabled", True):
                 for c in range(7):
                     it.setForeground(c, theme.qcolor("text_disabled"))
             self.tree.addTopLevelItem(it)
         self.apply_btn.setEnabled(bool(items))
-        head = (f"{len(used)} tình huống (STT {used[0]} → {used[-1]}) nối tiếp thành <b>1 video</b>: "
-                if many else "")
+        n_eps = self.episode.count()
+        head = (f"<b>Tập {ep}</b>" + (f" (thư mục có {n_eps} tập — mỗi tập một video)" if n_eps > 1 else "") + " · "
+                if ep is not None else "")
+        head += (f"{len(used)} tình huống (STT {used[0]} → {used[-1]}) nối tiếp thành <b>1 video</b>: "
+                 if many else "")
         if missing:
-            labels = {r.get("role"): r.get("label") or r.get("role") for r in rows}
-
-            def name(m: str) -> str:  # "7_loopb" → "7_loopB", "loopb" → "STT_loopB"
-                num, _, role = m.partition("_")
-                if many and num.isdigit() and role in labels:
-                    return f"{num}_{labels[role].removeprefix('STT_')}"
-                return labels.get(m, m)
-            names = ", ".join(name(m) for m in missing)
+            names = ", ".join(tp.missing_names(rows, missing, self.paths))
             self.note.setText(f"{head}<span style='color:{theme.css_color('warn_text')}'>Thiếu file: {names} — "
                               "dòng đó bị bỏ.</span>")
         else:
@@ -195,6 +219,7 @@ class TablePresetDialog(QDialog):
             QMessageBox.information(self, "Mẫu bảng clip", "Thư mục này không có file video / ảnh nào.")
             return
         self.source_dir, self.paths = d, files
+        self._fill_episodes()
         self._show()
 
     def _save(self) -> None:
@@ -224,7 +249,7 @@ class TablePresetDialog(QDialog):
         p = self.preset.currentData()
         if p is None:
             return
-        clips, _missing = tp.build(p["rows"], self.paths)
+        clips, _missing = tp.build(p["rows"], self.paths, self._episode())
         if not clips:
             return
         self.result_clips = clips

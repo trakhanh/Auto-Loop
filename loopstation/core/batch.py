@@ -10,7 +10,7 @@ from __future__ import annotations
 
 import copy
 import os
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from pathlib import Path
 from typing import Callable
 
@@ -67,6 +67,9 @@ def scan(parent: str, music_only: bool = False) -> list[FolderJob]:
         return jobs
     subs = sorted((d for d in root.iterdir() if d.is_dir() and not _skip_dir(d.name)),
                   key=lambda d: il.natural_key(d.name))
+    if not subs and any(f.is_file() and f.suffix.lower() in (AUDIO_EXTS if music_only else VISUAL_EXTS)
+                        for f in root.iterdir()):
+        subs = [root]  # chọn thẳng thư mục chứa file (ví dụ cả mùa 33_… 34_… nằm chung): chính nó là một việc
     for d in subs:
         job = FolderJob(folder=str(d), name=d.name, clips=[] if music_only else _files(d, VISUAL_EXTS),
                         music=_files(d, AUDIO_EXTS))
@@ -83,6 +86,21 @@ def scan(parent: str, music_only: bool = False) -> list[FolderJob]:
                 job.notes.append("Không có clip nền (tên chứa “loop”) — phát lần lượt theo tên")
         jobs.append(job)
     return jobs
+
+
+def split_episodes(jobs: list[FolderJob]) -> list[FolderJob]:
+    """Mẫu bảng clip, tên kiểu Tập_STT_Vai (33_4_LOOP A): thư mục có nhiều tập → mỗi tập một video ("Tập 33",
+    "Tập 34"). `folder` của việc tách ra có thêm " · tập N" (khoá riêng cho chỉnh tay / âm lượng từng video)."""
+    from . import table_preset as tp
+    out: list[FolderJob] = []
+    for job in jobs:
+        eps = tp.by_episode(job.clips) if not job.error else {}
+        if len(eps) < 2:
+            out.append(job)
+            continue
+        out += [replace(job, folder=f"{job.folder} · tập {ep}", name=f"Tập {ep}", clips=files, base=None, notes=[])
+                for ep, files in eps.items()]
+    return out
 
 
 def safe_name(name: str) -> str:
