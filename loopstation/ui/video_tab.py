@@ -10,7 +10,7 @@ from PySide6.QtCore import QEvent, QTimer, QRegularExpression, QSettings, QSize,
 from PySide6.QtGui import QColor, QFontMetrics, QIcon, QKeySequence, QPixmap, QRegularExpressionValidator, QShortcut
 from PySide6.QtWidgets import (
     QCheckBox, QComboBox, QDoubleSpinBox, QFormLayout, QFrame, QGroupBox, QHBoxLayout, QHeaderView,
-    QLabel, QLineEdit, QMessageBox, QPlainTextEdit, QPushButton, QScrollArea, QSlider, QSpinBox,
+    QLabel, QLineEdit, QMessageBox, QPlainTextEdit, QPushButton, QScrollArea, QSizePolicy, QSlider, QSpinBox,
     QSplitter, QTabWidget, QTreeWidgetItem, QVBoxLayout, QWidget,
 )
 
@@ -24,7 +24,7 @@ from .trim_dialog import MIN_KEEP, TrimDialog, trim_text
 
 COL_NAME, COL_INFO, COL_TRIM, COL_PLAYS, COL_STRETCH, COL_LOOPXF, COL_NEXTXF, COL_DUR = range(8)
 
-ORDER = [("list", "Theo thứ tự trong bảng"), ("shuffle", "Ngẫu nhiên (xáo khi xuất)")]
+ORDER = [("list", "Theo thứ tự trong bảng"), ("shuffle", "Ngẫu nhiên — xem thứ tự ngay trên bảng clip")]
 LENGTH = [("manual", "Thủ công — đúng số lần phát trong bảng"),
           ("target", "Thời lượng mục tiêu (ví dụ 1h, 3h, 10h)"),
           ("music", "Theo độ dài nhạc (1 lượt playlist)")]
@@ -182,6 +182,9 @@ class VideoTab(QWidget):
     notify = Signal(str, str)  # (nội dung, kiểu ok|info|warn|error) → thông báo nổi của cửa sổ chính
     nextStepRequested = Signal()
     mixerRequested = Signal()  # mở Bảng trộn âm (trang 2)
+    queueAddRequested = Signal()  # nút "Thêm vào hàng đợi" ngay trên dải Sẵn sàng
+    shuffleDetailsRequested = Signal()  # cửa sổ riêng "Thứ tự sẽ xuất" (40–50 clip vẫn đọc rõ)
+    seasonDropped = Signal(list, str)  # thả file của nhiều tập (33_…, 34_…): (đường dẫn, tên mẫu bảng hợp nhất)
 
     def __init__(self, settings: QSettings, parent=None):
         super().__init__(parent)
@@ -437,7 +440,8 @@ class VideoTab(QWidget):
 
         self.count_label = QLabel("0 clip")
         self.count_label.setObjectName("chip")
-        self.status = w.muted("")
+        self.status = w.ElidedLabel("")  # thông báo ngắn trên thanh tiêu đề bảng: dài thì rút gọn, không chèn nút
+        self.status.setObjectName("muted")
         hint = w.ElidedLabel()
         hint.setObjectName("muted")
         hint.set_full_text("Mẹo: bấm đúp ô số để sửa · kéo dòng để đổi thứ tự", "Kéo dòng để đổi thứ tự · Bấm đúp tên file để mở xem · "
@@ -462,13 +466,13 @@ class VideoTab(QWidget):
         lv = QVBoxLayout(left)
         lv.setContentsMargins(0, 0, 0, 0)
         lv.setSpacing(6)
-        top_bar = QHBoxLayout()
+        # hàng tiêu đề tự xuống dòng khi cột hẹp / chữ to (trước đây các nút bị ép hẹp, cắt chữ)
+        top_box = QWidget()
+        top_bar = w.FlowLayout(top_box, spacing=8)
         top_title = QLabel("Danh sách Clip & Ảnh")
         top_title.setObjectName("h2")
         top_bar.addWidget(top_title)
         top_bar.addWidget(self.count_label)
-        top_bar.addStretch(1)
-        top_bar.addWidget(self.status)
         self.interleave_btn = QPushButton("Xen kẽ nền…")
         self.interleave_btn.setObjectName("pill")
         self.interleave_btn.setIcon(icons.icon("repeat", 13))
@@ -493,7 +497,8 @@ class VideoTab(QWidget):
                                          "lưu bảng hiện tại thành mẫu theo tên file (STT_loopB ×1 → STT_loopA ×57 → …)")
         self.table_preset_btn.clicked.connect(self._open_library)
         top_bar.addWidget(self.table_preset_btn)
-        lv.addLayout(top_bar)
+        top_bar.addWidget(self.status)
+        lv.addWidget(top_box)
         lv.addWidget(self.toolbar)
         # gợi ý khi vừa thêm file có clip nền (loop…) cùng các cảnh khác
         self.suggest = QFrame()
@@ -508,7 +513,8 @@ class VideoTab(QWidget):
         sg.addWidget(self.suggest_text, 1)
         self.suggest_go = sg_go = QPushButton("Xen kẽ ngay…")
         sg_go.setObjectName("accentBtn")
-        sg_go.clicked.connect(lambda: self._open_sequence() if self._suggest_kind == "sequence"
+        sg_go.clicked.connect(lambda: self._open_library() if self._suggest_kind == "table"
+                              else self._open_sequence() if self._suggest_kind == "sequence"
                               else self._open_interleave())
         self._suggest_kind = "interleave"
         sg.addWidget(sg_go)
@@ -518,6 +524,71 @@ class VideoTab(QWidget):
         sg.addWidget(sg_close)
         self.suggest.setVisible(False)
         lv.addWidget(self.suggest)
+        # dải "Sẵn sàng": tóm tắt video sẽ xuất (tập, tình huống, độ dài, intro / outro, nhạc, tiếng gốc, tên file)
+        # + Thêm vào hàng đợi ngay tại đây — không phải đi qua trang Nhạc, trang Xuất cho mỗi tập
+        self.ready = QFrame()
+        self.ready.setObjectName("readyBar")
+        rb = QHBoxLayout(self.ready)
+        rb.setContentsMargins(12, 8, 8, 8)
+        rb.setSpacing(8)
+        rb_ic = QLabel()
+        icons.bind(rb_ic, "check", 15, "success_text")
+        rb.addWidget(rb_ic, 0, Qt.AlignmentFlag.AlignTop)
+        self.ready_text = QLabel()
+        self.ready_text.setWordWrap(True)
+        rb.addWidget(self.ready_text, 1)
+        rb_tpl = QPushButton("Đổi mẫu…")
+        rb_tpl.setObjectName("pill")
+        rb_tpl.setToolTip("Thư viện mẫu: chọn mẫu khác cho bảng này")
+        rb_tpl.clicked.connect(self._open_library)
+        rb_audio = QPushButton("Âm thanh")
+        rb_audio.setObjectName("pill")
+        rb_audio.setIcon(icons.icon("volume", 13))
+        rb_audio.setIconSize(QSize(13, 13))
+        rb_audio.setToolTip("Bảng trộn âm: giữ / tắt tiếng gốc, nhạc to hay tiếng gốc to")
+        rb_audio.clicked.connect(self.mixerRequested.emit)
+        self.ready_add = QPushButton("Thêm vào hàng đợi")
+        self.ready_add.setObjectName("accentBtn")
+        self.ready_add.setIcon(icons.icon("plus", 13, "accent_text"))
+        self.ready_add.setIconSize(QSize(13, 13))
+        self.ready_add.clicked.connect(self.queueAddRequested.emit)
+        for b in (rb_tpl, rb_audio, self.ready_add):
+            rb.addWidget(b, 0, Qt.AlignmentFlag.AlignVCenter)
+        self.ready.setVisible(False)
+        lv.addWidget(self.ready)
+        # trộn ngẫu nhiên: hiện thứ tự sẽ xuất ngay (cùng số mầm luôn ra cùng thứ tự) + Trộn lại / Dùng thứ tự này
+        self.shuffle_bar = QFrame()
+        self.shuffle_bar.setObjectName("suggestBar")
+        sb = QHBoxLayout(self.shuffle_bar)
+        sb.setContentsMargins(12, 8, 8, 8)
+        sb.setSpacing(8)
+        sb_ic = QLabel()
+        icons.bind(sb_ic, "shuffle", 15, "accent_text")
+        sb.addWidget(sb_ic, 0, Qt.AlignmentFlag.AlignTop)
+        self.shuffle_text = QLabel()
+        self.shuffle_text.setWordWrap(True)
+        sb.addWidget(self.shuffle_text, 1)
+        sb_again = QPushButton("Trộn lại")
+        sb_again.setObjectName("pill")
+        sb_again.setIcon(icons.icon("refresh", 13))
+        sb_again.setIconSize(QSize(13, 13))
+        sb_again.setToolTip("Ra thứ tự ngẫu nhiên khác (đổi số mầm)")
+        sb_again.clicked.connect(lambda: self.seed.setValue(random.randint(0, 999_999)))
+        sb_keep = QPushButton("Dùng thứ tự này")
+        sb_keep.setObjectName("accentBtn")
+        sb_keep.setToolTip("Chép thứ tự đang thấy vào bảng (chuyển sang Theo thứ tự trong bảng) để sửa tay tiếp. "
+                           "Ctrl+Z để quay lại.")
+        sb_keep.clicked.connect(lambda: self._freeze_order())
+        self.shuffle_more = QPushButton("Xem đủ thứ tự…")
+        self.shuffle_more.setObjectName("pill")
+        self.shuffle_more.setIcon(icons.icon("queue", 13))
+        self.shuffle_more.setToolTip("Mở cửa sổ riêng: mỗi clip một dòng — số thứ tự, tên, số lần, bắt đầu ở phút nào")
+        self.shuffle_more.clicked.connect(self.shuffleDetailsRequested.emit)
+        for b in (self.shuffle_more, sb_again, sb_keep):
+            sb.addWidget(b, 0, Qt.AlignmentFlag.AlignVCenter)
+        self.shuffle_bar.setVisible(False)
+        self._shuffle_order: list[int] = []
+        lv.addWidget(self.shuffle_bar)
         self.list.setMinimumHeight(210)
         lv.addWidget(self.list, 1)
         lv.addWidget(quick_bar)
@@ -1328,7 +1399,73 @@ class VideoTab(QWidget):
                                 "\n".join(f"• {b.path}: {b.error or 'không có hình'}" for b in bad[:15]))
         self.status.setText(msg)
         self._emit()
-        self._maybe_suggest_interleave()
+        if not self._auto_table():
+            self._maybe_suggest_interleave()
+
+    # ---------- trộn ngẫu nhiên: xem trước thứ tự ----------
+    def set_shuffle(self, html: str, order: list[int], more: str = "") -> None:
+        self.shuffle_text.setText(html)
+        self._shuffle_order = order
+        self.shuffle_more.setText(more or "Xem đủ thứ tự…")
+        self.shuffle_bar.setVisible(bool(html))
+
+    def _freeze_order(self, order: list[int] | None = None) -> None:
+        """Chép thứ tự trộn đang thấy vào bảng → Theo thứ tự trong bảng (sửa tay tiếp được, Ctrl+Z quay lại)."""
+        clips, infos, _d = self._table_media()
+        seen: list[int] = []
+        for k in self._shuffle_order if order is None else order:
+            if 0 <= k < len(clips) and k not in seen:
+                seen.append(k)
+        new = [clips[k] for k in seen] + [c for k, c in enumerate(clips) if k not in seen]
+        if not new:
+            return
+        set_combo(self.order, "list")
+        self._apply_arranged(new, infos, "Đã chép thứ tự trộn vào bảng")
+
+    # ---------- dải Sẵn sàng + tự áp mẫu bảng ----------
+    def set_ready(self, html: str, add_text: str = "Thêm vào hàng đợi") -> None:
+        self.ready_text.setText(html)
+        self.ready_add.setText(add_text)
+        self.ready.setVisible(bool(html))
+
+    def _auto_table(self) -> bool:
+        """Vừa thả file đánh số (33_4_LOOP A, 5_loopB…): tự áp mẫu bảng hợp nhất (mẫu dùng lần trước nếu khớp) —
+        khỏi mở Thư viện mẫu mỗi tập. Nhiều tập một lúc: báo cửa sổ chính hỏi đưa cả mùa vào hàng đợi."""
+        from ..core import table_preset as tp
+        from .interleave_dialog import all_table_presets
+        clips = [it.data(0, w.ROLE_DATA) for it in self.list.items()]
+        paths = list(dict.fromkeys(c.path for c in clips))
+        if len(clips) != len(paths) or len(paths) < 2:  # bảng đã xếp (có dòng lặp): không tự xếp lại
+            return False
+        if sum(1 for p in paths if tp.stt_of(p) is not None) < max(2, len(paths) - 1):
+            return False
+        preset = tp.best_preset(all_table_presets(self.settings), paths, str(self.settings.value("table/last", "")))
+        if preset is None:
+            return False
+        if len(tp.episodes(paths)) > 1:
+            self.seasonDropped.emit(paths, preset["name"])
+            return True
+        built, missing = tp.build(preset["rows"], paths)
+        if not built:
+            return False
+        _clips, infos, _d = self._table_media()
+        self._apply_arranged(built, infos, "Đã tự áp mẫu")
+        self.settings.setValue("table/last", preset["name"])
+        stts = sorted({n for n in map(tp.stt_of, paths) if n is not None})
+        eps = tp.episodes(paths)
+        what = (f"Tập {eps[0]} · " if eps else "") + (f"tình huống {stts[0]} → {stts[-1]} · " if len(stts) > 1 else "")
+        warn = ""
+        extra = tp.unused(preset["rows"], paths)
+        if missing or extra:
+            bits = ([f"thiếu {', '.join(tp.missing_names(preset['rows'], missing, paths)[:3])}"] if missing else []) + \
+                   ([f"chưa có trong mẫu: {', '.join(extra[:3])}"] if extra else [])
+            warn = f" <span style='color:{theme.css_color('warn_text')}'>({'; '.join(bits)})</span>"
+        self._suggest_kind = "table"
+        self.suggest_go.setText("Đổi mẫu…")
+        self.suggest_text.setText(f"Đã tự áp mẫu <b>{preset['name']}</b>: {what}{len(built)} dòng.{warn} "
+                                  "Không đúng ý: bấm <b>Đổi mẫu…</b> hoặc Ctrl+Z.")
+        motion.slide_visible(self.suggest, True)
+        return True
 
     # ---------- xen kẽ clip nền ----------
     def _maybe_suggest_interleave(self) -> None:

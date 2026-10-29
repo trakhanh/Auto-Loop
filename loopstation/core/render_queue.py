@@ -7,7 +7,7 @@ from pathlib import Path
 
 from .project import Project
 
-STATUS_LABELS = {"pending": "Chờ", "running": "Đang chạy", "done": "Xong", "error": "Lỗi",
+STATUS_LABELS = {"pending": "Đang chờ", "running": "Đang chạy", "done": "Xong", "error": "Lỗi",
                  "cancelled": "Đã huỷ"}
 KIND_LABELS = {"video": "Video", "audio": "Nhạc"}
 
@@ -19,6 +19,7 @@ class QueueItem:
     kind: str = "video"  # video | audio
     status: str = "pending"
     message: str = ""
+    summary: str = ""  # "Tập 33 · tình huống 1 → 10 · 39 dòng · dài 1:05:00" (tính lúc thêm, hiện ở hàng đợi)
 
     @property
     def finished(self) -> bool:
@@ -26,7 +27,7 @@ class QueueItem:
 
     def to_dict(self) -> dict:
         return {"project": self.project.to_dict(None), "output": self.output, "kind": self.kind,
-                "status": self.status, "message": self.message}
+                "status": self.status, "message": self.message, "summary": self.summary}
 
     @classmethod
     def from_dict(cls, d: dict) -> "QueueItem":
@@ -34,7 +35,44 @@ class QueueItem:
         if status == "running":  # app bị tắt giữa chừng → chạy lại
             status = "pending"
         return cls(project=Project.from_dict(d["project"], None), output=d["output"],
-                   kind=d.get("kind", "video"), status=status, message=d.get("message", ""))
+                   kind=d.get("kind", "video"), status=status, message=d.get("message", ""),
+                   summary=d.get("summary", ""))
+
+
+def fmt_len(sec: float) -> str:
+    sec = int(round(sec))
+    return f"{sec // 3600}:{sec // 60 % 60:02d}:{sec % 60:02d}" if sec >= 3600 else f"{sec // 60}:{sec % 60:02d}"
+
+
+def describe(project: Project, kind: str = "video", total: float = 0.0) -> str:
+    """Tóm tắt một mục hàng đợi để biết bên trong có gì, không cần mở ra:
+    "Tập 33 · tình huống 1 → 10 · 39 dòng · dài 1:05:00", "12 dòng · dài 3:00:00", "Nhạc · 8 bài · dài 1:00:00"."""
+    from . import table_preset as tp
+    parts: list[str] = []
+    if kind == "audio":
+        parts.append(f"Nhạc · {sum(1 for t in project.music.tracks if t.enabled)} bài")
+    else:
+        clips = [c for c in project.video.clips if c.enabled]
+        paths = [c.path for c in clips]
+        eps = tp.episodes(paths)
+        if eps:
+            parts.append("Tập " + ", ".join(map(str, eps)))
+        stts = sorted({n for n in map(tp.stt_of, paths) if n is not None})
+        if len(stts) > 1:
+            parts.append(f"tình huống {stts[0]} → {stts[-1]}")
+        parts.append(f"{len(clips)} dòng")
+    if total > 0:
+        parts.append(f"dài {fmt_len(total)}")
+    return " · ".join(parts)
+
+
+def signature(project: Project, kind: str = "video") -> tuple:
+    """Nội dung chính của một mục (để báo khi lỡ thêm cùng một video hai lần)."""
+    if kind == "audio":
+        return ("audio", tuple(t.path.lower() for t in project.music.tracks if t.enabled))
+    v = project.video
+    return ("video", tuple((c.path.lower(), c.plays_mode, c.count, c.min, c.max, c.play_seconds)
+                           for c in v.clips if c.enabled), v.intro.lower(), v.outro.lower())
 
 
 def save(items: list[QueueItem], path: Path) -> None:

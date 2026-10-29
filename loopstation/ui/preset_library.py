@@ -11,7 +11,7 @@ import re
 from PySide6.QtCore import QRectF, QSettings, QSize, Qt
 from PySide6.QtGui import QColor, QFontMetrics, QPainter, QPainterPath
 from PySide6.QtWidgets import (
-    QDialog, QFrame, QHBoxLayout, QHeaderView, QLabel, QLineEdit, QMessageBox, QPushButton, QScrollArea,
+    QCheckBox, QComboBox, QDialog, QFrame, QHBoxLayout, QHeaderView, QLabel, QLineEdit, QMessageBox, QPushButton, QScrollArea,
     QTableWidget, QVBoxLayout, QWidget,
 )
 
@@ -63,24 +63,28 @@ def _loud(label: str) -> str:
     return re.sub(r"(?i)^loop[\s_\-]*", "LOOP ", label.removeprefix("STT_")).upper()
 
 
-def example(p: dict) -> tuple[list[tuple[str, str, int, float]], float, str]:
-    """(khối [(tên, số lần, nhóm màu, giây)], tổng giây, dòng file ví dụ) — áp mẫu thật lên bộ tên file ví dụ."""
+def example(p: dict, style: str = "") -> tuple[list[tuple[str, str, int, float]], float, str]:
+    """(khối [(tên, số lần, nhóm màu, giây)], tổng giây, dòng file ví dụ) — áp mẫu thật lên bộ tên file ví dụ.
+    `style` (mẫu bảng clip): "stt" = 5_loopA.mp4, "tap" = 33_1_LOOP A.mp4; bỏ trống = mẫu của bạn "stt", có sẵn "tap"."""
     k = kind_of(p)
     if k == "table":
         rows = p.get("rows") or []
-        if p.get("user"):
+        if (style or ("stt" if p.get("user") else "tap")) == "stt":
             names = [f"5_{(r.get('label') or r.get('role', '')).removeprefix('STT_')}.mp4" for r in rows]
         else:  # mẫu có sẵn: ví dụ theo cách đặt tên Tập_STT_Vai của nhân viên (33_1_LOOP B.mp4)
             names = [f"33_1_{_loud(r.get('label') or r.get('role', ''))}.mp4" for r in rows]
         clips = tp.build(rows, list(dict.fromkeys(names)))[0]
         files = ", ".join(dict.fromkeys(os.path.basename(c.path) for c in clips))
+        optional = set(tp.roles([r for r in rows if r.get("optional")]))
     else:
         names = (["Content.mp4", "Loop1.mp4", "Loop2.mp4", "Loop3.mp4"] if k == "sequence"
                  else ["loop_nen.mp4", "2_canh.mp4", "3_canh.mp4", "4_canh.mp4"])
         arrange = arrange_from_preset(p)
         clips = arrange([ClipItem(n) for n in names], 0) if arrange else []
         files = ", ".join(names)
-    roles: list[str] = []
+        optional = set()
+    # màu theo vai; vai "chỉ khi có file" xếp màu sau cùng → loopB / loopA giữ màu quen thuộc
+    roles: list[str] = [x for x in tp.roles(p.get("rows") or []) if x not in optional] if k == "table" else []
     blocks = []
     total = 0.0
     for c in clips:
@@ -99,6 +103,8 @@ def example(p: dict) -> tuple[list[tuple[str, str, int, float]], float, str]:
         role = tp.role_of(c.path)
         if role not in roles:
             roles.append(role)
+        if role in optional:
+            plays += " · nếu có"
         blocks.append((name, plays, roles.index(role), sec))
         total += sec
     return blocks, total, files
@@ -349,7 +355,7 @@ class PresetLibraryDialog(QDialog):
         self._fill()
 
 
-C_ROLE, C_PLAYS, C_LOOP, C_NEXT, C_ACT = range(5)
+C_ROLE, C_PLAYS, C_LOOP, C_NEXT, C_OPT, C_ACT = range(6)
 
 
 class PresetEditor(QDialog):
@@ -366,16 +372,20 @@ class PresetEditor(QDialog):
 
         self.name = QLineEdit(self.orig_name)
         self.name.setPlaceholderText("Tên mẫu, ví dụ: Loop A ×57 kẹp Loop B")
-        guide = w.muted("Mỗi dòng là một lần xuất hiện trong video. <b>Vai</b> = phần tên file sau số thứ tự: gõ "
-                        "<b>loopA</b> thì app dùng <b>5_loopA.mp4</b>, <b>6_loopA.mp4</b>… <b>Số lần phát</b>: "
-                        "<b>57</b> = 57 lần · <b>10p</b> = loop đủ 10 phút · <b>50-80</b> = ngẫu nhiên.")
+        guide = w.muted("Mỗi dòng là một lần xuất hiện trong video. <b>Vai</b> = phần tên file sau các số ở đầu: "
+                        "gõ <b>LOOP A</b> (hay loopA — hoa / thường, dấu cách đều được) thì app dùng cả 2 kiểu tên: "
+                        "<b>5_loopA.mp4</b> (STT_Vai) và <b>33_4_LOOP A.mp4</b> (Tập_STT_Vai, mỗi tập một video).<br>"
+                        "<b>Số lần phát</b>: <b>57</b> = 57 lần · <b>10p</b> = loop đủ 10 phút · <b>50-80</b> = ngẫu "
+                        "nhiên. Tick <b>Chỉ khi có file</b> cho vai không phải tình huống nào cũng có (ví dụ "
+                        "<b>LOOP AB</b>): có file thì dùng, không có thì bỏ, không báo thiếu.")
         guide.setWordWrap(True)
-        self.table = QTableWidget(0, 5)
-        self.table.setHorizontalHeaderLabels(["Vai (tên file sau STT_)", "Số lần phát", "Nối loop", "Sang clip", ""])
+        self.table = QTableWidget(0, 6)
+        self.table.setHorizontalHeaderLabels(["Vai (tên file sau STT_)", "Số lần phát", "Nối loop", "Sang clip",
+                                              "Chỉ khi có file", ""])
         self.table.verticalHeader().setVisible(True)
         hdr = self.table.horizontalHeader()
         hdr.setSectionResizeMode(C_ROLE, QHeaderView.ResizeMode.Stretch)
-        for c in (C_PLAYS, C_LOOP, C_NEXT, C_ACT):
+        for c in (C_PLAYS, C_LOOP, C_NEXT, C_OPT, C_ACT):
             hdr.setSectionResizeMode(c, QHeaderView.ResizeMode.ResizeToContents)
         add = QPushButton("Thêm dòng")
         add.setIcon(icons.icon("plus", 14))
@@ -404,7 +414,15 @@ class PresetEditor(QDialog):
         arow.addWidget(add)
         arow.addStretch(1)
         lay.addLayout(arow)
-        lay.addWidget(QLabel("Ví dụ kết quả (thư mục video 5, mỗi clip 10 giây):"))
+        self.name_style = QComboBox()  # xem ví dụ theo kiểu tên nào (mẫu dùng được cho cả 2 kiểu)
+        self.name_style.addItem("Tập_STT_Vai — 33_1_LOOP A.mp4", "tap")
+        self.name_style.addItem("STT_Vai — 5_loopA.mp4", "stt")
+        self.name_style.currentIndexChanged.connect(self._refresh)
+        exrow = QHBoxLayout()
+        exrow.addWidget(QLabel("Ví dụ kết quả (mỗi clip 10 giây), tên file kiểu:"))
+        exrow.addWidget(self.name_style)
+        exrow.addStretch(1)
+        lay.addLayout(exrow)
         lay.addWidget(self.strip)
         lay.addWidget(self.preview)
         lay.addLayout(bb)
@@ -417,7 +435,7 @@ class PresetEditor(QDialog):
         row = self.table.rowCount()
         self.table.insertRow(row)
         role = QLineEdit((r.get("label") or r.get("role", "")).removeprefix("STT_"))
-        role.setPlaceholderText("loopA")
+        role.setPlaceholderText("LOOP A")
         role.textChanged.connect(self._refresh)
         plays = QLineEdit(tp.plays_text(r).lstrip("×").replace("–", "-").replace(" phút", "p").replace(" giây", "s"))
         plays.setMaximumWidth(110)
@@ -428,6 +446,11 @@ class PresetEditor(QDialog):
         nxt.setValue(float(r.get("next_xfade", 0)))
         for sb in (loop, nxt):
             sb.valueChanged.connect(self._refresh)
+        opt = QCheckBox()
+        opt.setChecked(bool(r.get("optional")))
+        opt.setToolTip("Có file thì dùng, không có thì bỏ dòng này — không báo thiếu (ví dụ LOOP AB chỉ có ở vài "
+                       "tình huống).")
+        opt.toggled.connect(self._refresh)
         acts = QWidget()
         al = QHBoxLayout(acts)
         al.setContentsMargins(0, 0, 0, 0)
@@ -442,12 +465,12 @@ class PresetEditor(QDialog):
             theme.tag(b, variant="ghost")
             b.clicked.connect(fn)
             al.addWidget(b)
-        for c, wd in ((C_ROLE, role), (C_PLAYS, plays), (C_LOOP, loop), (C_NEXT, nxt), (C_ACT, acts)):
+        for c, wd in ((C_ROLE, role), (C_PLAYS, plays), (C_LOOP, loop), (C_NEXT, nxt), (C_OPT, opt), (C_ACT, acts)):
             self.table.setCellWidget(row, c, wd)
         self.table.setRowHeight(row, 40)
         acts.setProperty("extra", {k: v for k, v in r.items()
                                    if k not in ("role", "label", "count", "min", "max", "plays_mode", "play_seconds",
-                                                "loop_xfade", "next_xfade")})
+                                                "loop_xfade", "next_xfade", "optional")})
         if refresh:
             self._refresh()
 
@@ -473,7 +496,8 @@ class PresetEditor(QDialog):
                       "count": int(lo) if mode == "fixed" else 1, "min": int(lo) if mode == "random" else 1,
                       "max": int(hi) if mode == "random" else 1, "play_seconds": float(lo) if mode == "duration" else 0.0,
                       "loop_xfade": self.table.cellWidget(i, C_LOOP).value(),
-                      "next_xfade": self.table.cellWidget(i, C_NEXT).value()})
+                      "next_xfade": self.table.cellWidget(i, C_NEXT).value(),
+                      "optional": self.table.cellWidget(i, C_OPT).isChecked()})
             r.setdefault("enabled", True)
             rows.append(r)
         if not rows and not err:
@@ -482,10 +506,10 @@ class PresetEditor(QDialog):
 
     def _refresh(self, *_) -> None:
         rows, err = self._read()
-        blocks, total, files = example({"kind": "table", "rows": rows})
+        blocks, total, files = example({"kind": "table", "rows": rows}, self.name_style.currentData())
         self.strip.set_blocks(blocks)
         self.preview.setText(f"File ví dụ: {files or '—'} → video dài <b>{_fmt(total)}</b>, {len(blocks)} dòng. "
-                             "Thư mục có 1_… đến 10_… thì mẫu lặp cho từng số, nối thành một video."
+                             "Tình huống 1 → 10 nối thành một video; tên kiểu 33_… thì mỗi tập một video."
                              if rows else "")
         self.err.setText(err)
 
@@ -515,6 +539,7 @@ class PresetEditor(QDialog):
             r["_plays"] = self.table.cellWidget(i, C_PLAYS).text()
             r["loop_xfade"] = self.table.cellWidget(i, C_LOOP).value()
             r["next_xfade"] = self.table.cellWidget(i, C_NEXT).value()
+            r["optional"] = self.table.cellWidget(i, C_OPT).isChecked()
             out.append(r)
         return out, None
 

@@ -289,15 +289,16 @@ class Runner:
     """Chạy ffmpeg có thể huỷ, đọc tiến trình từ `-progress pipe:1`."""
 
     def __init__(self) -> None:
-        self._proc: subprocess.Popen | None = None
+        self._procs: set[subprocess.Popen] = set()  # chạy song song được (chuẩn hoá nhiều clip cùng lúc)
         self._lock = threading.Lock()
         self.cancelled = False
 
     def cancel(self) -> None:
         with self._lock:
             self.cancelled = True
-            if self._proc and self._proc.poll() is None:
-                self._proc.kill()
+            for p in list(self._procs):
+                if p.poll() is None:
+                    p.kill()
 
     def check(self) -> None:
         if self.cancelled:
@@ -317,13 +318,13 @@ class Runner:
         with self._lock:
             if self.cancelled:
                 raise CancelledError()
-            self._proc = subprocess.Popen(
+            proc = subprocess.Popen(
                 cmd,
                 stdout=subprocess.PIPE,
                 stderr=subprocess.PIPE,
                 creationflags=CREATE_NO_WINDOW,
             )
-            proc = self._proc
+            self._procs.add(proc)
             _attach(proc)
         err_chunks: list[bytes] = []
         t = threading.Thread(target=lambda: err_chunks.append(proc.stderr.read()), daemon=True)
@@ -343,7 +344,7 @@ class Runner:
         t.join()
         stderr = b"".join(err_chunks).decode("utf-8", "replace")
         with self._lock:
-            self._proc = None
+            self._procs.discard(proc)
         if self.cancelled:
             raise CancelledError()
         if proc.returncode != 0:

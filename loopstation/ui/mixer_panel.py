@@ -3,8 +3,11 @@ from __future__ import annotations
 
 from PySide6.QtCore import QRegularExpression, QSize, Qt, QTimer, QUrl, Signal
 from PySide6.QtGui import QRegularExpressionValidator
+import math
+
 from PySide6.QtWidgets import (
-    QGridLayout, QGroupBox, QHBoxLayout, QLabel, QLineEdit, QPushButton, QSlider, QSpinBox, QVBoxLayout, QWidget,
+    QButtonGroup, QCheckBox, QGridLayout, QGroupBox, QHBoxLayout, QLabel, QLineEdit, QPushButton, QSlider, QSpinBox,
+    QVBoxLayout, QWidget,
 )
 
 from ..core.project import format_hms, parse_hms
@@ -12,6 +15,11 @@ from . import icons, theme
 from . import widgets as w
 
 MAX_PCT = 200
+# chọn nhanh (nhạc %, tiếng gốc %) — tiếng gốc đã tự cân về cùng mức với nhạc nên 100 / 100 = nghe ngang nhau
+MIX_PRESETS = (("music", "Nhạc là chính", "Nhạc rõ, tiếng gốc làm nền nhẹ phía sau", 100, 35),
+               ("even", "Cân bằng", "Nhạc và tiếng gốc nghe ngang nhau", 100, 100),
+               ("source", "Tiếng gốc là chính", "Tiếng gốc (mưa, sóng, tiếng người…) rõ, nhạc nhỏ phía sau", 30, 100))
+SOURCE_MODES = (("mix", "Giữ tiếng gốc + nhạc"), ("only", "Chỉ tiếng gốc"), ("off", "Tắt tiếng gốc"))
 
 
 class _Channel:
@@ -74,6 +82,7 @@ class MixerPanel(QGroupBox):
     changed = Signal()  # một thanh âm lượng bất kỳ đổi (nhạc / tiếng gốc / tiếng nền)
     ambientVolumeChanged = Signal(int, int)  # (dòng trong bảng tiếng nền, %)
     previewRequested = Signal(float)  # nghe thử từ giây thứ …
+    sourceModeChanged = Signal(str)  # mix | only | off — đồng bộ với ô Tiếng gốc clip ở trang Video
     playbackStopped = Signal()  # nghe xong / bấm dừng
 
     def __init__(self, parent=None, hints: bool = True):
@@ -88,8 +97,45 @@ class MixerPanel(QGroupBox):
 
         lay = QVBoxLayout(self)
         lay.setSpacing(6)
-        lay.addWidget(w.muted("Chỉnh độ to của từng nguồn âm trong file xuất. <b>100%</b> = giữ nguyên. "
-                              "Muốn tiếng nền nổi hơn nhạc: <b>giảm Nhạc</b> (50–70%) thay vì đẩy nền quá 150%."))
+        # ----- 1. tiếng gốc clip: chọn kiểu ngay tại đây (trước đây nằm ở trang Video → Cài đặt video) -----
+        self.mode_box = QWidget()
+        mrow = w.FlowLayout(self.mode_box, spacing=5)
+        mrow.addWidget(QLabel("Tiếng gốc clip:"))
+        self.mode_group = QButtonGroup(self)
+        self.mode_buttons: dict[str, QPushButton] = {}
+        for key, text in SOURCE_MODES:
+            b = QPushButton(text)
+            b.setObjectName("pill")
+            b.setCheckable(True)
+            self.mode_group.addButton(b)
+            b.clicked.connect(lambda _=False, k=key: None if self._loading else self.sourceModeChanged.emit(k))
+            mrow.addWidget(b)
+            self.mode_buttons[key] = b
+        self.mode_buttons["mix"].setChecked(True)
+        self.sources_note = w.muted("")  # clip nào có tiếng
+        self.sources_note.setWordWrap(True)
+        # chữ ngắn + ElidedCheckBox: cột phải hẹp cũng không bị đẩy rộng (trước đây làm cả Bảng trộn âm tràn mép)
+        self.level = w.ElidedCheckBox("Tự cân độ to tiếng gốc (về cùng mức với nhạc)")
+        self.level.setChecked(True)
+        self.level.setToolTip("Bật: app đo độ to từng clip rồi đưa về cùng mức LUFS với nhạc, nên 100% + 100% nghe "
+                              "ngang nhau.\nTắt: giữ nguyên độ to gốc của clip (thường nhỏ hơn nhạc nhiều).")
+        self.level.toggled.connect(lambda *_: None if self._loading else self._value_changed())
+        for wd in (self.mode_box, self.sources_note, self.level):
+            lay.addWidget(wd)
+            wd.setVisible(hints)
+        # ----- 2. chọn nhanh độ to -----
+        qbox = QWidget()
+        qrow = w.FlowLayout(qbox, spacing=5)
+        qrow.addWidget(QLabel("Chọn nhanh:"))
+        self._presets: dict[str, QPushButton] = {}
+        for key, text, tip, mus, src in MIX_PRESETS:
+            b = QPushButton(text)
+            b.setObjectName("pill")
+            b.setToolTip(f"{tip} — Nhạc {mus}% · Tiếng gốc {src}%")
+            b.clicked.connect(lambda _=False, m=mus, sv=src: self._apply_preset(m, sv))
+            qrow.addWidget(b)
+            self._presets[key] = b
+        lay.addWidget(qbox)
         self._hints = hints
         self.grid = QGridLayout()
         self.grid.setHorizontalSpacing(8)
@@ -102,6 +148,12 @@ class MixerPanel(QGroupBox):
                                "Tiếng có sẵn trong các clip video (kể cả Intro / Outro nếu giữ tiếng)")
         for ch in (self.music, self.source):
             ch.spin.valueChanged.connect(lambda *_: None if self._loading else self._value_changed())
+            ch.spin.valueChanged.connect(lambda *_: self._update_balance())
+        self.balance = QLabel()  # "Tiếng gốc nghe nhỏ hơn nhạc khoảng 9 dB" — hiểu ngay % nghĩa là gì
+        self.balance.setObjectName("muted")
+        self.balance.setProperty("tone", "success")
+        self.balance.setWordWrap(True)
+        self.grid.addWidget(self.balance, 5, 1, 1, 2)
         self._amb_title = QLabel("TIẾNG NỀN")
         self._amb_title.setObjectName("metricTitle")
         self._amb_title.setContentsMargins(0, 8, 0, 0)
@@ -167,6 +219,58 @@ class MixerPanel(QGroupBox):
         self.music.set_value(music)
         self.source.set_value(source)
         self._loading = False
+        self._update_balance()
+
+    def set_level(self, on: bool) -> None:
+        self._loading = True
+        self.level.setChecked(on)
+        self._loading = False
+        self._update_balance()
+
+    def level_on(self) -> bool:
+        return self.level.isChecked()
+
+    def set_sources(self, names: list[str], n_clips: int) -> None:
+        """Clip nào có tiếng gốc — để biết bật "Giữ tiếng gốc" thì nghe được gì."""
+        if not n_clips:
+            self.sources_note.setText("")
+        elif not names:
+            self.sources_note.setText("Không clip nào có tiếng gốc — giữ hay tắt tiếng gốc đều như nhau.")
+        else:
+            shown = ", ".join(names[:4]) + (f" và {len(names) - 4} clip khác" if len(names) > 4 else "")
+            self.sources_note.setText(f"Clip có tiếng: <b>{shown}</b> ({len(names)}/{n_clips} clip).")
+
+    def _apply_preset(self, music: int, source: int) -> None:
+        self._loading = True
+        self.music.set_value(music)
+        self.source.set_value(source)
+        self._loading = False
+        self._update_balance()
+        self._value_changed()
+
+    def _update_balance(self) -> None:
+        mus, src = self.music.spin.value(), self.source.spin.value()
+        for key, _t, _tip, m, sv in MIX_PRESETS:  # nút chọn nhanh đang khớp: tô sáng
+            b = self._presets.get(key)
+            if b is not None:
+                b.setProperty("active", (m, sv) == (mus, src))
+                b.style().unpolish(b)
+                b.style().polish(b)
+        if not (self.music.slider.isEnabled() and self.source.slider.isEnabled()):
+            self.balance.setText("")
+            return
+        if not self.level.isChecked():
+            self.balance.setText("Đang tắt tự cân: tiếng gốc to / nhỏ tuỳ clip (thường nhỏ hơn nhạc nhiều).")
+            return
+        if mus == 0 or src == 0:
+            self.balance.setText("Chỉ nghe " + ("tiếng gốc." if mus == 0 else "nhạc.") if mus or src else "Tắt cả hai.")
+            return
+        db = 20 * math.log10(src / mus)
+        if abs(db) < 1.5:
+            self.balance.setText("Tiếng gốc và nhạc nghe <b>ngang nhau</b>.")
+        else:
+            self.balance.setText(f"Tiếng gốc nghe <b>{'to' if db > 0 else 'nhỏ'} hơn nhạc khoảng {abs(db):.0f} dB</b>"
+                                 + (" — nhạc làm nền." if db > 0 else " — tiếng gốc làm nền."))
 
     def values(self) -> tuple[int, int]:
         return self.music.spin.value(), self.source.spin.value()
@@ -216,6 +320,15 @@ class MixerPanel(QGroupBox):
 
     def set_state(self, mode: str, source_audio: str, bookend_audio: bool) -> None:
         """Bật / khoá từng dòng theo kiểu sản phẩm (ghi rõ lý do khi khoá)."""
+        self._loading = True
+        if source_audio in self.mode_buttons:
+            self.mode_buttons[source_audio].setChecked(True)
+        self.mode_buttons["mix"].setEnabled(mode != "video_only")
+        self.mode_buttons["mix"].setToolTip("Kiểu Chỉ video không có nhạc" if mode == "video_only" else "")
+        self.mode_box.setVisible(self._hints and mode != "music_only")
+        self.level.setVisible(self._hints and mode != "music_only")
+        self.sources_note.setVisible(self._hints and mode != "music_only")
+        self._loading = False
         if mode == "music_only":
             self.music.set_usable(True)
         elif mode == "video_only":
@@ -231,6 +344,7 @@ class MixerPanel(QGroupBox):
             else:
                 self.source.set_usable(True)
         self.source.set_visible(show_src)
+        self._update_balance()
 
     def set_timeline(self, total: float, changes: list[float]) -> None:
         self._total, self._changes = max(0.0, total), changes

@@ -63,6 +63,31 @@ def track_gains(runner: ft.Runner, ms: MusicSettings, paths: dict[int, str], log
     return gains
 
 
+SOURCE_GAIN_MAX = 15.0  # tiếng gốc: cân tối đa ±15 dB (clip gần như im lặng thì để nguyên, không kéo ồn nền lên)
+
+
+def source_gains(runner: ft.Runner, paths: dict[int, str], audible: dict[int, bool], target: float,
+                 log=None) -> dict[int, float]:
+    """Tự cân tiếng gốc: dB cho từng clip có tiếng để clip nào cũng to bằng mức LUFS đích (cùng mức với nhạc).
+    Nhờ vậy 100% tiếng gốc + 100% nhạc nghe ngang nhau, clip to / nhỏ khác nhau không còn chênh."""
+    from concurrent.futures import ThreadPoolExecutor
+    gains: dict[int, float] = {}
+    files = list(dict.fromkeys(p for k, p in sorted(paths.items()) if audible.get(k)))
+    with ThreadPoolExecutor(max_workers=4) as pool:  # đo 4 clip cùng lúc (40–50 clip: nhanh gấp ~3 lần)
+        seen = dict(zip(files, pool.map(lambda p: measure_loudness(runner, p), files)))
+    for path in files:
+        if log and seen[path] is not None:
+            g = max(-SOURCE_GAIN_MAX, min(SOURCE_GAIN_MAX, target - seen[path]))
+            log(f"  Tiếng gốc {Path(path).name}: {seen[path]:.1f} LUFS → {g:+.1f} dB")
+    for k, path in sorted(paths.items()):
+        if not audible.get(k):
+            continue
+        lufs = seen[path]
+        if lufs is not None:
+            gains[k] = max(-SOURCE_GAIN_MAX, min(SOURCE_GAIN_MAX, target - lufs))
+    return gains
+
+
 def measure_loudness(runner: ft.Runner, path: str) -> float | None:
     """Độ to tích hợp (LUFS) của bài. Có cache trên đĩa."""
     cached = cached_loudness(path)

@@ -126,6 +126,18 @@ AUDIO_FORMATS = {
 }
 
 
+def parallel_jobs(encoder: str) -> int:
+    """Số khối chuẩn hoá cùng lúc. Card đồ hoạ (NVENC / AMF / QSV) mã hoá nhiều phiên song song, trong lúc CPU giải mã
+    + co giãn clip tiếp theo → nhanh hơn rõ khi ghép 40–50 clip. 3 phiên: an toàn cả với driver GeForce cũ.
+    CPU (libx264 / x265) tự dùng mọi nhân → chạy 2 cho kín máy, nhiều hơn chỉ tranh nhau."""
+    import os
+    if encoder.endswith(("_nvenc", "_amf")):
+        return 3
+    if encoder.endswith("_qsv"):
+        return 2
+    return 2 if (os.cpu_count() or 4) >= 8 else 1
+
+
 def audio_args(choice: str, available: dict[str, list[str]]) -> list[str]:
     """`aac_mf` (Media Foundation của Windows) nhanh hơn AAC tích hợp của ffmpeg rất nhiều."""
     if choice == "max":
@@ -205,6 +217,13 @@ def pix_fmt(encoder: str) -> str:
     return "nv12" if encoder.endswith("_qsv") else "yuv420p"
 
 
+# NVENC p4 + tune hq: nhanh hơn p6 ~35–40% (đo trên clip 2K / 720p thật), độ nét SSIM chênh < 0,001, file không nặng
+# hơn → mức Tiết kiệm / Cân bằng / Cao dùng p4. "Rất cao" giữ p6 cho ai cần nén kỹ hơn, không ngại chậm.
+NVENC_PRESET = ["p4", "p4", "p4", "p6"]
+AMF_QUALITY = ["balanced", "balanced", "balanced", "quality"]  # AMD: cùng ý — "quality" chậm nhất, chỉ cho Rất cao
+QSV_PRESET = ["medium", "medium", "medium", "slow"]
+
+
 def encoder_args(encoder: str, quality: str, gop: int, maxrate_kbps: int = 0, strict: bool = False) -> list[str]:
     """Tham số mã hoá theo mức chất lượng. `maxrate_kbps` > 0: chặn bitrate đỉnh (giới hạn dung lượng).
     `strict`: giới hạn cứng do người dùng đặt (Mbps / GB) — NVENC chuyển sang VBR theo bitrate, vì kiểu theo
@@ -221,29 +240,29 @@ def encoder_args(encoder: str, quality: str, gop: int, maxrate_kbps: int = 0, st
         return common + ["-preset", "medium", "-crf", ["26", "23", "20", "18"][q],
                          "-x265-params", "log-level=error", *cap]
     if encoder in ("h264_nvenc", "hevc_nvenc") and maxrate_kbps > 0 and strict:
-        return common + ["-preset", ["p5", "p5", "p6", "p7"][q], "-tune", "hq", "-rc", "vbr",
+        return common + ["-preset", NVENC_PRESET[q], "-tune", "hq", "-rc", "vbr",
                          "-b:v", f"{maxrate_kbps * 8 // 10}k", "-maxrate", f"{maxrate_kbps}k",
                          "-bufsize", f"{maxrate_kbps}k", "-spatial-aq", "1",
                          "-profile:v", "high" if encoder == "h264_nvenc" else "main"]
     if encoder == "h264_nvenc":
-        return common + ["-preset", ["p5", "p5", "p6", "p7"][q], "-tune", "hq", "-rc", "vbr",
+        return common + ["-preset", NVENC_PRESET[q], "-tune", "hq", "-rc", "vbr",
                          "-cq", ["26", "23", "20", "18"][q], "-b:v", "0", "-spatial-aq", "1",
                          "-profile:v", "high", *cap]
     if encoder == "hevc_nvenc":
-        return common + ["-preset", ["p5", "p5", "p6", "p7"][q], "-tune", "hq", "-rc", "vbr",
+        return common + ["-preset", NVENC_PRESET[q], "-tune", "hq", "-rc", "vbr",
                          "-cq", ["28", "25", "22", "20"][q], "-b:v", "0", "-spatial-aq", "1",
                          "-profile:v", "main", *cap]
     if encoder in ("h264_qsv", "hevc_qsv"):
-        preset = ["medium", "medium", "slow", "veryslow"][q]
+        preset = QSV_PRESET[q]
         if maxrate_kbps > 0:  # ICQ không nhận maxrate → dùng VBR có trần
             return common + ["-preset", preset, "-b:v", f"{maxrate_kbps * 7 // 10}k", *cap]
         base = [26, 23, 20, 18] if encoder == "h264_qsv" else [28, 25, 22, 20]
         return common + ["-preset", preset, "-global_quality", str(base[q])]
     if encoder in ("h264_amf", "hevc_amf"):
         if maxrate_kbps > 0:
-            return common + ["-quality", "quality", "-rc", "vbr_peak", "-b:v", f"{maxrate_kbps * 7 // 10}k", *cap]
+            return common + ["-quality", AMF_QUALITY[q], "-rc", "vbr_peak", "-b:v", f"{maxrate_kbps * 7 // 10}k", *cap]
         base = [25, 22, 19, 17] if encoder == "h264_amf" else [27, 24, 21, 19]
-        return common + ["-quality", "quality", "-rc", "cqp",
+        return common + ["-quality", AMF_QUALITY[q], "-rc", "cqp",
                          "-qp_i", str(base[q]), "-qp_p", str(base[q] + 2)]
     return common + cap
 

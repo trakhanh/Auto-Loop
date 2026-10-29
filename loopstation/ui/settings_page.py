@@ -39,7 +39,7 @@ def pill(ok: bool | None, text: str, fixed: int = 0) -> QLabel:
         f = lab.font()
         f.setBold(True)
         need = QFontMetrics(f).horizontalAdvance(lab.text()) + 30
-        lab.setFixedWidth(max(fixed, need))
+        lab.setMinimumWidth(max(fixed, need))  # tối thiểu (không cố định): đổi cỡ chữ lớn hơn vẫn đủ chỗ
         lab.setAlignment(Qt.AlignmentFlag.AlignCenter)
     return lab
 

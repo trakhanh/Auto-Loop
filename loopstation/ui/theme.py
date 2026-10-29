@@ -17,7 +17,7 @@ from ..core import ffmpeg_tools as ft
 
 APP_NAME = "KT Loop Station"
 AUTHOR = "By Khánh Trà"
-APP_VERSION = "1.8.4"
+APP_VERSION = "1.8.5"
 # nơi lưu cài đặt (registry); KTLS_SETTINGS_ORG dùng cho test để không đụng cài đặt thật
 SETTINGS_ORG = os.environ.get("KTLS_SETTINGS_ORG", "KTLoopStation")
 
@@ -308,6 +308,9 @@ QLabel#info {{ background: {rgba(t['info'], 0.10)}; border: 1px solid {rgba(t['i
 QLabel#info[tone="accent"] {{ background: {rgba(t['accent'], 0.14)}; border-color: {rgba(t['accent'], 0.45)}; }}
 QFrame#suggestBar {{ background: {rgba(t['accent'], 0.14)}; border: 1px solid {rgba(t['accent'], 0.45)};
                     border-radius: {R['md']}px; }}
+QFrame#readyBar {{ background: {rgba(t['success'], 0.10)}; border: 1px solid {rgba(t['success'], 0.45)};
+                  border-radius: {R['md']}px; }}
+QFrame#readyBar QLabel {{ background: transparent; color: {t['text']}; }}
 QLabel#toastDot {{ background: transparent; font-size: {f['subtitle']}; color: {t['accent_text']}; }}
 QLabel#toastDot[tone="ok"] {{ color: {t['success_text']}; }}
 QLabel#toastDot[tone="warn"] {{ color: {t['warn_text']}; }}
@@ -391,7 +394,7 @@ QPushButton#pill, QPushButton[size="sm"] {{ background: {t['field']}; border: 1p
                    padding: 3px 8px; color: {t['text_2']}; font-size: {f['small']}; font-weight: 600; }}
 QPushButton#pill:hover, QPushButton[size="sm"]:hover {{ border-color: {t['line_strong']}; color: {t['text']};
                    background: {t['raised']}; }}
-QPushButton#pill:checked, QPushButton[size="sm"]:checked {{ background: {rgba(t['accent'], 0.22)};
+QPushButton#pill:checked, QPushButton#pill[active="true"], QPushButton[size="sm"]:checked {{ background: {rgba(t['accent'], 0.22)};
                    border-color: {rgba(t['accent'], 0.55)}; color: {t['text']}; }}
 QPushButton#pill:disabled, QPushButton[size="sm"]:disabled {{ color: {t['text_disabled']}; background: {t['panel']};
                    border-color: {t['line_subtle']}; }}
@@ -487,6 +490,13 @@ QFrame#presetCard {{ background: {t['panel']}; border: 1px solid {t['line_subtle
 QFrame#presetCard:hover {{ border-color: {rgba(t['accent'], 0.55)}; }}
 QFrame#presetCard QLabel {{ background: transparent; }}
 QLabel#presetName {{ color: {t['text']}; font-size: {f['subtitle']}; font-weight: 600; }}
+/* hàng đợi: nút chọn bước tiếp theo, chi tiết mục, dải "Đang sửa mục" */
+QPushButton#helpCard[primary="true"] {{ background: {rgba(t['accent'], 0.14)}; border: 1px solid {rgba(t['accent'], 0.60)}; }}
+QPushButton#helpCard[primary="true"]:hover {{ background: {rgba(t['accent'], 0.22)}; border-color: {t['accent']}; }}
+QPushButton#helpCard:focus {{ border-color: {t['accent']}; }}
+QLabel#queueDetail {{ color: {t['text_2']}; background: transparent; }}
+QFrame#editBanner {{ background: {rgba(t['accent'], 0.16)}; border: none; border-bottom: 1px solid {rgba(t['accent'], 0.55)}; }}
+QFrame#editBanner QLabel {{ background: transparent; color: {t['text']}; }}
 QLabel#helpCardTitle {{ color: {t['text']}; font-weight: 600; background: transparent; }}
 QFrame#helpNews {{ background: {rgba(t['accent'], 0.07)}; border: 1px solid {rgba(t['accent'], 0.35)};
                   border-radius: {R['xl']}px; }}

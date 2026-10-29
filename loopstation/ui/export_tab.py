@@ -37,6 +37,7 @@ class ExportTab(QWidget):
     queueEdited = Signal()
     emptyActionRequested = Signal(int)  # nút ở màn hình trống: chuyển tới trang (0 = Video, 1 = Nhạc)
     batchRequested = Signal()  # thêm hàng loạt từ thư mục  # xoá/đổi thứ tự mục trong hàng đợi
+    queueEditRequested = Signal(int)  # "Sửa mục này": mở lại mục hàng đợi ở trang Video để chỉnh rồi cập nhật
 
     def __init__(self, settings: QSettings, parent=None):
         super().__init__(parent)
@@ -316,6 +317,7 @@ class ExportTab(QWidget):
         self.queue_add_btn.setToolTip("Lưu cấu hình hiện tại thành một mục chờ xuất. Thêm nhiều dự án rồi chạy "
                                       "lần lượt qua đêm.")
         self.queue_add_btn.clicked.connect(lambda: self.queueAddRequested.emit())
+        self._add_tip = self.queue_add_btn.toolTip()
 
         # chỉ hiện khi dùng được: đang xuất mới có Huỷ, xuất xong mới có Hiện file
         self.cancel_btn = QPushButton("Huỷ xuất")
@@ -373,16 +375,49 @@ class ExportTab(QWidget):
             "Bấm 'Thêm vào hàng đợi' để xếp nhiều dự án,\n"
             "rồi bấm 'Chạy hàng đợi' để xuất lần lượt."
         )
-        self.queue.setHeaderLabels(["Dự án", "Loại", "File đầu ra", "Trạng thái"])
+        # mỗi dòng = một file sẽ xuất: tên file + bên trong có gì (tập, tình huống, số dòng, độ dài) + trạng thái
+        self.queue.setHeaderLabels(["#", "Tên file", "Nội dung", "Trạng thái"])
         self.queue.setRootIsDecorated(False)
         self.queue.setAlternatingRowColors(True)
         self.queue.setSelectionMode(QTreeWidget.SelectionMode.ExtendedSelection)
         qh = self.queue.header()
         qh.setStretchLastSection(False)
         qh.setSectionResizeMode(2, QHeaderView.ResizeMode.Stretch)
-        self.queue.setColumnWidth(0, 165)
-        self.queue.setColumnWidth(1, 65)
-        self.queue.setColumnWidth(3, 135)
+        self.queue.setColumnWidth(0, 30)
+        self.queue.setColumnWidth(1, 150)
+        self.queue.setColumnWidth(3, 110)
+        self.queue.itemSelectionChanged.connect(self._show_detail)
+        self.queue.setIconSize(QSize(w.ThumbLoader.W * 3 // 4, w.ThumbLoader.H * 3 // 4))
+        self._q_thumbs = w.ThumbIcons(self)  # ảnh clip đầu của mỗi video trong hàng đợi
+        self.queue.itemDoubleClicked.connect(lambda *_: self._edit_selected())
+        # chi tiết mục đang chọn: biết rõ video trong hàng đợi có gì, lưu ở đâu; mở thư mục / sửa lại mục
+        self.q_detail = QLabel()
+        self.q_detail.setObjectName("queueDetail")
+        self.q_detail.setWordWrap(True)
+        self.q_detail.setTextInteractionFlags(Qt.TextInteractionFlag.TextSelectableByMouse)
+        self.q_open_btn = QPushButton("Mở thư mục")
+        self.q_open_btn.setObjectName("ghost")
+        self.q_open_btn.setIcon(icons.icon("folder", 13))
+        self.q_open_btn.setIconSize(QSize(13, 13))
+        self.q_open_btn.clicked.connect(self._open_selected_folder)
+        self.q_edit_btn = QPushButton("Sửa mục này")
+        self.q_edit_btn.setObjectName("pill")
+        self.q_edit_btn.setIcon(icons.icon("edit", 13))
+        self.q_edit_btn.setIconSize(QSize(13, 13))
+        self.q_edit_btn.setToolTip("Mở lại mục ở trang Video để chỉnh, rồi bấm “Cập nhật …” ở trang Xuất "
+                                   "(nháy đúp vào mục cũng được)")
+        self.q_edit_btn.clicked.connect(self._edit_selected)
+        self.q_detail_box = QFrame()
+        self.q_detail_box.setObjectName("presetCard")
+        db = QHBoxLayout(self.q_detail_box)
+        db.setContentsMargins(10, 8, 10, 8)
+        db.addWidget(self.q_detail, 1)
+        dbtn = QVBoxLayout()
+        dbtn.addWidget(self.q_edit_btn)
+        dbtn.addWidget(self.q_open_btn)
+        dbtn.addStretch(1)
+        db.addLayout(dbtn)
+        self._editing: QueueItem | None = None
 
         self.queue_run_btn = QPushButton("Chạy hàng đợi")
         self.queue_run_btn.setObjectName("accentBtn")
@@ -427,6 +462,7 @@ class ExportTab(QWidget):
         qv.setContentsMargins(10, 6, 10, 8)
         qv.setSpacing(6)
         qv.addWidget(self.queue, 1)
+        qv.addWidget(self.q_detail_box)
         qr = QHBoxLayout()
         for b in (self.queue_run_btn, self.q_batch, q_up, q_down):
             qr.addWidget(b)
@@ -796,18 +832,77 @@ class ExportTab(QWidget):
             "cancelled": "warn_text",
             "pending": "text_2",
         }
-        for it in items:
-            row = QTreeWidgetItem([it.project.name, KIND_LABELS.get(it.kind, it.kind),
-                                   os.path.basename(it.output), STATUS_LABELS.get(it.status, it.status)])
-            row.setToolTip(2, it.output)
+        keep = {self.queue.indexOfTopLevelItem(r) for r in self.queue.selectedItems()}
+        self.queue.blockSignals(True)
+        self.queue.clear()
+        self._q_thumbs.forget_waiting()
+        for k, it in enumerate(items, 1):
+            content = it.summary or f"{KIND_LABELS.get(it.kind, it.kind)} · {it.project.name}"
+            row = QTreeWidgetItem([str(k), Path(it.output).stem, content, STATUS_LABELS.get(it.status, it.status)])
+            row.setToolTip(1, it.output)
+            row.setToolTip(2, content)
             row.setToolTip(3, it.message)
             col = status_colors.get(it.status)
             if col:
                 row.setForeground(3, theme.qcolor(col))
+            if it is self._editing:
+                row.setForeground(1, theme.qcolor("accent_text"))
+                row.setText(3, "Đang sửa")
             self.queue.addTopLevelItem(row)
+            first = next((c.path for c in it.project.video.clips if c.enabled), "") if it.kind == "video" else ""
+            self._q_thumbs.want(first, lambda icon, r=row: row_icon(r, icon))
+        for r in keep:
+            if 0 <= r < self.queue.topLevelItemCount():
+                self.queue.topLevelItem(r).setSelected(True)
+        self.queue.blockSignals(False)
+        self._show_detail()
         pending = sum(1 for i in items if i.status == "pending")
         self.queue_run_btn.setText(f"Chạy hàng đợi ({pending})" if pending else "Chạy hàng đợi")
         self.queue_run_btn.setEnabled(not self._running and pending > 0)
+
+    def _selected_rows(self) -> list[int]:
+        return sorted({self.queue.indexOfTopLevelItem(r) for r in self.queue.selectedItems()})
+
+    def _show_detail(self) -> None:
+        rows = self._selected_rows()
+        if len(rows) != 1 or not 0 <= rows[0] < len(self.items):
+            self.q_detail.setText("Bấm vào một mục để xem bên trong có gì và lưu ở đâu." if self.items else
+                                  "Cách dùng: làm xong 1 video → <b>Thêm vào hàng đợi</b> → <b>Làm video tiếp theo</b>"
+                                  " → … → <b>Chạy hàng đợi</b>.")
+            self.q_edit_btn.setEnabled(False)
+            self.q_open_btn.setEnabled(False)
+            return
+        it = self.items[rows[0]]
+        self.q_detail.setText(queue_detail_html(it))
+        self.q_edit_btn.setEnabled(it.status != "running" and it.kind == "video")
+        self.q_open_btn.setEnabled(True)
+
+    def _edit_selected(self) -> None:
+        rows = self._selected_rows()
+        if len(rows) == 1 and self.items[rows[0]].status != "running" and self.items[rows[0]].kind == "video":
+            self.queueEditRequested.emit(rows[0])
+
+    def _open_selected_folder(self) -> None:
+        rows = self._selected_rows()
+        if len(rows) != 1:
+            return
+        d = Path(self.items[rows[0]].output).parent
+        while not d.exists() and d.parent != d:  # chưa xuất (thư mục riêng chưa có): mở thư mục lưu gần nhất
+            d = d.parent
+        if d.exists():
+            os.startfile(str(d))  # type: ignore[attr-defined]
+
+    def set_editing(self, item: QueueItem | None) -> None:
+        """Đang sửa một mục hàng đợi: nút Thêm thành "Cập nhật …" để khỏi lỡ thêm thành mục mới."""
+        self._editing = item
+        if item is None:
+            self.queue_add_btn.setText("Thêm vào hàng đợi")
+            self.queue_add_btn.setToolTip(self._add_tip)
+        else:
+            self.queue_add_btn.setText(f"Cập nhật “{Path(item.output).stem}”")
+            self.queue_add_btn.setToolTip("Lưu thay đổi vào đúng mục này trong hàng đợi (không thêm mục mới). "
+                                          "Muốn bỏ sửa: Dự án mới hoặc mở dự án khác.")
+        self.set_queue(self.items)
 
     def set_queue_status(self, index: int, text: str) -> None:
         row = self.queue.topLevelItem(index)
@@ -829,6 +924,11 @@ class ExportTab(QWidget):
             return
         again = [self.items[r] for r in rows if self.items[r].status in ("error", "cancelled")]
         menu = QMenu(self)
+        if len(rows) == 1:
+            ed = menu.addAction(icons.icon("edit", 14), "Sửa mục này…", self._edit_selected)
+            ed.setEnabled(self.q_edit_btn.isEnabled())
+            menu.addAction(icons.icon("folder", 14), "Mở thư mục", self._open_selected_folder)
+            menu.addSeparator()
         act = menu.addAction(icons.icon("repeat", 14), f"Chạy lại ({len(again)} mục) — đặt về Đang chờ")
         act.setEnabled(bool(again))
         act.triggered.connect(lambda: self._requeue(again))
@@ -874,3 +974,38 @@ class ExportTab(QWidget):
             self._update_audio_enabled()
             self.changed.emit()
 
+
+
+def row_icon(row: QTreeWidgetItem, icon) -> None:
+    import shiboken6
+    if shiboken6.isValid(row):
+        row.setIcon(1, icon)
+
+
+def queue_detail_html(it: QueueItem) -> str:
+    """Chi tiết một mục hàng đợi, từng dòng có nhãn đậm: nội dung, bảng clip, hình, intro / outro, nhạc, nơi lưu."""
+    p, ex = it.project, it.project.export
+    esc = html.escape
+    label = theme.css_color("text")
+    rows: list[tuple[str, str]] = [("Nội dung", esc(it.summary or p.name))]
+    if it.kind == "video":
+        clips = [c for c in p.video.clips if c.enabled]
+        parts = [f"{Path(c.path).stem} ×{c.count}" if c.plays_mode == "fixed" else Path(c.path).stem for c in clips[:5]]
+        more = f" → … (+{len(clips) - 5} dòng)" if len(clips) > 5 else ""
+        rows.append(("Bảng clip", esc(" → ".join(parts)) + more))
+        fps = "fps theo clip" if ex.fps == "source" else f"{ex.fps} fps"
+        cap = {"mbps": f" · tối đa {ex.cap_mbps:g} Mbps", "size": f" · tối đa {ex.cap_gb:g} GB",
+               "youtube": " · bitrate mức YouTube"}.get(ex.bitrate_cap, "")
+        rows.append(("Hình", f"{esc(ex.resolution)} · {fps}{cap}"))
+        ends = " · ".join(x for x in (f"Intro {esc(Path(p.video.intro).name)}" if p.video.intro else "",
+                                      f"Outro {esc(Path(p.video.outro).name)}" if p.video.outro else "") if x)
+        rows.append(("Intro / Outro", ends or "không có"))
+        n_music = sum(1 for t in p.music.tracks if t.enabled) if p.output_kind == "video_music" else 0
+        rows.append(("Nhạc", f"{n_music} bài" if n_music else "không nhạc"))
+    rows.append(("Lưu tại", esc(it.output)))
+    if it.message and it.status == "error":
+        rows.append(("Lỗi", f"<span style='color:{theme.css_color('danger_text')}'>{esc(it.message[-300:])}</span>"))
+    body = "".join(f"<tr><td style='color:{label}; font-weight:600; padding:1px 12px 1px 0; white-space:nowrap'>{k}</td>"
+                   f"<td style='padding:1px 0'>{v}</td></tr>" for k, v in rows)
+    return (f"<div style='color:{label}; font-size:large; font-weight:700; margin-bottom:4px'>"
+            f"{esc(Path(it.output).stem)}</div><table cellspacing='0'>{body}</table>")

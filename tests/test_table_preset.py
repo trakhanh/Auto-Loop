@@ -84,13 +84,14 @@ def test_builtin_table_preset_ships_with_app():
     st.clear()
     p = next(x for x in all_presets(st) if x["name"] == "Loop A ×57 kẹp Loop B")
     assert p["kind"] == "table" and not p.get("user")
-    assert tp.summary(p["rows"]) == "STT_loopB ×1 → STT_loopA ×57 → STT_loopB ×1 → STT_loopA ×1"
+    assert tp.summary(p["rows"]) == ("STT_loopAB ×1 (nếu có) → STT_loopB ×1 → STT_loopA ×57 → STT_loopB ×1 → "
+                                     "STT_loopA ×1")
     clips, missing = tp.build(p["rows"], [f"D:/f/{n}_loop{r}.mp4" for n in range(1, 11) for r in "AB"])
     assert not missing and len(clips) == 40 and clips[1].path.endswith("1_loopA.mp4") and clips[1].count == 57
     save_table_presets(st, [{"name": "Loop A ×57 kẹp Loop B", "rows": p["rows"][:2]}])  # bản của bạn trùng tên: thay mẫu có sẵn
     mine = [x for x in all_table_presets(st) if x["name"] == "Loop A ×57 kẹp Loop B"]
     assert len(mine) == 1 and mine[0].get("user") and len(mine[0]["rows"]) == 2
-    assert len(TABLE_BUILTIN[0]["rows"]) == 4  # mẫu gốc không đổi
+    assert len(TABLE_BUILTIN[0]["rows"]) == 5  # mẫu gốc không đổi (LOOP AB nếu có + 4 dòng)
     st.clear()
 
 
@@ -144,3 +145,18 @@ def test_batch_splits_episodes(tmp_path):
         assert all(os.path.basename(c.path).startswith(f"{ep}_") for c in proj.video.clips)
     plain = batch.FolderJob(folder="x", name="Video 6", clips=["E:/x/6_loopA.mp4", "E:/x/6_loopB.mp4"])
     assert batch.split_episodes([plain]) == [plain]  # tên kiểu cũ: không tách
+
+
+def test_optional_row_goes_first_only_when_file_exists():
+    """LOOP AB (dòng "chỉ khi có file") lên đầu tình huống nào có file; tình huống khác bỏ qua, không báo thiếu."""
+    from loopstation.ui.interleave_dialog import TABLE_BUILTIN
+    rows = TABLE_BUILTIN[0]["rows"]
+    paths = [f"D:/m/33_{n}_LOOP {r}.mp4" for n in (1, 2, 3) for r in "AB"] + ["D:/m/33_2_ LOOP AB.mp4"]
+    clips, missing = tp.build(rows, paths, 33)
+    names = [os.path.basename(c.path) for c in clips]
+    assert not missing and len(clips) == 13
+    assert names[4:6] == ["33_2_ LOOP AB.mp4", "33_2_LOOP B.mp4"] and names[0] == "33_1_LOOP B.mp4"
+    assert tp.unused(rows, paths, 33) == []
+    assert tp.unused(rows, paths + ["D:/m/33_3_LOOP C.mp4"], 33) == ["33_3_LOOP C.mp4"]  # vai lạ: báo, không dùng
+    old = [r for r in rows if not r.get("optional")]  # mẫu chưa có dòng LOOP AB: file AB được báo
+    assert tp.unused(old, paths, 33) == ["33_2_ LOOP AB.mp4"]

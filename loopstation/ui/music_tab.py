@@ -208,6 +208,7 @@ class MusicTab(QWidget):
         g_order = QGroupBox("Thứ tự phát Playlist")
         f = QFormLayout(g_order)
         f.setVerticalSpacing(8)
+        f.setRowWrapPolicy(QFormLayout.RowWrapPolicy.WrapLongRows)  # cột hẹp / chữ to: nhãn lên trên, không đẩy cột
         f.addRow("Chế độ phát", self.order)
         f.addRow(self.lbl_seed, self.seed_wrap)
         self.pin_info = QLabel("")
@@ -380,7 +381,7 @@ class MusicTab(QWidget):
         rv.setSpacing(8)
         self.playlist_cards = (g_order, g_tr, g_loud)
         # thứ tự theo mức hay dùng: độ dài (Chỉ nhạc) → tiếng nền → thứ tự phát → [nâng cao: chuyển bài, âm lượng]
-        self.adv_btn = QPushButton("Nâng cao ▾  (chuyển bài, chuẩn hoá âm lượng)")
+        self.adv_btn = w.ShrinkButton("Nâng cao ▾  (chuyển bài, âm lượng)")  # co lại được, không đẩy cột phải
         self.adv_btn.setObjectName("ghost")
         self.adv_btn.setCheckable(True)
         self.adv_btn.setToolTip("Mặc định đã tốt cho YouTube: crossfade 3 giây, chuẩn hoá -14 LUFS")
@@ -398,7 +399,7 @@ class MusicTab(QWidget):
                 else:
                     g.setVisible(on)
             self.adv_btn.setText("Ẩn tuỳ chọn nâng cao ▴" if on else
-                                 "Nâng cao ▾  (chuyển bài, chuẩn hoá âm lượng)")
+                                 "Nâng cao ▾  (chuyển bài, âm lượng)")
             self.settings.setValue("ui/music_advanced", "true" if on else "false")
 
         self.adv_btn.toggled.connect(show_adv)

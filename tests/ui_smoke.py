@@ -27,6 +27,8 @@ theme.apply(app, 10)
 import loopstation.ui.main_window as mw  # noqa: E402
 # dự án mẫu dùng Intro / Outro trong Mau-Test: hộp hỏi “Intro mẫu” là modal, không ai bấm khi chạy ngầm
 mw.MainWindow._confirm_sample_bookends = lambda self: True
+mw.MainWindow._after_queue_add = lambda self, out, summary: None  # hộp hỏi bước tiếp theo (modal)
+mw.QMessageBox.question = staticmethod(lambda *a, **k: mw.QMessageBox.StandardButton.Yes)  # thêm trùng
 from loopstation.core.project import Project  # noqa: E402
 
 ini = os.path.join(scratch, "settings.ini")

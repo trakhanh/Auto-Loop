@@ -177,11 +177,15 @@ class RenderJob:
         # ----- 2. tiếng gốc -----
         src_blocks = {}
         if tl.use_source:
+            sgains = {}
+            if vs.source_level:
+                self.progress(W_VIDEO, "Đang đo độ to tiếng gốc…")
+                sgains = audio_build.source_gains(self.runner, paths, tl.audible, self.project.music.lufs, self.log)
             uniq = list(dict.fromkeys(segs))
-            for k, seg in enumerate(uniq):
-                self.progress(W_VIDEO + W_SRC * k / len(uniq), "Đang tách tiếng gốc…")
-                src_blocks[seg] = video_build.source_audio_segment(
-                    self.runner, seg, paths, tl.audible, tl.fps, vs.fade_out, tl.offsets)
+            src_blocks = dict(zip(uniq, _parallel(
+                uniq, lambda seg: video_build.source_audio_segment(
+                    self.runner, seg, paths, tl.audible, tl.fps, vs.fade_out, tl.offsets, sgains), 4,
+                lambda k: self.progress(W_VIDEO + W_SRC * k / len(uniq), "Đang tách tiếng gốc…"))))
 
         # ----- 3. đo âm lượng nhạc -----
         used_tracks = sorted({it.track for it in tl.music_items})
@@ -239,9 +243,9 @@ class RenderJob:
         partial = self.output.with_name(self.output.stem + ".dang-xuat.mp4")
         args += ["-t", f"{total:.6f}"]
         if total <= FASTSTART_MAX:
-            # đưa chỉ mục lên đầu file để xem được ngay trên web; video rất dài thì bỏ qua cho nhanh
-            # (phải ghi lại cả file, ~70 giây với file 20 GB; YouTube không cần)
-            args += ["-movflags", "+faststart"]
+            # chỉ mục (moov) ở đầu file để xem được ngay trên web. Giữ sẵn chỗ cho nó thay vì +faststart:
+            # +faststart ghi lại CẢ file lần nữa (file 4 GB mất thêm 25–50 giây); giữ chỗ thì ghi một lần là xong.
+            args += ["-moov_size", str(moov_reserve(total, tl.fps))]
         args += ["-metadata", f"title={proj.name}", "-f", "mp4", str(partial)]
 
         # ----- 5. ghép -----
@@ -255,7 +259,7 @@ class RenderJob:
                 return
             frac = min(1.0, t / total) if total else 1.0
             if frac >= 0.999:
-                self.progress(base + W_MUX * 0.999, "Đang hoàn tất file (sắp xếp lại để xem nhanh trên web)…")
+                self.progress(base + W_MUX * 0.999, "Đang hoàn tất file…")
                 return
             elapsed = time.time() - start
             eta = elapsed / frac * (1 - frac) if frac > 0.01 else 0
@@ -423,17 +427,63 @@ class RenderJob:
             self.log("Màu & Logo: " + ", ".join(parts))
         self.log(f"Encoder: {encoder} — {len(uniq)} khối video khác nhau ({n_x} đoạn crossfade), "
                  f"ghép thành {len(segs)} khối.")
-        blocks = {}
-        for k, seg in enumerate(uniq):
-            what = "crossfade" if seg.kind == "xfade" else "clip"
-            self.progress(W_VIDEO * k / len(uniq),
-                          f"Đang chuẩn hoá {what} {k + 1}/{len(uniq)} bằng {encoder}…")
-            blocks[seg] = video_build.encode_segment(
+        jobs = encoders.parallel_jobs(encoder)
+        if jobs > 1 and len(uniq) > 1:
+            self.log(f"Chuẩn hoá {jobs} khối cùng lúc")
+
+        def one(seg):
+            return video_build.encode_segment(
                 self.runner, seg, paths, tl.fps, tl.width, tl.height, vs.fit, encoder, ex.quality,
                 vs.fade_out, tl.offsets, getattr(self, "maxrate", 0), look, vs.look_bookends,
                 getattr(self, "strict_cap", False))
+
+        def step(done: int) -> None:
+            self.progress(W_VIDEO * done / len(uniq), f"Đang chuẩn hoá {done + 1}/{len(uniq)} khối bằng {encoder}"
+                          + (f" ({jobs} khối cùng lúc)…" if jobs > 1 else "…"))
+
+        blocks = dict(zip(uniq, _parallel(uniq, one, jobs, step)))
         self.progress(W_VIDEO, "Đã chuẩn hoá xong video.")
         return blocks
+
+
+def moov_reserve(total: float, fps) -> int:
+    """Byte giữ sẵn ở đầu file cho chỉ mục: mỗi khung hình / khung âm thanh tốn ≤ ~24 byte (kích thước, vị trí, thời
+    điểm…) → giữ 40 byte mỗi khung + 512 KB cho chắc (thiếu chỗ là ffmpeg báo lỗi). Thừa vài MB không đáng kể."""
+    frames = total * float(fps) + total * 48000 / 1024
+    return int(frames * 40) + 512 * 1024
+
+
+def _parallel(items: list, fn, jobs: int, on_step=None) -> list:
+    """Chạy fn(item) cho từng item, tối đa `jobs` việc cùng lúc, trả kết quả đúng thứ tự. Lỗi ở một việc: huỷ các
+    việc chưa chạy, đợi việc đang chạy xong rồi báo lỗi đó (để xuất lại bằng CPU nếu card đồ hoạ lỗi)."""
+    if jobs <= 1 or len(items) <= 1:
+        out = []
+        for k, it in enumerate(items):
+            if on_step:
+                on_step(k)
+            out.append(fn(it))
+        return out
+    from concurrent.futures import FIRST_EXCEPTION, ThreadPoolExecutor, wait
+    results: list = [None] * len(items)
+    done = 0
+    with ThreadPoolExecutor(max_workers=jobs) as pool:
+        futs = {pool.submit(fn, it): k for k, it in enumerate(items)}
+        pending = set(futs)
+        if on_step:
+            on_step(0)
+        while pending:
+            finished, pending = wait(pending, return_when=FIRST_EXCEPTION)
+            for f in finished:
+                if f.exception() is not None:
+                    for p in pending:
+                        p.cancel()
+                    wait(pending)
+                    raise f.exception()
+                results[futs[f]] = f.result()
+                done += 1
+            if on_step and done < len(items):
+                on_step(done)
+    return results
 
 
 def _fmt_dur(sec: float) -> str:

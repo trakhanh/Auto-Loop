@@ -108,17 +108,14 @@ def plan(rows: list[dict], paths: list[str], episode: int | None = None
     """Dựng bảng theo mẫu cho MỌI số thứ tự có trong `paths`, nối tiếp (1 → 2 → … → 10) thành một video.
     → ([(dòng mẫu, file, STT)…], các vai thiếu file ("loopb", "7_loopb" khi nhiều STT, "33_7_loopb" khi có số tập),
     các STT đã dùng). File không có số ở đầu (Content.mp4…) dùng chung: lấp vai còn thiếu ở mọi số thứ tự.
-    Tên có số tập (33_4_LOOP A): chỉ dùng file của tập `episode` (mặc định tập nhỏ nhất) — mỗi tập một video."""
-    eps = episodes(paths)
-    if eps:
-        episode = episode if episode in eps else eps[0]
-        paths = [p for p in paths if in_episode(p, episode)]
-    else:
-        episode = None
+    Tên có số tập (33_4_LOOP A): chỉ dùng file của tập `episode` (mặc định tập nhỏ nhất) — mỗi tập một video.
+    Dòng "chỉ khi có file" (`optional`, ví dụ LOOP AB): tình huống nào có file thì dùng, không có thì bỏ, không báo thiếu."""
+    paths, episode = _episode_paths(paths, episode)
     groups: dict[int | None, dict[str, str]] = {}
     for p in sorted(paths, key=_natural):
         groups.setdefault(stt_of(p), {}).setdefault(role_of(p), p)
     need = roles(rows)
+    must = roles([r for r in rows if not r.get("optional")])
     shared = groups.get(None, {})
     numbered = [g for g in groups if g is not None and any(r in groups[g] for r in need)]
     used: list[int | None] = numbered or ([None] if any(r in shared for r in need) else [])
@@ -130,10 +127,27 @@ def plan(rows: list[dict], paths: list[str], episode: int | None = None
             if path:
                 out.append((r, path, g))
         missing += [m if (len(used) < 2 and episode is None) or g is None
-                    else f"{g}_{m}" if episode is None else f"{episode}_{g}_{m}" for m in need if m not in found]
+                    else f"{g}_{m}" if episode is None else f"{episode}_{g}_{m}" for m in must if m not in found]
     if not used:
-        missing = list(need)
+        missing = list(must)
     return out, missing, used
+
+
+def _episode_paths(paths: list[str], episode: int | None) -> tuple[list[str], int | None]:
+    eps = episodes(paths)
+    if not eps:
+        return list(paths), None
+    episode = episode if episode in eps else eps[0]
+    return [p for p in paths if in_episode(p, episode)], episode
+
+
+def unused(rows: list[dict], paths: list[str], episode: int | None = None) -> list[str]:
+    """File có số thứ tự (của tập đang dựng) mà vai không có trong mẫu → không được dùng, cần báo
+    (ví dụ 33_2_LOOP AB khi mẫu chưa có dòng LOOP AB)."""
+    paths, _ep = _episode_paths(paths, episode)
+    known = set(roles(rows))
+    return [os.path.basename(p) for p in sorted(paths, key=_natural)
+            if stt_of(p) is not None and role_of(p) not in known]
 
 
 def match(rows: list[dict], paths: list[str]) -> tuple[dict[str, str], list[str]]:
@@ -201,6 +215,28 @@ def plays_text(r: dict) -> str:
 
 def summary(rows: list[dict], limit: int = 8) -> str:
     """"STT_loopB ×1 → STT_loopA ×57 → STT_loopB ×1 → …" (để hiện trong danh sách mẫu)."""
-    parts = [f"{r.get('label') or r.get('role')} {plays_text(r)}" for r in rows if r.get("enabled", True)]
+    parts = [f"{r.get('label') or r.get('role')} {plays_text(r)}" + (" (nếu có)" if r.get("optional") else "")
+             for r in rows if r.get("enabled", True)]
     more = len(parts) - limit
     return " → ".join(parts[:limit]) + (f" → … (+{more} dòng)" if more > 0 else "")
+
+
+def best_preset(presets: list[dict], paths: list[str], prefer: str = "") -> dict | None:
+    """Mẫu bảng hợp nhất với bộ file vừa thả (để tự áp, khỏi chọn lại mỗi tập): mẫu dùng lần trước nếu khớp,
+    không thì mẫu khớp nhiều file nhất. None khi không mẫu nào dùng được phần lớn các file đánh số."""
+    numbered = [p for p in paths if stt_of(p) is not None]
+    if not numbered:
+        return None
+    best, best_key = None, None
+    for p in presets:
+        rows = p.get("rows") or []
+        items, missing, _used = plan(rows, paths)
+        if not items:
+            continue
+        extra = unused(rows, paths)
+        if len(extra) > len(numbered) * 0.2:  # mẫu bỏ sót quá nhiều file: không phải mẫu của bộ này
+            continue
+        key = (p.get("name") == prefer, -len(extra), -len(missing))
+        if best_key is None or key > best_key:
+            best, best_key = p, key
+    return best

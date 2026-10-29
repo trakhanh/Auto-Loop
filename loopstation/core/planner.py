@@ -265,6 +265,19 @@ def segments(plan: VideoPlan, frames: dict[int, int]) -> list[Segment]:
     return out
 
 
+def round_order(plan: VideoPlan, r: int = 0) -> list[tuple[int, int]]:
+    """Thứ tự clip trong lượt `r` (mặc định lượt đầu): [(chỉ số clip, số lần phát liền nhau)…] — xem trước khi trộn."""
+    out: list[tuple[int, int]] = []
+    for clip, n, rr in plan.all_plays():
+        if clip < 0 or rr != r:
+            continue
+        if out and out[-1][0] == clip:
+            out[-1] = (clip, out[-1][1] + n)
+        else:
+            out.append((clip, n))
+    return out
+
+
 def describe_rounds(plan: VideoPlan, names: list[str], max_rounds: int = 20) -> str:
     """Mô tả thứ tự phát theo từng vòng, để người dùng xem trước."""
     if plan.error:

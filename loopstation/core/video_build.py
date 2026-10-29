@@ -246,8 +246,10 @@ def source_audio_segment(
     fps: Fraction,
     fade_out: float = 0.0,
     offsets: dict[int, int] | None = None,
+    gains: dict[int, float] | None = None,
 ) -> Path:
-    """Tiếng gốc khớp đúng khối video (WAV 48 kHz stereo). Clip tắt tiếng/không có tiếng → im lặng."""
+    """Tiếng gốc khớp đúng khối video (WAV 48 kHz stereo). Clip tắt tiếng/không có tiếng → im lặng.
+    `gains`: dB tự cân cho từng clip (audio_build.source_gains) — clip to / nhỏ khác nhau về cùng mức."""
     n_s = samples_of(seg.frames, fps)
     dur = n_s / SAMPLE_RATE
     fade = min(fade_out, dur) if seg.fade else 0.0
@@ -256,7 +258,9 @@ def source_audio_segment(
     if seg.kind == "xfade":
         sides.append((seg.clip_b, samples_of(offs.get(seg.clip_b, 0), fps)))
     ids = [(_file_id(paths[c]) if audible.get(c) else "silence", s) for c, s in sides]
-    key = _key(BLOCK_VERSION, "a", seg.kind, *ids, n_s, f"{fade:.3f}")
+    gdb = {c: round((gains or {}).get(c, 0.0), 2) for c, _ in sides}
+    key = _key(BLOCK_VERSION, "a", seg.kind, *ids, n_s, f"{fade:.3f}",
+               *(f"g{gdb[c]:.2f}" for c, _ in sides if gdb[c]))
     fmt = "aformat=sample_fmts=s16:channel_layouts=stereo"
 
     def build(out: str) -> list[str]:
@@ -264,7 +268,8 @@ def source_audio_segment(
         for k, (clip, start) in enumerate(sides):
             if audible.get(clip):
                 inputs += ["-i", paths[clip]]
-                chains.append(f"[{k}:a:0]asetpts=PTS-STARTPTS,aresample=48000,{fmt},apad,"
+                vol = f"volume={gdb[clip]:.2f}dB," if gdb[clip] else ""
+                chains.append(f"[{k}:a:0]asetpts=PTS-STARTPTS,aresample=48000,{vol}{fmt},apad,"
                               f"atrim=start_sample={start}:end_sample={start + n_s},"
                               f"asetpts=PTS-STARTPTS[s{k}]")
             else:

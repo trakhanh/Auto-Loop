@@ -783,6 +783,10 @@ class BatchDialog(QDialog):
                 if missing:
                     extra.append("Thiếu file: " + ", ".join(tp.missing_names(p["rows"], missing, job.clips))
                                  + " — dòng đó bị bỏ")
+                odd = tp.unused(p["rows"], job.clips)
+                if odd:
+                    extra.append("File chưa có trong mẫu (không dùng): " + ", ".join(odd[:4])
+                                 + (f" (+{len(odd) - 4})" if len(odd) > 4 else ""))
             if not job.error:
                 proj = self._build(job)
                 tl = timeline.build_audio(proj) if self.music_only else timeline.build(proj)

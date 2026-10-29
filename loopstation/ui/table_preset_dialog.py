@@ -29,6 +29,12 @@ EMPTY_GUIDE = (
     "</ol>")
 
 
+def _set_file_icon(row: QTreeWidgetItem, icon) -> None:
+    import shiboken6
+    if shiboken6.isValid(row):
+        row.setIcon(C_FILE, icon)
+
+
 class TablePresetDialog(QDialog):
     """`clips`: bảng hiện tại (để lưu thành mẫu và làm nguồn file khi áp). Bấm Áp dụng → `result_clips`."""
 
@@ -74,6 +80,9 @@ class TablePresetDialog(QDialog):
         self.tree.setHeaderLabels(["#", "Vai (tên file)", "Số lần phát", "Nối loop", "Sang clip", "Cắt đoạn",
                                    "Sẽ dùng file"])
         self.tree.setRootIsDecorated(False)
+        self.tree.setIconSize(QSize(w.ThumbLoader.W * 3 // 4, w.ThumbLoader.H * 3 // 4))
+        self._thumbs = w.ThumbIcons(self)  # ảnh xem trước file sẽ dùng
+        self.finished.connect(lambda *_: self._thumbs.shutdown())
         self.tree.setSelectionMode(QTreeWidget.SelectionMode.NoSelection)
         self.empty = QLabel(EMPTY_GUIDE)  # chưa có mẫu: hướng dẫn tạo mẫu thay cho bảng trống
         self.empty.setObjectName("info")
@@ -167,6 +176,7 @@ class TablePresetDialog(QDialog):
         self.tree.setVisible(p is not None)
         self.empty.setVisible(p is None)
         self.tree.clear()
+        self._thumbs.forget_waiting()
         n_files = len(self.paths)
         where = (f"thư mục <b>{os.path.basename(self.source_dir) or self.source_dir}</b>" if self.source_dir
                  else "bảng clip hiện tại")
@@ -184,7 +194,8 @@ class TablePresetDialog(QDialog):
         for k, (r, path, g) in enumerate(items, 1):
             trim = ("Toàn bộ" if not (r.get("trim_start") or r.get("trim_end"))
                     else f"bỏ {r.get('trim_start', 0):g}s đầu, {r.get('trim_end', 0):g}s cuối")
-            it = QTreeWidgetItem([str(k), r.get("label") or r.get("role", ""), tp.plays_text(r),
+            it = QTreeWidgetItem([str(k), (r.get("label") or r.get("role", "")) + (" (nếu có)" if r.get("optional")
+                                                                                else ""), tp.plays_text(r),
                                   w.xf_text(float(r.get("loop_xfade", 0))), w.xf_text(float(r.get("next_xfade", 0))),
                                   trim, os.path.basename(path)])
             it.setForeground(C_FILE, theme.qcolor("text_muted"))
@@ -196,12 +207,18 @@ class TablePresetDialog(QDialog):
                 for c in range(7):
                     it.setForeground(c, theme.qcolor("text_disabled"))
             self.tree.addTopLevelItem(it)
+            self._thumbs.want(path, lambda icon, row=it: _set_file_icon(row, icon))
         self.apply_btn.setEnabled(bool(items))
         n_eps = self.episode.count()
         head = (f"<b>Tập {ep}</b>" + (f" (thư mục có {n_eps} tập — mỗi tập một video)" if n_eps > 1 else "") + " · "
                 if ep is not None else "")
         head += (f"{len(used)} tình huống (STT {used[0]} → {used[-1]}) nối tiếp thành <b>1 video</b>: "
                  if many else "")
+        extra = tp.unused(rows, self.paths, ep)
+        if extra:  # file đánh số nhưng mẫu chưa có vai đó → không dùng: báo để khỏi mất cảnh mà không biết
+            more = f" (+{len(extra) - 4})" if len(extra) > 4 else ""
+            head = (f"<span style='color:{theme.css_color('warn_text')}'>File chưa có trong mẫu (không dùng): "
+                    f"{', '.join(extra[:4])}{more} — thêm dòng cho vai đó ở Thư viện mẫu → Sửa.</span><br>" + head)
         if missing:
             names = ", ".join(tp.missing_names(rows, missing, self.paths))
             self.note.setText(f"{head}<span style='color:{theme.css_color('warn_text')}'>Thiếu file: {names} — "

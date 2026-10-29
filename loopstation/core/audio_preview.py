@@ -129,10 +129,12 @@ def _render(project, start: float, runner: ft.Runner | None, version: int, secon
                 break
         if chosen:
             blocks = []
+            sgains = (audio_build.source_gains(runner, paths, tl.audible, project.music.lufs)
+                      if vs.source_level else {})
             for seg, d in chosen:
                 runner.check()
                 blocks.append((video_build.source_audio_segment(runner, seg, paths, tl.audible, tl.fps, vs.fade_out,
-                                                                tl.offsets), d))
+                                                                tl.offsets, sgains), d))
             alist = work / "source.ffconcat"
             video_build.write_concat(alist, blocks)
             inputs += ["-f", "concat", "-safe", "0", "-i", str(alist)]

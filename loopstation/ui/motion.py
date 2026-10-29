@@ -39,6 +39,8 @@ class UiMotion(QObject):
                 obj.verticalScrollBar().setSingleStep(18)
             return False
         if t == QEvent.Type.Show and isinstance(obj, QDialog) and obj.isWindow():
+            from . import branding
+            branding.apply_window_frame(obj)  # thanh tiêu đề + viền tối theo màu theme (như cửa sổ chính)
             fade_window_in(obj, 160)
             return False
         if t == QEvent.Type.Wheel:

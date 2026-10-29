@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import copy
+import html
 import os
 import threading
 from datetime import datetime
@@ -122,6 +123,10 @@ class MainWindow(QMainWindow):
         self.music_tab.list.changed.connect(lambda: self.music_tab.mixer.mark_stale(
             "Playlist / âm lượng từng bài vừa đổi — bấm Dừng rồi Nghe thử lại để nghe bản mới."))
         self.video_tab.mixerRequested.connect(self._open_mixer)
+        self.video_tab.queueAddRequested.connect(lambda: self.add_to_queue("video"))
+        self.video_tab.seasonDropped.connect(self._season_dropped)
+        self.video_tab.shuffleDetailsRequested.connect(self._show_shuffle_order)
+        self.music_tab.mixer.sourceModeChanged.connect(self._set_source_mode)
         self.settings_page = SettingsPage(self.settings)
         self.settings_page.prefsChanged.connect(self._apply_prefs)
         self.settings_page.recheckRequested.connect(lambda: self._detect_encoders(force=True))
@@ -165,6 +170,9 @@ class MainWindow(QMainWindow):
         self.export_tab.queueRunRequested.connect(self.run_queue)
         self.export_tab.batchRequested.connect(self.batch_from_folders)
         self.export_tab.queueEdited.connect(self._save_queue)
+        self.export_tab.queueEditRequested.connect(self._edit_queue_item)
+        self._editing_item: rq.QueueItem | None = None  # mục hàng đợi đang mở lại để sửa ("Sửa mục này")
+        self._auto_name = ""  # tên file app tự gợi ý ("Tập 33") — người dùng tự gõ tên khác thì không đè
         self.queue: list[rq.QueueItem] = rq.load(ffmpeg_tools.data_dir() / QUEUE_FILE)
         self._queue_running = False
         self._queue_item: rq.QueueItem | None = None
@@ -584,6 +592,28 @@ class MainWindow(QMainWindow):
         self.accent_line = effects.AccentLine()  # vạch dải màu; đang xuất thì chạy liên tục
         mv.addWidget(self.accent_line)
         mv.addWidget(self.guide)
+        self.edit_banner = QFrame()
+        self.edit_banner.setObjectName("editBanner")
+        eb = QHBoxLayout(self.edit_banner)
+        eb.setContentsMargins(16, 6, 12, 6)
+        eb.setSpacing(10)
+        eb_icon = QLabel()
+        icons.bind(eb_icon, "edit", 15, "accent_text")
+        self.edit_text = QLabel()
+        eb_update = QPushButton("Cập nhật mục")
+        eb_update.setObjectName("accentBtn")
+        eb_update.setToolTip("Lưu thay đổi vào đúng mục này trong hàng đợi (không tạo mục mới)")
+        eb_update.clicked.connect(lambda: self.add_to_queue("video"))
+        eb_cancel = QPushButton("Huỷ sửa")
+        eb_cancel.setObjectName("ghost")
+        eb_cancel.setToolTip("Thôi sửa — mục trong hàng đợi giữ nguyên như lúc thêm")
+        eb_cancel.clicked.connect(self._cancel_edit)
+        eb.addWidget(eb_icon)
+        eb.addWidget(self.edit_text, 1)
+        eb.addWidget(eb_update)
+        eb.addWidget(eb_cancel)
+        self.edit_banner.setVisible(False)
+        mv.addWidget(self.edit_banner)
         mv.addWidget(self.work, 1)
         mv.addWidget(self.timeline_wrap)
         shell = QWidget()
@@ -880,6 +910,7 @@ class MainWindow(QMainWindow):
         self.export_tab.fill_audio_export(music)  # độ dài/định dạng file nhạc nằm ở trang Xuất
         video = self.video_tab.collect()
         video.music_volume, video.source_volume = self.music_tab.mixer.values()  # Bảng trộn âm (mọi chế độ)
+        video.source_level = self.music_tab.mixer.level_on()
         return Project(name=self.name_edit.text().strip() or "Dự án", output_kind=self.mode,
                        video=video, music=music, export=self.export_tab.collect())
 
@@ -897,7 +928,9 @@ class MainWindow(QMainWindow):
             self.go_to(1)
         self._schedule()
 
-    def load_project(self, proj: Project) -> None:
+    def load_project(self, proj: Project, editing: rq.QueueItem | None = None) -> None:
+        self._set_editing(editing)  # mở dự án khác / dự án mới: thôi sửa mục hàng đợi
+        self._auto_name = ""
         self._initial_loaded = True
         self.name_edit.blockSignals(True)
         self.name_edit.setText(proj.name)
@@ -906,6 +939,7 @@ class MainWindow(QMainWindow):
         self.video_tab.load(proj.video)
         self.music_tab.load(proj.music)
         self.music_tab.mixer.set_values(proj.video.music_volume, proj.video.source_volume)
+        self.music_tab.mixer.set_level(proj.video.source_level)
         self.export_tab.load(proj.export)
         self.export_tab.load_audio_export(proj.music)
         self.set_mode(proj.output_kind)
@@ -1059,16 +1093,32 @@ class MainWindow(QMainWindow):
         if state == "playing":
             self.music_tab.mixer.stop(quiet=True)
 
+    def _suggest_filename(self, proj: Project) -> None:
+        """Bảng dùng file kiểu 33_4_LOOP A (một tập): tên file tự là "Tập 33" — khỏi quên đổi tên, khỏi trùng.
+        Người dùng đã tự gõ tên khác thì giữ nguyên."""
+        from ..core import table_preset as tp
+        eps = tp.episodes([c.path for c in proj.video.clips if c.enabled]) if self.mode != "music_only" else []
+        want = f"Tập {eps[0]}" if len(eps) == 1 else ""
+        cur = self.export_tab.filename.text().strip()
+        if want != self._auto_name and cur in ("", self._auto_name):
+            self.export_tab.filename.setText(want)
+            proj.export.filename = want
+        self._auto_name = want
+
     def _recompute_core(self) -> None:
         proj = self.collect_project()
+        self._suggest_filename(proj)
         v = proj.video
         self.music_tab.mixer.set_state(self.mode, v.source_audio, bool(v.intro or v.outro) and v.bookend_audio)
         self._update_nav_badges(proj)
         self._update_audio_info(proj)
         self.music_tab.set_versions_view(max(1, proj.music.versions), self.mode == "music_only")
         if self.mode == "music_only":
+            self.video_tab.set_ready("")
             self._recompute_music_only(proj)
             return
+        self.video_tab.set_ready("")
+        self.video_tab.set_shuffle("", [])
         self.video_tab.timeline.setEnabled(True)
         try:
             tl = timeline.build(proj)
@@ -1099,6 +1149,7 @@ class MainWindow(QMainWindow):
             self.export_tab.set_summary("<span style='color:" + theme.T["danger_text"] + "'>" + "<br>".join(tl.errors) + "</span>")
             return
         self.export_tab.set_can_export(True)
+        self._update_ready(proj, tl)
         v = tl.video
         first = next((c for c in proj.video.clips if c.enabled), None)
         info = tl.clip_infos.get(proj.video.clips.index(first)) if first else None
@@ -1108,6 +1159,7 @@ class MainWindow(QMainWindow):
                                                    proj.video.fit)
         self._set_chips(seq=v.sequence_seconds, rounds=v.rounds, plays=v.body_plays, total=tl.total,
                         warnings=tl.warnings)
+        self._update_shuffle(proj, v, clip_names)
         preview = planner.describe_rounds(v, clip_names)
         if tl.warnings:
             preview = "\n".join("Cảnh báo: " + w for w in tl.warnings) + "\n\n" + preview
@@ -1506,7 +1558,8 @@ class MainWindow(QMainWindow):
             p = copy.deepcopy(proj)
             p.music = planner.music_variant(p.music, seed)  # chốt thứ tự của bản này
             p.name = f"{proj.name} — bản {k + 1}"
-            items.append(rq.QueueItem(project=p, output=out, kind="audio"))
+            items.append(rq.QueueItem(project=p, output=out, kind="audio",
+                                      summary=rq.describe(p, "audio", tl.total) + f" · bản {k + 1}"))
         self.settings.setValue("dir/output", ex.output_dir)
         return items
 
@@ -1578,21 +1631,102 @@ class MainWindow(QMainWindow):
         if not tl.ok:
             QMessageBox.warning(self, "Chưa thêm được", "\n".join(tl.errors))
             return
+        editing = self._editing_item if kind == "video" and self._editing_item in self.queue else None
+        sig = rq.signature(proj, kind)
+        twin = next((i for i in self.queue if not i.finished and i is not editing
+                     and i.kind == kind and rq.signature(i.project, i.kind) == sig), None)
+        if twin is not None and QMessageBox.question(
+                self, "Có thể bị trùng",
+                f"Video này giống hệt mục “{Path(twin.output).stem}” đang có trong hàng đợi (cùng clip, cùng số lần "
+                "phát, cùng intro / outro).\n\nVẫn thêm?",
+                QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
+                QMessageBox.StandardButton.No) != QMessageBox.StandardButton.Yes:
+            return
+        if editing is not None:  # chỉ loại đường dẫn của chính mục này khỏi danh sách trùng tên
+            editing.output, keep = "", editing.output
         if kind == "video":
             out = self._output_path(proj, default_output_name(proj), ".mp4", for_queue=True)
         else:
             fmt = encoders.AUDIO_FORMATS[proj.music.export_format]
             base = os.path.splitext(default_output_name(proj))[0].replace("_", "_nhac_", 1)
             out = self._output_path(proj, base + fmt.ext, fmt.ext, for_queue=True)
+        if editing is not None and not out:
+            editing.output = keep
         if not out:
             return
-        self.queue.append(rq.QueueItem(project=copy.deepcopy(proj), output=out, kind=kind))
+        summary = rq.describe(proj, kind, tl.total if tl.ok else 0.0)
+        if editing is not None:  # "Cập nhật …": thay đúng mục đang sửa, chạy lại từ đầu
+            editing.project, editing.output, editing.summary = copy.deepcopy(proj), out, summary
+            editing.status, editing.message = "pending", ""
+            self._set_editing(None)
+            self._save_queue()
+            self.go_to(2)
+            self.notify(f"Đã cập nhật mục “{Path(out).stem}” trong hàng đợi.", "ok", 4000)
+            return
+        self.queue.append(rq.QueueItem(project=copy.deepcopy(proj), output=out, kind=kind, summary=summary))
         self.export_tab.set_queue(self.queue)
         self._save_queue()
-        pending = sum(1 for i in self.queue if i.status == "pending")
-        self.notify(f"Đã thêm vào hàng đợi: {os.path.basename(out)} — {pending} mục đang chờ.", "info", 4000)
         if kind == "audio":
+            pending = sum(1 for i in self.queue if i.status == "pending")
+            self.notify(f"Đã thêm vào hàng đợi: {os.path.basename(out)} — {pending} mục đang chờ.", "info", 4000)
             self.go_to(2)
+            return
+        self._after_queue_add(out, summary)
+
+    def _after_queue_add(self, out: str, summary: str) -> None:
+        """Thêm xong: nói rõ đã thêm gì, lưu ở đâu, và bước tiếp theo (làm video tiếp / chạy luôn)."""
+        from .queue_dialogs import QueueAddedDialog
+        pending = sum(1 for i in self.queue if i.status == "pending")
+        dlg = QueueAddedDialog(out, summary, pending, not (self.job or self._queue_running), self)
+        dlg.exec()
+        if dlg.choice == "next":
+            self.next_video()
+        elif dlg.choice == "run":
+            self.go_to(2)
+            self.run_queue()
+        else:
+            self.go_to(2)
+
+    def next_video(self) -> None:
+        """Làm video tiếp theo: bảng clip trống + tên file trống, giữ mọi cài đặt khác (intro / outro, nhạc, xuất…)."""
+        proj = self.collect_project()
+        proj.video.clips = []
+        proj.export.filename = ""
+        self.load_project(proj)
+        self.go_to(0)
+        self.notify("Bảng clip đã trống — thêm file video tiếp theo (Thư viện mẫu… để áp mẫu).", "info", 4500)
+
+    def _set_editing(self, item: rq.QueueItem | None) -> None:
+        self._editing_item = item
+        self.export_tab.set_editing(item)
+        banner = getattr(self, "edit_banner", None)
+        if banner is not None:
+            if item is not None:
+                self.edit_text.setText(f"Đang sửa mục <b>“{html.escape(Path(item.output).stem)}”</b> trong hàng đợi — "
+                                       "sửa xong bấm <b>Cập nhật mục</b>. Mục chỉ đổi khi bạn bấm Cập nhật.")
+            banner.setVisible(item is not None)
+
+    def _cancel_edit(self) -> None:
+        item = self._editing_item
+        self._set_editing(None)
+        self._schedule()  # nút trên dải Sẵn sàng về lại "Thêm vào hàng đợi"
+        if item is not None:
+            self.notify(f"Đã thôi sửa — “{Path(item.output).stem}” trong hàng đợi giữ nguyên.", "info", 3500)
+
+    def _edit_queue_item(self, index: int) -> None:
+        """"Sửa mục này": mở lại mục ở trang Video; nút Thêm thành "Cập nhật …" để lưu vào đúng mục đó."""
+        if not 0 <= index < len(self.queue) or self.queue[index].status == "running":
+            return
+        item = self.queue[index]
+        if QMessageBox.question(
+                self, "Sửa mục hàng đợi",
+                f"Mở lại “{Path(item.output).stem}” để sửa?\n\nBảng clip và cài đặt đang mở sẽ được thay bằng mục "
+                "này (lưu dự án trước nếu cần). Sửa xong bấm “Cập nhật …” ở trang Xuất.") \
+                != QMessageBox.StandardButton.Yes:
+            return
+        self.load_project(copy.deepcopy(item.project), editing=item)
+        self.go_to(0)
+        self.notify(f"Đang sửa “{Path(item.output).stem}” — sửa xong bấm Cập nhật mục (dải tím phía trên).", "info", 5000)
 
     def batch_from_folders(self) -> None:
         """Mỗi thư mục con = một video, dựng theo dự án đang mở làm khuôn rồi thêm cả loạt vào hàng đợi."""
@@ -1626,6 +1760,11 @@ class MainWindow(QMainWindow):
                 items = [rq.QueueItem(project=p, output=out, kind="video")]
             for it in items:
                 taken.add(it.output.lower())
+                try:
+                    tl = timeline.build_audio(it.project) if it.kind == "audio" else timeline.build(it.project)
+                    it.summary = rq.describe(it.project, it.kind, tl.total if tl.ok else 0.0)
+                except Exception:  # noqa: BLE001 — tóm tắt chỉ để xem, không chặn việc thêm
+                    it.summary = rq.describe(it.project, it.kind)
             added += items
         if not added:
             return
@@ -1747,6 +1886,170 @@ class MainWindow(QMainWindow):
             self.go_to(1)
         elif act == "welcome":
             self.show_welcome()
+
+    def _update_ready(self, proj: Project, tl) -> None:
+        """Dải "Sẵn sàng" ở trang Video: nhìn một chỗ biết video sẽ ra sao, thêm vào hàng đợi ngay tại đó."""
+        v = proj.video
+        bits = [rq.describe(proj, "video", tl.total)]
+        ends = [x for x, on in (("Intro", v.intro), ("Outro", v.outro)) if on]
+        bits.append(" + ".join(ends) if ends else "không intro / outro")
+        n_music = sum(1 for t in proj.music.tracks if t.enabled)
+        if self.mode == "video_music" and v.source_audio != "only":
+            bits.append(f"nhạc {n_music} bài" if n_music else "chưa có nhạc")
+        heard = sorted(k for k, on in tl.audible.items() if on and k >= 0)
+        n_heard = len({tl.clip_infos[k].path for k in heard if k in tl.clip_infos})
+        src = {"mix": "giữ tiếng gốc", "only": "chỉ tiếng gốc", "off": "tắt tiếng gốc"}.get(v.source_audio, "")
+        bits.append(src + (f" ({n_heard} file có tiếng)" if v.source_audio != "off" and n_heard else ""))
+        name = proj.export.filename.strip() or "tên tự đặt"
+        where = "" if proj.export.output_dir else \
+            f" <span style='color:{theme.css_color('warn_text')}'>· chưa chọn thư mục lưu (trang Xuất)</span>"
+        item = self._editing_item
+        self.video_tab.set_ready(f"<b>Sẵn sàng:</b> {html.escape(' · '.join(bits))} → <b>{html.escape(name)}.mp4</b>"
+                                 + where, f"Cập nhật “{Path(item.output).stem}”" if item else "Thêm vào hàng đợi")
+        names = [Path(tl.clip_infos[k].path).stem for k in heard if k in tl.clip_infos]
+        self.music_tab.mixer.set_sources(list(dict.fromkeys(names)), len({c.path for c in v.clips if c.enabled}))
+
+    def _update_shuffle(self, proj: Project, plan, names: list[str]) -> None:
+        """Trộn ngẫu nhiên: hiện ngay thứ tự sẽ xuất (lượt đầu) thay vì "xáo khi xuất" mù mờ."""
+        if proj.video.order != "shuffle":
+            self.video_tab.set_shuffle("", [])
+            return
+        order = planner.round_order(plan)
+        if not order:
+            self.video_tab.set_shuffle("", [])
+            return
+        shown = order[:6]  # dải chỉ tóm tắt; đủ cả 40–50 clip ở cửa sổ "Xem đủ thứ tự"
+        parts = [f"<b>{k}.</b> {html.escape(names[c])}" + (f" ×{n}" if n > 1 else "") for k, (c, n) in enumerate(shown, 1)]
+        more = f" → … (+{len(order) - len(shown)})" if len(order) > len(shown) else ""
+        rounds = plan.rounds or 1
+        tail = ""
+        if rounds > 1:
+            tail = (" · mỗi lượt lặp lại xáo thứ tự mới" if proj.video.reshuffle_each_round
+                    else f" · {rounds} lượt cùng thứ tự này")
+        self.video_tab.set_shuffle(f"<b>Thứ tự sẽ xuất</b> (số mầm {proj.video.seed}{tail}): " + " → ".join(parts) + more,
+                                   [c for c, _n in order], f"Xem đủ thứ tự ({len(order)} dòng)…")
+
+    def _shuffle_data(self, round_idx: int = 0) -> dict | None:
+        """Thứ tự một lượt trộn để xem trong cửa sổ riêng: (tên, số lần, giây bắt đầu ≈, giây dài) mỗi dòng."""
+        proj = self.collect_project()
+        try:
+            tl = timeline.build(proj)
+        except Exception:  # noqa: BLE001
+            return None
+        if not tl.ok or tl.video is None:
+            return None
+        plan, vs = tl.video, proj.video
+
+        def play_len(k: int) -> float:
+            info = tl.clip_infos.get(k)
+            if info is None or not info.ok:
+                return 0.0
+            if info.is_image:
+                return vs.image_duration
+            c = vs.clips[k] if 0 <= k < len(vs.clips) else None
+            return max(0.1, info.duration - (c.trim_start + c.trim_end if c else 0.0))
+
+        rows, order, t = [], [], 0.0
+        for clip, n, rnd in plan.all_plays():
+            d = play_len(clip) * n
+            if rnd == round_idx and clip >= 0:
+                if order and order[-1] == clip:
+                    name, n0, s0, d0, p0 = rows[-1]
+                    rows[-1] = (name, n0 + n, s0, d0 + d, p0)
+                else:
+                    rows.append((Path(vs.clips[clip].path).stem, n, t, d, vs.clips[clip].path))
+                    order.append(clip)
+            t += d
+        rounds = (plan.rounds or 1) if vs.reshuffle_each_round else 1
+        return {"title": f"Thứ tự sẽ xuất — {len(rows)} dòng (số mầm {vs.seed})", "rows": rows, "order": order,
+                "rounds": rounds}
+
+    def _show_shuffle_order(self) -> None:
+        import random
+        from .shuffle_dialog import ShuffleOrderDialog
+        vt = self.video_tab
+        dlg = ShuffleOrderDialog(self._shuffle_data, lambda: vt.seed.setValue(random.randint(0, 999_999)),
+                                 vt._freeze_order, self)
+        dlg.exec()
+
+    def _set_source_mode(self, mode: str) -> None:
+        """Bảng trộn âm đổi kiểu tiếng gốc → đồng bộ ô Tiếng gốc clip ở trang Video (một nguồn sự thật)."""
+        cb = self.video_tab.source
+        i = cb.findData(mode)
+        if i >= 0 and cb.model().item(i).isEnabled():
+            cb.setCurrentIndex(i)
+
+    def _season_dropped(self, paths: list, preset_name: str) -> None:
+        """Thả file của nhiều tập: hỏi một câu → đưa cả mùa vào hàng đợi (mỗi tập một video) hoặc làm một tập."""
+        from ..core import table_preset as tp
+        from .interleave_dialog import all_table_presets
+        from .queue_dialogs import QueueAddedDialog, SeasonDialog
+        preset = next((p for p in all_table_presets(self.settings) if p["name"] == preset_name), None)
+        if preset is None:
+            return
+        rows, groups = preset["rows"], tp.by_episode(paths)
+        desc = []
+        for ep, files in groups.items():
+            clips, missing = tp.build(rows, files, ep)
+            stts = sorted({n for n in map(tp.stt_of, files) if n is not None})
+            d = (f"tình huống {stts[0]} → {stts[-1]} · " if len(stts) > 1 else "") + f"{len(clips)} dòng"
+            if missing:
+                d += " · thiếu " + ", ".join(tp.missing_names(rows, missing, files)[:2])
+            desc.append((ep, d))
+        dlg = SeasonDialog(desc, preset_name, self.export_tab.out_dir.text().strip(), self)
+        dlg.exec()
+        if dlg.choice == "one":
+            clips, _missing = tp.build(rows, groups.get(dlg.episode, []), dlg.episode)
+            _c, infos, _d = self.video_tab._table_media()
+            self.video_tab._apply_arranged(clips, infos, f"Tập {dlg.episode} — mẫu “{preset_name}”")
+            self.settings.setValue("table/last", preset_name)
+            return
+        if dlg.choice != "all" or not self._confirm_sample_bookends():
+            return
+        if not self.export_tab.out_dir.text().strip():
+            d = QFileDialog.getExistingDirectory(self, "Chọn thư mục lưu cả mùa", self.settings.value("dir/output", ""))
+            if not d:
+                return
+            self.export_tab.out_dir.setText(d)
+        template = self.collect_project()
+        taken = {i.output.lower() for i in self.queue if not i.finished}
+        added = []
+        for ep, files in groups.items():
+            p = copy.deepcopy(template)
+            p.video.clips = tp.build(rows, files, ep)[0]
+            if not p.video.clips:
+                continue
+            p.export.filename = f"Tập {ep}"
+            out = output_path(p.export.output_dir, p.export.filename + ".mp4", p.export.own_folder, taken)
+            taken.add(out.lower())
+            try:
+                tl = timeline.build(p)
+                summary = rq.describe(p, "video", tl.total if tl.ok else 0.0)
+            except Exception:  # noqa: BLE001 — tóm tắt chỉ để xem
+                summary = rq.describe(p, "video")
+            added.append(rq.QueueItem(project=p, output=out, kind="video", summary=summary))
+        if not added:
+            return
+        self.settings.setValue("table/last", preset_name)
+        self.settings.setValue("dir/output", template.export.output_dir)
+        self.queue.extend(added)
+        self.export_tab.set_queue(self.queue)
+        self._save_queue()
+        cleared = self.collect_project()  # bảng trống chờ mùa sau, giữ mọi cài đặt
+        cleared.video.clips, cleared.export.filename = [], ""
+        self.load_project(cleared)
+        pending = sum(1 for i in self.queue if i.status == "pending")
+        box = QueueAddedDialog(template.export.output_dir, "", pending, not (self.job or self._queue_running), self,
+                               lines=[f"<b>{html.escape(Path(i.output).stem)}</b> — {html.escape(i.summary)}"
+                                      for i in added], name=f"{len(added)} tập đã vào hàng đợi")
+        box.exec()
+        if box.choice == "run":
+            self.go_to(2)
+            self.run_queue()
+        elif box.choice == "next":
+            self.go_to(0)
+        else:
+            self.go_to(2)
 
     def _open_mixer(self) -> None:
         self.go_to(1)
@@ -1919,7 +2222,14 @@ class MainWindow(QMainWindow):
             self._after_success(output)
             self.export_tab.on_progress(1.0, f"Xong! {output}")
             what = "File nhạc" if kind == "audio" else "Video"
-            QMessageBox.information(self, "Xuất xong", f"{what} đã lưu tại:\n{output}")
+            pending = sum(1 for i in self.queue if i.status == "pending")
+            if pending and kind in ("video", "audio"):  # thêm vào hàng đợi trong lúc xuất: hỏi chạy luôn
+                if QMessageBox.question(self, "Xuất xong", f"{what} đã lưu tại:\n{output}\n\nHàng đợi còn "
+                                        f"{pending} mục đang chờ. Chạy hàng đợi luôn?") == QMessageBox.StandardButton.Yes:
+                    self.go_to(2)
+                    self.run_queue()
+            else:
+                QMessageBox.information(self, "Xuất xong", f"{what} đã lưu tại:\n{output}")
         elif error == "cancel":
             self.export_tab.on_progress(0, "Đã huỷ.")
             self.notify("Đã huỷ xuất file.", "warn")

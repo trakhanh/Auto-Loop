@@ -11,11 +11,11 @@ import hashlib
 from concurrent.futures import ThreadPoolExecutor
 
 from PySide6.QtCore import QEasingCurve, QEvent, QObject, QPoint, QPropertyAnimation, QRect, QRectF, QSize, Qt, QTimer, Signal
-from PySide6.QtGui import (QFontMetrics, QColor, QFont, QImage, QKeyEvent, QKeySequence, QPainter, QPainterPath, QPen,
-                           QRegularExpressionValidator, QShortcut)
+from PySide6.QtGui import (QFontMetrics, QColor, QFont, QIcon, QImage, QKeyEvent, QKeySequence, QPainter, QPainterPath, QPen,
+                           QPixmap, QRegularExpressionValidator, QShortcut)
 from PySide6.QtWidgets import (
-    QApplication, QAbstractScrollArea, QAbstractSpinBox, QComboBox, QFrame, QGraphicsOpacityEffect,
-    QLayout, QMenu, QScrollArea, QSizePolicy, QStackedWidget,
+    QApplication, QAbstractScrollArea, QAbstractSlider, QAbstractSpinBox, QComboBox, QFrame, QGraphicsOpacityEffect,
+    QLayout, QMenu, QScrollArea, QScrollBar, QSizePolicy, QStackedWidget,
     QAbstractItemView, QCheckBox, QFileDialog, QHBoxLayout, QLineEdit, QPushButton,
     QDoubleSpinBox, QLabel, QSpinBox, QStyle, QStyledItemDelegate, QStyleOptionButton, QStylePainter, QTreeWidget, QTreeWidgetItem, QWidget,
 )
@@ -801,6 +801,7 @@ class ListToolbar(QWidget):
         super().__init__(parent)
         self.lst = lst
         self.recursive = QCheckBox("Cả thư mục con")
+        self.recursive.setSizePolicy(QSizePolicy.Policy.Fixed, QSizePolicy.Policy.Fixed)  # không bị ép hẹp cắt chữ
         self.recursive.setMinimumHeight(32)
         self.recursive.setToolTip("Quét thư mục con: khi thêm thư mục hoặc kéo thả thư mục, tự quét cả các thư mục con bên trong")
         lay = QHBoxLayout(self)
@@ -918,8 +919,8 @@ class ListToolbar(QWidget):
         sp = self.layout().spacing()
         fw = self._full_w
         tail = self.search.minimumWidth() + 64 + (self.match.sizeHint().width() if self.match.text() else 0)
-        w0 = fw[self.add_btn] + fw[self.folder_btn] + fw[self.recursive] + tail + sp * 6
-        w1 = fw[self.add_btn] + 32 + tail + sp * 5
+        w0 = fw[self.add_btn] + fw[self.folder_btn] + fw[self.recursive] + tail + sp * 7 + 6  # dư chút: cỡ chữ lớn
+        w1 = fw[self.add_btn] + 32 + tail + sp * 6 + 6                                        # không cắt chữ
         w2 = 32 + 32 + tail + sp * 5
         return w0, w1, w2
 
@@ -1247,11 +1248,53 @@ class ThumbLoader(QObject):
         return None
 
 
-class WheelGuard(QObject):
-    """Lăn chuột chỉ cuộn trang: ô chọn/ô số chỉ đổi giá trị bằng lăn chuột khi đã được bấm chọn (có focus).
-    Tránh việc cuộn ngang qua làm đổi cài đặt mà người dùng không biết."""
+class ThumbIcons(QObject):
+    """Ảnh xem trước cho ô trong bảng: `want(đường dẫn, hàm đặt icon)` — có sẵn thì đặt ngay, chưa có thì tạo ở luồng
+    nền (cache trên đĩa dùng chung với bảng clip) rồi đặt khi xong. Hàm đặt icon được gọi trên luồng giao diện."""
 
-    TYPES = (QComboBox, QAbstractSpinBox)
+    def __init__(self, parent=None):
+        super().__init__(parent)
+        self._icons: dict[str, QIcon] = {}
+        self._wait: dict[str, list] = {}
+        self.loader = ThumbLoader(self)
+        self.loader.image.connect(self._done)
+
+    def want(self, path: str, setter) -> None:
+        if not path:
+            return
+        if path in self._icons:
+            setter(self._icons[path])
+            return
+        first = path not in self._wait
+        self._wait.setdefault(path, []).append(setter)
+        if first:
+            self.loader.request([path])
+
+    def forget_waiting(self) -> None:
+        """Bảng vừa dựng lại: bỏ các ô cũ đang chờ (ô mới sẽ hỏi lại)."""
+        self._wait.clear()
+
+    def _done(self, path: str, img) -> None:
+        setters = self._wait.pop(path, [])
+        if img.isNull():
+            return
+        icon = self._icons[path] = QIcon(QPixmap.fromImage(img))
+        for fn in setters:
+            try:
+                fn(icon)
+            except RuntimeError:  # ô đã bị xoá
+                pass
+
+    def shutdown(self) -> None:
+        self.loader.shutdown()
+
+
+class WheelGuard(QObject):
+    """Lăn chuột LUÔN chỉ cuộn trang: ô số, ô chọn (dropdown), thanh trượt không bao giờ đổi giá trị vì lăn chuột —
+    kể cả ô vừa bấm vào (trước đây ô đang có focus vẫn bị đổi khi lăn qua). Đổi giá trị: gõ, bấm, phím mũi tên, kéo.
+    Widget muốn nhận lăn chuột (ví dụ thanh âm lượng của trình phát) đặt property "allowWheel" = True."""
+
+    TYPES = (QComboBox, QAbstractSpinBox, QAbstractSlider)
 
     def eventFilter(self, obj, event):  # noqa: N802
         t = event.type()
@@ -1263,10 +1306,20 @@ class WheelGuard(QObject):
             return False
         if t == QEvent.Type.Polish and isinstance(obj, self.TYPES):
             obj.setFocusPolicy(Qt.FocusPolicy.StrongFocus)  # mặc định WheelFocus: lăn qua là chiếm focus
+            if isinstance(obj, QComboBox) and \
+                    obj.sizeAdjustPolicy() == QComboBox.SizeAdjustPolicy.AdjustToContentsOnFirstShow:
+                # mặc định ô chọn rộng bằng lựa chọn dài nhất → ép cột phải rộng hơn màn hình, chữ bên cạnh bị cắt.
+                # Cho co theo cột (chữ dài tự rút gọn "…"); danh sách mở ra vẫn hiện đủ chữ.
+                obj.setSizeAdjustPolicy(QComboBox.SizeAdjustPolicy.AdjustToMinimumContentsLengthWithIcon)
+                obj.setMinimumContentsLength(10)
+                v = obj.view()
+                if v is not None:
+                    v.setMinimumWidth(obj.view().sizeHintForColumn(0) + 24)
             if isinstance(obj, QAbstractSpinBox):
                 # gõ "120" không làm app tính lại 3 lần (1 → 12 → 120): áp khi Enter / rời ô / bấm mũi tên
                 obj.setKeyboardTracking(False)
-        elif t == QEvent.Type.Wheel and isinstance(obj, self.TYPES) and not obj.hasFocus():
+        elif (t == QEvent.Type.Wheel and isinstance(obj, self.TYPES) and not isinstance(obj, QScrollBar)
+              and not obj.property("allowWheel")):  # thanh cuộn cũng là "slider" — để nó cuộn bình thường
             area = obj.parentWidget()
             while area is not None and not isinstance(area, QAbstractScrollArea):
                 area = area.parentWidget()

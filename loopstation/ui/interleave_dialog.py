@@ -49,14 +49,18 @@ SEQUENCE_PRESETS = [
 
 
 
-def _table_builtin(name: str, plays: list[tuple[str, int]]) -> dict:
+def _table_builtin(name: str, plays: list[tuple[str, int]], optional: tuple[str, ...] = ()) -> dict:
     from ..core import table_preset as tp
-    return {"name": name, "kind": "table", "rows": tp.from_clips([ClipItem(f"1_{r}.mp4", count=n) for r, n in plays])}
+    rows = tp.from_clips([ClipItem(f"1_{r}.mp4", count=n) for r, n in plays])
+    for r in rows:
+        r["optional"] = r["role"] in optional  # "chỉ khi có file": tình huống không có file đó thì bỏ dòng, không báo
+    return {"name": name, "kind": "table", "rows": rows}
 
 
 # mẫu bảng clip dựng sẵn: đóng gói trong app → máy nào cài cũng có (mẫu tự lưu chỉ nằm trên máy đã lưu)
 TABLE_BUILTIN = [
-    _table_builtin("Loop A ×57 kẹp Loop B", [("loopB", 1), ("loopA", 57), ("loopB", 1), ("loopA", 1)]),
+    _table_builtin("Loop A ×57 kẹp Loop B", [("loopAB", 1), ("loopB", 1), ("loopA", 57), ("loopB", 1), ("loopA", 1)],
+                   optional=("loopab",)),  # LOOP AB (33_2_LOOP AB…) lên đầu tình huống — chỉ khi có file
 ]
 
 

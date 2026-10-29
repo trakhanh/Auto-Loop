@@ -34,26 +34,24 @@ FIRST_STEPS = (
 )
 # "Có gì mới" của bản đang chạy — hiện ở đầu trang Tổng quan (sửa cùng lúc với APP_VERSION khi ra bản mới)
 WHATS_NEW = (
-    ("repeat", "Tên Tập_STT_Vai — mỗi tập một video",
-     "Mẫu bảng clip nhận thêm tên 33_4_LOOP A.mp4 (tập 33, tình huống 4; LOOP A = loopA). Xuất hàng loạt tự tách "
-     "thư mục có 33_…, 34_… thành Tập 33, Tập 34 — mỗi tập một video; hộp Mẫu bảng clip có ô Tập để chọn."),
-    ("queue", "Thư viện mẫu + mẫu bảng clip",
-     "Xem 7 mẫu có sẵn kèm ví dụ kết quả (có mẫu bảng Loop A ×57 kẹp Loop B — máy nào cài cũng có), tự tạo mẫu "
-     "mới. Lưu cả bảng (STT_loopB ×1 → STT_loopA ×57 → …) "
-     "thành mẫu theo tên file, áp cho video khác (6_loopA, 6_loopB…), "
-     "nối 10 tình huống (1_… → 10_…) thành một video, hoặc dùng ở Xuất hàng loạt. Nút Thư viện mẫu… ở trang Video."),
-    ("info", "Nhắc Intro / Outro mẫu",
-     "Ô Intro / Outro ghi · MẪU khi đang dùng file của bộ tập dùng (màn hình chữ “KT Loop Station”), và app hỏi trước "
-     "khi xuất."),
-    ("palette", "Sửa màu clip HDR bị lệch",
-     "Clip điện thoại quay HDR (iPhone bật mặc định, HDR10) trước đây ghép ra bị xỉn, tối. Giờ app tự nhận (cột thông tin "
-     "ghi HDR) và chuyển sang màu thường khi xem trước và khi xuất."),
-    ("sliders", "Gợi ý độ phân giải / fps theo clip gốc",
-     "Trang Xuất ghi ngay dưới ô Độ phân giải: bằng clip gốc, phóng to (không nét hơn, nặng file) hay tăng fps (không "
-     "mượt hơn). Bấm Theo clip gốc là đặt lại đúng."),
-    ("download", "Cập nhật ngay trong app",
-     "Có bản mới thì thanh bên hiện nút Có bản mới → Tải & cài đặt: app tải bộ cài, kiểm tra SHA-256, cài đè rồi tự mở "
-     "lại. Kiểm tra tay ở Cài đặt → Giới thiệu."),
+    ("zap", "Xuất nhanh hơn ~3 lần",
+     "Ghép nhiều clip: app chuẩn hoá 3 clip cùng lúc trên card NVIDIA / AMD, mã hoá nhanh cho mức Cao (độ nét như cũ), bước "
+     "cuối không ghi lại cả file. Đo thật: 45 clip 2K, video 22 phút — 229 giây còn 74 giây."),
+    ("shuffle", "Trộn ngẫu nhiên: thấy trước thứ tự",
+     "Chọn Ngẫu nhiên là ngay trên bảng clip hiện Thứ tự sẽ xuất (1. → 2. → …). Trộn lại để ra thứ tự khác, Dùng thứ tự "
+     "này để chép vào bảng rồi sửa tay."),
+    ("folder", "Thả file là xong — ít bước hơn",
+     "Thả file / cả thư mục vào trang Video: app tự nhận tập, tự áp mẫu dùng lần trước, dải Sẵn sàng có nút Thêm vào hàng "
+     "đợi. Thả cả mùa: một câu hỏi là đưa hết các tập vào hàng đợi."),
+    ("sliders", "Tiếng gốc rõ, chỉnh ở một chỗ",
+     "Tiếng gốc tự cân về cùng mức với nhạc. Bảng trộn âm có 3 nút Giữ / Chỉ / Tắt tiếng gốc và chọn nhanh Nhạc là chính · "
+     "Cân bằng · Tiếng gốc là chính."),
+    ("queue", "Hàng đợi dễ dùng, khó nhầm",
+     "Thêm xong app hỏi Làm video tiếp theo hay Chạy hàng đợi; tên file tự gợi ý Tập 33; mỗi mục ghi rõ nội dung, bấm vào "
+     "xem chi tiết, Sửa mục này rồi Cập nhật đúng mục đó; lỡ thêm trùng thì app hỏi lại."),
+    ("plus", "LOOP AB lên đầu tình huống — dòng “Chỉ khi có file”",
+     "Mẫu Loop A ×57 kẹp Loop B có dòng LOOP AB ở đầu: tình huống có file 33_2_LOOP AB thì mở đầu bằng AB, tình huống "
+     "khác giữ nguyên. Tự tạo mẫu: tick Chỉ khi có file. File có vai mẫu chưa có (34_5_LOOP C) được báo tên."),
 )
 SHORTCUTS = (("Space", "Phát / dừng"), ("F1", "Hướng dẫn"), ("Ctrl+S", "Lưu dự án"), ("Ctrl+Z", "Hoàn tác"),
              ("Ctrl+D", "Nhân bản dòng"), ("Ctrl+F", "Tìm"))
