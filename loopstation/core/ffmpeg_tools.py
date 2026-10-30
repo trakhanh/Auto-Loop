@@ -29,7 +29,8 @@ def app_dir() -> Path:
 
 
 # Tuỳ chọn toàn cục, đặt từ trang Cài đặt
-OPTIONS: dict[str, str] = {"hwdec": ""}  # "" = giải mã bằng CPU; hoặc tên hwaccel (cuda, d3d11va…)
+# hwdec: "" = giải mã bằng CPU; hoặc tên hwaccel (cuda, d3d11va…) · cache_dir: "" = trong thư mục dữ liệu (ổ C)
+OPTIONS: dict[str, str] = {"hwdec": "", "cache_dir": ""}
 _custom_dir: str | None = None
 
 
@@ -81,8 +82,36 @@ def data_dir() -> Path:
     return d
 
 
+def cache_root() -> Path:
+    """Gốc bộ nhớ đệm: mặc định <thư mục dữ liệu>/cache (ổ C); Cài đặt cho chuyển sang ổ khác còn nhiều chỗ."""
+    custom = OPTIONS.get("cache_dir") or ""
+    d = Path(custom) if custom else data_dir() / "cache"
+    d.mkdir(parents=True, exist_ok=True)
+    return d
+
+
+def usable_dir(path: str) -> bool:
+    """Thư mục ghi được (để chọn làm nơi đặt bộ nhớ đệm)."""
+    try:
+        p = Path(path)
+        p.mkdir(parents=True, exist_ok=True)
+        probe = p / ".ktls-ghi-thu"
+        probe.write_bytes(b"1")
+        probe.unlink()
+        return True
+    except OSError:
+        return False
+
+
+def disk_free(path: Path | str) -> int:
+    try:
+        return shutil.disk_usage(str(path)).free
+    except OSError:
+        return -1
+
+
 def cache_dir(sub: str = "") -> Path:
-    d = data_dir() / "cache"
+    d = cache_root()
     if sub:
         d = d / sub
     d.mkdir(parents=True, exist_ok=True)
@@ -137,7 +166,7 @@ PRUNE_PARTS = ("blocks", "srcaudio", "estimate", "thumbs")
 def _cache_files(parts=PRUNE_PARTS) -> list[tuple[float, int, Path]]:
     out = []
     for part in parts:
-        d = data_dir() / "cache" / part
+        d = cache_root() / part
         if not d.is_dir():
             continue
         for f in d.iterdir():
@@ -177,7 +206,7 @@ def _clean_stale_cache() -> None:
     import time
     now = time.time()
     for part in CACHE_PARTS:
-        d = data_dir() / "cache" / part
+        d = cache_root() / part
         if not d.is_dir():
             continue
         for f in d.iterdir():
@@ -204,7 +233,7 @@ def cache_size() -> int:
 
 def clear_cache() -> None:
     for part in CACHE_PARTS:
-        shutil.rmtree(data_dir() / "cache" / part, ignore_errors=True)
+        shutil.rmtree(cache_root() / part, ignore_errors=True)
     clean_previews()
 
 

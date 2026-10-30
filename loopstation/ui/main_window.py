@@ -5,16 +5,17 @@ import copy
 import html
 import os
 import threading
-from datetime import datetime
+import time
+from datetime import datetime, timedelta
 from pathlib import Path
 
-from PySide6.QtCore import QObject, QSettings, QSize, QTimer, Signal
+from PySide6.QtCore import QEvent, QObject, QSettings, QSize, QTimer, Signal
 from PySide6.QtGui import QFontMetrics, QKeySequence, QShortcut
 from PySide6.QtCore import Qt
 from PySide6.QtWidgets import (
     QSizePolicy,
     QFrame, QScrollArea, QStackedWidget,
-    QApplication, QButtonGroup, QDialog, QFileDialog, QHBoxLayout, QLabel, QLineEdit, QMainWindow,
+    QApplication, QButtonGroup, QDialog, QFileDialog, QHBoxLayout, QLabel, QLineEdit, QMainWindow, QMenu,
     QMessageBox, QPushButton, QVBoxLayout, QWidget,
 )
 
@@ -61,6 +62,9 @@ class MainWindow(QMainWindow):
     def __init__(self):
         super().__init__()
         self.settings = QSettings(SETTINGS_ORG, APP_NAME)
+        # nơi đặt bộ nhớ đệm (Cài đặt → Bộ nhớ đệm): đặt trước mọi việc dùng tới bộ nhớ đệm (ảnh nhỏ, dọn file tạm)
+        cdir = str(self.settings.value("pref/cache_dir", "") or "")
+        ffmpeg_tools.OPTIONS["cache_dir"] = cdir if cdir and ffmpeg_tools.usable_dir(cdir) else ""
         self.project_path: str | None = None
         self.job: RenderJob | None = None
         self._job_kind = "video"
@@ -171,6 +175,11 @@ class MainWindow(QMainWindow):
         self.export_tab.batchRequested.connect(self.batch_from_folders)
         self.export_tab.queueEdited.connect(self._save_queue)
         self.export_tab.queueEditRequested.connect(self._edit_queue_item)
+        self.export_tab.queuePauseRequested.connect(self._toggle_pause)
+        self._pause_after = False
+        QTimer.singleShot(1000, self._refresh_eta)
+        self.settings_page.cacheChanged.connect(self._check_disk)
+        QTimer.singleShot(4000, self._check_disk)
         self._editing_item: rq.QueueItem | None = None  # mục hàng đợi đang mở lại để sửa ("Sửa mục này")
         self._auto_name = ""  # tên file app tự gợi ý ("Tập 33") — người dùng tự gõ tên khác thì không đè
         self.queue: list[rq.QueueItem] = rq.load(ffmpeg_tools.data_dir() / QUEUE_FILE)
@@ -475,6 +484,17 @@ class MainWindow(QMainWindow):
             tb.clicked.connect(fn)
             proj_bar.addWidget(tb)
         hv.addLayout(proj_bar)
+        # hồ sơ kênh: chọn kênh là áp cả bộ intro / outro, logo, nhạc, mẫu bảng, nơi lưu…
+        self.profile_btn = QPushButton("Kênh: chưa chọn")
+        self.profile_btn.setObjectName("pill")
+        self.profile_btn.setIcon(icons.icon("video_music", 14))
+        self.profile_btn.setToolTip("Hồ sơ kênh — mỗi kênh một bộ cài đặt (intro / outro, logo, nhạc, mẫu, nơi lưu…)")
+        self.profile_menu = QMenu(self.profile_btn)
+        self.profile_menu.aboutToShow.connect(self._fill_profile_menu)
+        self.profile_btn.setMenu(self.profile_menu)
+        self._profile_collapsed = False
+        self._set_profile_label(str(self.settings.value("profiles/last", "") or ""))
+        hv.addWidget(self.profile_btn)
         hv.addSpacing(4)
         hv.addWidget(w.hairline())
         hv.addSpacing(4)
@@ -528,6 +548,7 @@ class MainWindow(QMainWindow):
         for c in (self.chip_warn, self.chip_seq, self.chip_rounds, self.chip_size, self.chip_total):
             cb.addWidget(c)
         self.chip_box = chip_box
+        chip_box.installEventFilter(self)  # khung chip đổi cỡ thật (sau khi thanh tiêu đề xếp xong) → chọn lại chip
         hv.addWidget(chip_box, 1)
 
         self.tl_toggle = QPushButton("Dòng thời gian")
@@ -614,6 +635,33 @@ class MainWindow(QMainWindow):
         eb.addWidget(eb_cancel)
         self.edit_banner.setVisible(False)
         mv.addWidget(self.edit_banner)
+        # ổ đĩa sắp đầy (bộ nhớ đệm / thư mục lưu): báo sớm, kèm cách xử lý ngay tại chỗ
+        self.disk_banner = QFrame()
+        self.disk_banner.setObjectName("warnBar")
+        db = QHBoxLayout(self.disk_banner)
+        db.setContentsMargins(16, 6, 12, 6)
+        db.setSpacing(10)
+        db_icon = QLabel()
+        icons.bind(db_icon, "info", 15, "warn_text")
+        self.disk_text = QLabel()
+        self.disk_text.setWordWrap(True)
+        db_move = QPushButton("Chuyển bộ nhớ đệm sang ổ khác…")
+        db_move.setObjectName("pill")
+        db_move.clicked.connect(lambda: self.settings_page.pick_cache_dir())
+        db_clean = QPushButton("Dọn bộ nhớ đệm")
+        db_clean.setObjectName("ghost")
+        db_clean.clicked.connect(lambda: self.settings_page._clear_cache())
+        db_hide = QPushButton("Ẩn")
+        db_hide.setObjectName("ghost")
+        db_hide.clicked.connect(self._hide_disk_banner)
+        self._disk_buttons = (db_move, db_clean)
+        db.addWidget(db_icon)
+        db.addWidget(self.disk_text, 1)
+        for b in (db_move, db_clean, db_hide):
+            db.addWidget(b)
+        self.disk_banner.setVisible(False)
+        self._disk_hidden = False
+        mv.addWidget(self.disk_banner)
         mv.addWidget(self.work, 1)
         mv.addWidget(self.timeline_wrap)
         shell = QWidget()
@@ -673,6 +721,9 @@ class MainWindow(QMainWindow):
             bold = b.font()
             bold.setBold(True)
             b.setMinimumWidth(40 if narrow else QFontMetrics(bold).horizontalAdvance(full) + 46)
+        # nút Kênh: cửa sổ hẹp → chỉ biểu tượng (tên kênh trong tooltip) để Tổng / dung lượng không bị cắt chữ
+        self._profile_collapsed = width < 1500 * max(1.0, theme.scale())
+        self.profile_btn.setText("" if self._profile_collapsed else getattr(self, "_profile_text", "Kênh"))
         self._fit_chips()
         QTimer.singleShot(0, self._fit_chips)  # đo lại sau khi thanh tiêu đề sắp xếp xong
 
@@ -681,16 +732,23 @@ class MainWindow(QMainWindow):
         has_err = self.chip_total.objectName() in ("chip", "chipError") and not self.chip_seq.text()
         cands = [c for c, ok in ((self.chip_size, getattr(self, "_size_wanted", False)),
                                  (self.chip_warn, getattr(self, "_warn_wanted", False))) if ok and not has_err]
+        # ô Tổng luôn đủ chữ: khung chip giữ tối thiểu bằng nó (ô tên dự án co lại thay vì cắt chữ "Tổng 1:00:00")
+        self.chip_box.setMinimumWidth(self.chip_total.sizeHint().width() + 2)
         avail = self.chip_box.width()
         used = self.chip_total.sizeHint().width()
         show = set()
         for c in cands:
             need = c.sizeHint().width() + 8
-            if used + need <= avail:
+            if used + need + 12 <= avail:  # chừa chút: thanh tiêu đề còn xếp lại sau khi đo
                 show.add(c)
                 used += need
         for c in (self.chip_size, self.chip_warn, self.chip_rounds, self.chip_seq):
             c.setVisible(c in show)
+
+    def eventFilter(self, obj, event) -> bool:  # noqa: N802
+        if obj is getattr(self, "chip_box", None) and event.type() == QEvent.Type.Resize:
+            QTimer.singleShot(0, self._fit_chips)
+        return super().eventFilter(obj, event)
 
     def resizeEvent(self, e) -> None:  # noqa: N802
         if e is not None:
@@ -1529,7 +1587,7 @@ class MainWindow(QMainWindow):
         if out:
             self._start_job(RenderJob(proj, self.export_tab.available, out,
                                       on_progress=self.bridge.progress.emit, on_log=self.bridge.log.emit),
-                            "video")
+                            "video", seconds=tl.total)
 
     @staticmethod
     def _multi_version(proj: Project) -> bool:
@@ -1558,7 +1616,7 @@ class MainWindow(QMainWindow):
             p = copy.deepcopy(proj)
             p.music = planner.music_variant(p.music, seed)  # chốt thứ tự của bản này
             p.name = f"{proj.name} — bản {k + 1}"
-            items.append(rq.QueueItem(project=p, output=out, kind="audio",
+            items.append(rq.QueueItem(project=p, output=out, kind="audio", seconds=tl.total,
                                       summary=rq.describe(p, "audio", tl.total) + f" · bản {k + 1}"))
         self.settings.setValue("dir/output", ex.output_dir)
         return items
@@ -1657,13 +1715,15 @@ class MainWindow(QMainWindow):
         summary = rq.describe(proj, kind, tl.total if tl.ok else 0.0)
         if editing is not None:  # "Cập nhật …": thay đúng mục đang sửa, chạy lại từ đầu
             editing.project, editing.output, editing.summary = copy.deepcopy(proj), out, summary
+            editing.seconds = tl.total if tl.ok else 0.0
             editing.status, editing.message = "pending", ""
             self._set_editing(None)
             self._save_queue()
             self.go_to(2)
             self.notify(f"Đã cập nhật mục “{Path(out).stem}” trong hàng đợi.", "ok", 4000)
             return
-        self.queue.append(rq.QueueItem(project=copy.deepcopy(proj), output=out, kind=kind, summary=summary))
+        self.queue.append(rq.QueueItem(project=copy.deepcopy(proj), output=out, kind=kind, summary=summary,
+                                       seconds=tl.total if tl.ok else 0.0))
         self.export_tab.set_queue(self.queue)
         self._save_queue()
         if kind == "audio":
@@ -1705,6 +1765,35 @@ class MainWindow(QMainWindow):
                 self.edit_text.setText(f"Đang sửa mục <b>“{html.escape(Path(item.output).stem)}”</b> trong hàng đợi — "
                                        "sửa xong bấm <b>Cập nhật mục</b>. Mục chỉ đổi khi bạn bấm Cập nhật.")
             banner.setVisible(item is not None)
+
+    def _check_disk(self) -> None:
+        """Ổ chứa bộ nhớ đệm / thư mục lưu còn dưới ~8 GB: hiện dải cảnh báo (xuất video dài dễ lỗi thiếu chỗ)."""
+        if self._closing or self._disk_hidden:
+            return
+        from .settings_page import LOW_DISK
+        places: dict[str, tuple[str, str]] = {}
+        root = ffmpeg_tools.cache_root()
+        places[os.path.splitdrive(str(root))[0].upper() or str(root)] = ("bộ nhớ đệm", str(root))
+        out = self.export_tab.out_dir.text().strip()
+        if out and os.path.isdir(os.path.splitdrive(out)[0] + os.sep):
+            places.setdefault(os.path.splitdrive(out)[0].upper(), ("thư mục lưu video", out))
+        low = []
+        for drive, (what, path) in places.items():
+            free = ffmpeg_tools.disk_free(path if os.path.exists(path) else drive + os.sep)
+            if 0 <= free < LOW_DISK:
+                low.append(f"Ổ <b>{drive}</b> chỉ còn <b>{free / 1024 ** 3:.1f} GB</b> trống (đang chứa {what})")
+        if not low:
+            self.disk_banner.setVisible(False)
+            return
+        self.disk_text.setText(" · ".join(low) + " — xuất video dài có thể lỗi thiếu chỗ. Chuyển bộ nhớ đệm sang ổ "
+                               "khác hoặc dọn bớt.")
+        for b in self._disk_buttons:
+            b.setEnabled(self.job is None and not self._queue_running)
+        self.disk_banner.setVisible(True)
+
+    def _hide_disk_banner(self) -> None:
+        self._disk_hidden = True  # tới lần mở app sau
+        self.disk_banner.setVisible(False)
 
     def _cancel_edit(self) -> None:
         item = self._editing_item
@@ -1763,6 +1852,7 @@ class MainWindow(QMainWindow):
                 try:
                     tl = timeline.build_audio(it.project) if it.kind == "audio" else timeline.build(it.project)
                     it.summary = rq.describe(it.project, it.kind, tl.total if tl.ok else 0.0)
+                    it.seconds = it.seconds or (tl.total if tl.ok else 0.0)
                 except Exception:  # noqa: BLE001 — tóm tắt chỉ để xem, không chặn việc thêm
                     it.summary = rq.describe(it.project, it.kind)
             added += items
@@ -1784,6 +1874,8 @@ class MainWindow(QMainWindow):
                                     "ở trang Xuất để thêm (kiểu Chỉ nhạc thì thêm file nhạc).")
             return
         self._queue_only = {id(i) for i in only} if only else None
+        self._pause_after = False
+        self.export_tab.set_paused(False)
         self._queue_running = True
         self._queue_results = []
         self._run_next()
@@ -1792,6 +1884,20 @@ class MainWindow(QMainWindow):
         if self.job or self._closing:
             return
         only = self._queue_only
+        if self._pause_after and self._queue_results:  # "Tạm dừng sau video này": dừng êm, chạy tiếp lúc nào cũng được
+            self._pause_after = False
+            self._queue_running = False
+            self._queue_item = None
+            self._queue_only = None
+            self.export_tab.set_running(False)
+            self.export_tab.set_paused(False)
+            self.accent_line.set_running(False)
+            left = sum(1 for i in self.queue if i.status == "pending")
+            self.export_tab.on_progress(0, f"Đã tạm dừng hàng đợi — còn {left} video. Bấm Chạy hàng đợi để chạy tiếp.")
+            self.notify(f"Đã tạm dừng hàng đợi — còn {left} video chờ.", "info", 5000)
+            self._refresh_eta()
+            QTimer.singleShot(300, self._update_power)
+            return
         item = next((i for i in self.queue if i.status == "pending" and (only is None or id(i) in only)), None)
         if item is None:
             self._queue_running = False
@@ -1805,6 +1911,9 @@ class MainWindow(QMainWindow):
             last = next((i.output for i in reversed(self.queue) if i.status == "done"), None)
             if ok and last:  # chỉ báo / mở thư mục khi lượt chạy này có mục thành công
                 self._after_success(last)
+            self.export_tab.set_paused(False)
+            self._refresh_eta()
+            self._windows_notice("Hàng đợi xong", f"{ok} video xong" + (f", {bad} lỗi" if bad else "") + ".")
             if self.settings_page.shutdown.isChecked():
                 self._shutdown_countdown(ok, bad)
                 return
@@ -1819,7 +1928,7 @@ class MainWindow(QMainWindow):
         self._start_job(RenderJob(item.project, self.export_tab.available, item.output,
                                   audio_only=item.kind == "audio",
                                   on_progress=self.bridge.progress.emit, on_log=self.bridge.log.emit),
-                        "queue", clear_log=False)
+                        "queue", clear_log=False, seconds=item.seconds if item.kind == "video" else 0.0)
 
     def _after_success(self, output: str) -> None:
         sp = self.settings_page
@@ -1858,6 +1967,66 @@ class MainWindow(QMainWindow):
             rq.save(self.queue, ffmpeg_tools.data_dir() / QUEUE_FILE)
         except OSError:
             pass
+        self._refresh_eta()
+
+    # ---------- hàng đợi: giờ xong, tạm dừng, thông báo ----------
+    def _speed_ratio(self) -> float:
+        """Giây máy làm cho mỗi giây video (đo từ các lần xuất trước). 0 = chưa đo."""
+        try:
+            return float(self.settings.value("perf/ratio", 0.0) or 0.0)
+        except (TypeError, ValueError):
+            return 0.0
+
+    def _refresh_eta(self, frac: float = 0.0) -> None:
+        """Dòng "Còn 3 video · ~25 phút · xong khoảng 23:40" trên hàng đợi + ước tính từng mục đang chờ."""
+        ratio = self._speed_ratio()
+        pend = [i for i in self.queue if i.status == "pending"]
+        run = self._queue_item if self._queue_running and self._queue_item in self.queue else None
+        self.export_tab.set_eta_ratio(ratio)
+        if not pend and run is None:
+            self.export_tab.set_queue_eta("")
+            return
+        n = len(pend) + (1 if run else 0)
+        left = sum(i.seconds for i in pend) + (run.seconds * (1 - frac) if run else 0.0)
+        if ratio <= 0 or left <= 0:
+            self.export_tab.set_queue_eta(f"Còn {n} video · giờ xong sẽ hiện sau lần xuất đầu tiên (app đo tốc độ máy)")
+            return
+        sec = left * ratio
+        done_at = datetime.now() + timedelta(seconds=sec)
+        day = "" if done_at.date() == datetime.now().date() else " ngày mai" \
+            if (done_at.date() - datetime.now().date()).days == 1 else f" {done_at:%d/%m}"
+        self.export_tab.set_queue_eta(f"Còn <b>{n} video</b> · {rq.eta_text(sec)} · xong khoảng <b>{done_at:%H:%M}"
+                                      f"{day}</b>" + ("" if self._queue_running else " (nếu bấm Chạy ngay)"))
+
+    def _record_speed(self) -> None:
+        """Xuất video xong: cập nhật tỉ lệ thời gian làm / độ dài video (trung bình trượt, bỏ lần quá lệch)."""
+        secs = getattr(self, "_job_secs", 0.0)
+        if secs <= 30:
+            return
+        r = (time.time() - self._job_t0) / secs
+        old = self._speed_ratio()
+        new = r if old <= 0 else old * 0.6 + r * 0.4
+        self.settings.setValue("perf/ratio", round(new, 5))
+
+    def _toggle_pause(self) -> None:
+        self._pause_after = not self._pause_after
+        self.export_tab.set_paused(self._pause_after)
+        if self._pause_after:
+            self.notify("Hàng đợi sẽ dừng sau khi xong video đang chạy.", "info", 4000)
+
+    def _windows_notice(self, title: str, text: str) -> None:
+        """Thông báo của Windows (góc màn hình) — người dùng đi đâu cũng biết hàng đợi đã xong."""
+        from PySide6.QtWidgets import QSystemTrayIcon
+        if not QSystemTrayIcon.isSystemTrayAvailable():
+            return
+        tray = getattr(self, "_tray", None)
+        if tray is None:
+            tray = self._tray = QSystemTrayIcon(self.windowIcon(), self)
+            tray.setToolTip(APP_NAME)
+            tray.messageClicked.connect(lambda: (self.showNormal(), self.raise_(), self.activateWindow()))
+        tray.show()
+        tray.showMessage(f"{APP_NAME} — {title}", text, QSystemTrayIcon.MessageIcon.Information, 10000)
+        QTimer.singleShot(30000, tray.hide)
 
     # ---------- Bảng trộn âm: nghe thử 20 giây ----------
     def _help_action(self, act: str) -> None:
@@ -1972,6 +2141,71 @@ class MainWindow(QMainWindow):
                                  vt._freeze_order, self)
         dlg.exec()
 
+    # ---------- hồ sơ kênh ----------
+    def _set_profile_label(self, name: str) -> None:
+        short = name if len(name) <= 18 else name[:17] + "…"
+        self._profile_text = f"Kênh: {short}" if name else "Kênh: chưa chọn"
+        self.profile_btn.setToolTip(f"{self._profile_text} — hồ sơ kênh: mỗi kênh một bộ cài đặt (intro / outro, logo, "
+                                    "nhạc, mẫu, nơi lưu…)")
+        if self.profile_btn.text() or not getattr(self, "_profile_collapsed", False):
+            self.profile_btn.setText(self._profile_text)
+
+    def _fill_profile_menu(self) -> None:
+        from .share_io import read_profiles
+        m = self.profile_menu
+        m.clear()
+        cur = str(self.settings.value("profiles/last", "") or "")
+        items = read_profiles(self.settings)
+        for p in items:
+            act = m.addAction(p["name"], lambda p=p: self._apply_profile(p))
+            act.setCheckable(True)
+            act.setChecked(p["name"] == cur)
+        if not items:
+            m.addAction("Chưa có hồ sơ nào").setEnabled(False)
+        m.addSeparator()
+        m.addAction(icons.icon("plus", 14), "Lưu cài đặt hiện tại thành hồ sơ…", self._new_profile)
+        m.addAction(icons.icon("settings", 14), "Quản lý hồ sơ kênh…", self._open_profiles)
+
+    def _capture_profile(self, name: str) -> dict:
+        from ..core import profiles as prof
+        return prof.capture(name, self.collect_project(), str(self.settings.value("table/last", "") or ""))
+
+    def _new_profile(self) -> None:
+        from PySide6.QtWidgets import QInputDialog
+        from .share_io import read_profiles, write_profiles
+        name, ok = QInputDialog.getText(self, "Lưu thành hồ sơ kênh", "Tên kênh (ví dụ: Kênh Mưa Đêm):")
+        name = name.strip()
+        if not ok or not name:
+            return
+        items = read_profiles(self.settings)
+        if any(p["name"] == name for p in items) and QMessageBox.question(
+                self, "Hồ sơ kênh", f"Đã có hồ sơ “{name}”. Ghi đè?") != QMessageBox.StandardButton.Yes:
+            return
+        write_profiles(self.settings, [p for p in items if p["name"] != name] + [self._capture_profile(name)])
+        self.settings.setValue("profiles/last", name)
+        self._set_profile_label(name)
+        self.notify(f"Đã lưu hồ sơ kênh “{name}” — lần sau chọn ở nút Kênh trên cùng.", "ok", 4000)
+
+    def _open_profiles(self) -> None:
+        from .profiles_dialog import ProfileDialog
+        ProfileDialog(self.settings, self._capture_profile, self._apply_profile,
+                      str(self.settings.value("profiles/last", "") or ""), self).exec()
+
+    def _apply_profile(self, p: dict) -> None:
+        """Áp hồ sơ kênh vào dự án đang mở: intro / outro, màu & logo, âm thanh, nhạc, tiếng nền, mẫu bảng, xuất.
+        Bảng clip + tên file giữ nguyên."""
+        from ..core import profiles as prof
+        new, notes = prof.apply(p, self.collect_project())
+        self.load_project(new, editing=self._editing_item)
+        if p.get("table_preset"):
+            self.settings.setValue("table/last", p["table_preset"])  # thả file sau đó: tự áp đúng mẫu của kênh
+        self.settings.setValue("profiles/last", p["name"])
+        self._set_profile_label(p["name"])
+        self.notify(f"Đã áp hồ sơ kênh “{p['name']}”: {prof.describe(p)}", "ok", 5000)
+        if notes:
+            QMessageBox.warning(self, "Hồ sơ kênh", "Đã áp hồ sơ, nhưng có vài thứ không còn trên máy này:\n\n• "
+                                + "\n• ".join(notes))
+
     def _set_source_mode(self, mode: str) -> None:
         """Bảng trộn âm đổi kiểu tiếng gốc → đồng bộ ô Tiếng gốc clip ở trang Video (một nguồn sự thật)."""
         cb = self.video_tab.source
@@ -2022,12 +2256,14 @@ class MainWindow(QMainWindow):
             p.export.filename = f"Tập {ep}"
             out = output_path(p.export.output_dir, p.export.filename + ".mp4", p.export.own_folder, taken)
             taken.add(out.lower())
+            secs = 0.0
             try:
                 tl = timeline.build(p)
-                summary = rq.describe(p, "video", tl.total if tl.ok else 0.0)
+                secs = tl.total if tl.ok else 0.0
+                summary = rq.describe(p, "video", secs)
             except Exception:  # noqa: BLE001 — tóm tắt chỉ để xem
                 summary = rq.describe(p, "video")
-            added.append(rq.QueueItem(project=p, output=out, kind="video", summary=summary))
+            added.append(rq.QueueItem(project=p, output=out, kind="video", summary=summary, seconds=secs))
         if not added:
             return
         self.settings.setValue("table/last", preset_name)
@@ -2135,8 +2371,9 @@ class MainWindow(QMainWindow):
                                   on_progress=self.bridge.progress.emit, on_log=self.bridge.log.emit),
                         "preview")
 
-    def _start_job(self, job: RenderJob, kind: str, clear_log: bool = True) -> None:
+    def _start_job(self, job: RenderJob, kind: str, clear_log: bool = True, seconds: float = 0.0) -> None:
         self.job, self._job_kind = job, kind
+        self._job_t0, self._job_secs = time.time(), seconds  # đo tốc độ máy để ước tính giờ xong hàng đợi
         power.keep_awake(True)  # máy không tự ngủ khi đang xuất (hàng đợi qua đêm)
         self.settings_page.set_job_running(True)
         if self._size_runner:  # dừng đo dung lượng đang chạy: không tranh card đồ hoạ (giới hạn phiên NVENC)
@@ -2146,6 +2383,7 @@ class MainWindow(QMainWindow):
             self._size_redo = True
         self.go_to(2)
         self.export_tab.set_running(True, clear_log=clear_log)
+        self.export_tab.q_pause_btn.setVisible(kind == "queue")  # tạm dừng chỉ có nghĩa khi chạy hàng đợi
         self.accent_line.set_running(True)
 
         def work():
@@ -2171,17 +2409,23 @@ class MainWindow(QMainWindow):
         self.export_tab.on_progress(frac, status)
         if self._queue_item in self.queue:
             self.export_tab.set_queue_status(self.queue.index(self._queue_item), f"Đang chạy {int(frac * 100)}%")
+            if int(frac * 100) != getattr(self, "_eta_pct", -1):  # cập nhật giờ xong mỗi 1%
+                self._eta_pct = int(frac * 100)
+                self._refresh_eta(frac)
         self.setWindowTitle(f"{int(frac * 100)}% — {APP_NAME}")
 
     def _update_power(self) -> None:
         """Hết việc (không còn xuất, hàng đợi đã dừng) → trả lại chế độ ngủ bình thường của Windows."""
         if self.job is None and not self._queue_running:
+            QTimer.singleShot(500, self._check_disk)  # xuất xong: ổ đĩa có thể vừa đầy thêm
             power.keep_awake(False)
             self.settings_page.set_job_running(False)
             threading.Thread(target=ffmpeg_tools.prune_cache, daemon=True).start()  # bộ nhớ đệm quá lớn → dọn bớt
 
     def _on_finished(self, output: str, error: str) -> None:
         kind = self._job_kind
+        if output and kind in ("video", "queue"):
+            self._record_speed()
         self.job = None
         if self._closing:  # đang đóng app: mục hàng đợi dở đã được đặt lại "Đang chờ" trong closeEvent
             return

@@ -18,7 +18,7 @@ from PySide6.QtWidgets import (
 from ..core import interleave as il
 from ..core import table_preset as tp
 from ..core.project import ClipItem
-from . import icons, theme
+from . import icons, share_io, theme
 from . import widgets as w
 from .interleave_dialog import (
     BUILTIN, SEQUENCE_PRESETS, TABLE_BUILTIN, USER_PREFIX, all_presets, arrange_from_preset, save_table_presets,
@@ -274,7 +274,20 @@ class PresetLibraryDialog(QDialog):
         scroll.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
         close = QPushButton("Đóng")
         close.clicked.connect(self.reject)
+        # chia sẻ mẫu giữa các máy: tạo một lần, gửi file .ktls cho cả phòng
+        exp = QPushButton("Xuất ra file…")
+        exp.setObjectName("pill")
+        exp.setIcon(icons.icon("upload", 13))
+        exp.setToolTip("Lưu mẫu của bạn (kèm hồ sơ kênh) ra file .ktls để gửi máy khác")
+        exp.clicked.connect(lambda: share_io.export_file(self, self.settings))
+        imp = QPushButton("Nhập từ file…")
+        imp.setObjectName("pill")
+        imp.setIcon(icons.icon("download", 13))
+        imp.setToolTip("Nhận mẫu (và hồ sơ kênh) từ file .ktls của máy khác")
+        imp.clicked.connect(lambda: share_io.import_file(self, self.settings) and self._fill())
         bb = QHBoxLayout()
+        bb.addWidget(exp)
+        bb.addWidget(imp)
         bb.addWidget(w.muted("Mẫu của bạn cũng có ở <b>Xuất hàng loạt</b> → ô <i>Cách xếp clip</i>."), 1)
         bb.addWidget(close)
         lay = QVBoxLayout(self)

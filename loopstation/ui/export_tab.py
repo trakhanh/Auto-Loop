@@ -17,7 +17,7 @@ from PySide6.QtWidgets import (
 
 from ..core import encoders
 from ..core.project import ExportSettings, MusicSettings, format_hms, parse_hms
-from ..core.render_queue import KIND_LABELS, STATUS_LABELS, QueueItem
+from ..core.render_queue import KIND_LABELS, STATUS_LABELS, QueueItem, eta_text
 from . import effects, icons, theme
 from . import widgets as w
 from .video_tab import combo, hms_edit, quick_buttons, set_combo
@@ -37,6 +37,7 @@ class ExportTab(QWidget):
     queueEdited = Signal()
     emptyActionRequested = Signal(int)  # nút ở màn hình trống: chuyển tới trang (0 = Video, 1 = Nhạc)
     batchRequested = Signal()  # thêm hàng loạt từ thư mục  # xoá/đổi thứ tự mục trong hàng đợi
+    queuePauseRequested = Signal()  # "Tạm dừng sau video này" / bỏ tạm dừng
     queueEditRequested = Signal(int)  # "Sửa mục này": mở lại mục hàng đợi ở trang Video để chỉnh rồi cập nhật
 
     def __init__(self, settings: QSettings, parent=None):
@@ -385,7 +386,7 @@ class ExportTab(QWidget):
         qh.setSectionResizeMode(2, QHeaderView.ResizeMode.Stretch)
         self.queue.setColumnWidth(0, 30)
         self.queue.setColumnWidth(1, 150)
-        self.queue.setColumnWidth(3, 110)
+        qh.setSectionResizeMode(3, QHeaderView.ResizeMode.ResizeToContents)  # "Đang chờ · ~5 phút" đủ chữ
         self.queue.itemSelectionChanged.connect(self._show_detail)
         self.queue.setIconSize(QSize(w.ThumbLoader.W * 3 // 4, w.ThumbLoader.H * 3 // 4))
         self._q_thumbs = w.ThumbIcons(self)  # ảnh clip đầu của mỗi video trong hàng đợi
@@ -425,6 +426,16 @@ class ExportTab(QWidget):
         self.queue_run_btn.setIconSize(QSize(13, 13))
         self.queue_run_btn.setEnabled(False)
         self.queue_run_btn.clicked.connect(lambda: self.queueRunRequested.emit())
+        self.q_pause_btn = QPushButton("Tạm dừng sau video này")
+        self.q_pause_btn.setObjectName("pill")
+        self.q_pause_btn.setIcon(icons.icon("pause", 13))
+        self.q_pause_btn.setToolTip("Xong video đang chạy thì dừng (không bỏ dở). Bấm Chạy hàng đợi để chạy tiếp.")
+        self.q_pause_btn.clicked.connect(lambda: self.queuePauseRequested.emit())
+        self.q_pause_btn.setVisible(False)
+        self.q_eta = QLabel("")  # "Còn 3 video · ~25 phút · xong khoảng 23:40"
+        self.q_eta.setObjectName("queueDetail")
+        self.q_eta.setWordWrap(True)
+        self._eta_ratio = 0.0
         q_del = QPushButton("Xoá mục chọn")
         q_del.setObjectName("ghost")
         q_del.setIcon(icons.icon("trash", 13))
@@ -461,10 +472,11 @@ class ExportTab(QWidget):
         qv = QVBoxLayout(g_queue)
         qv.setContentsMargins(10, 6, 10, 8)
         qv.setSpacing(6)
+        qv.addWidget(self.q_eta)
         qv.addWidget(self.queue, 1)
         qv.addWidget(self.q_detail_box)
         qr = QHBoxLayout()
-        for b in (self.queue_run_btn, self.q_batch, q_up, q_down):
+        for b in (self.queue_run_btn, self.q_pause_btn, self.q_batch, q_up, q_down):
             qr.addWidget(b)
         qr.addStretch(1)
         qr.addWidget(q_del)
@@ -737,6 +749,8 @@ class ExportTab(QWidget):
 
     def set_running(self, running: bool, clear_log: bool = True) -> None:
         self._running = running
+        if not running:
+            self.q_pause_btn.setVisible(False)
         self._sync_footer()
         self.start_btn.setEnabled(self._can_export and not running)
         self.queue_add_btn.setEnabled(self._can_export)
@@ -838,7 +852,10 @@ class ExportTab(QWidget):
         self._q_thumbs.forget_waiting()
         for k, it in enumerate(items, 1):
             content = it.summary or f"{KIND_LABELS.get(it.kind, it.kind)} · {it.project.name}"
-            row = QTreeWidgetItem([str(k), Path(it.output).stem, content, STATUS_LABELS.get(it.status, it.status)])
+            status = STATUS_LABELS.get(it.status, it.status)
+            if it.status == "pending" and it.seconds > 0 and self._eta_ratio > 0:
+                status += f" · {eta_text(it.seconds * self._eta_ratio)}"
+            row = QTreeWidgetItem([str(k), Path(it.output).stem, content, status])
             row.setToolTip(1, it.output)
             row.setToolTip(2, content)
             row.setToolTip(3, it.message)
@@ -903,6 +920,18 @@ class ExportTab(QWidget):
             self.queue_add_btn.setToolTip("Lưu thay đổi vào đúng mục này trong hàng đợi (không thêm mục mới). "
                                           "Muốn bỏ sửa: Dự án mới hoặc mở dự án khác.")
         self.set_queue(self.items)
+
+    def set_queue_eta(self, html_text: str) -> None:
+        self.q_eta.setText(html_text)
+        self.q_eta.setVisible(bool(html_text))
+
+    def set_eta_ratio(self, ratio: float) -> None:
+        if abs(ratio - self._eta_ratio) > 1e-9:
+            self._eta_ratio = ratio
+            self.set_queue(self.items)
+
+    def set_paused(self, pending: bool) -> None:
+        self.q_pause_btn.setText("Bỏ tạm dừng" if pending else "Tạm dừng sau video này")
 
     def set_queue_status(self, index: int, text: str) -> None:
         row = self.queue.topLevelItem(index)

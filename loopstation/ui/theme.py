@@ -17,7 +17,7 @@ from ..core import ffmpeg_tools as ft
 
 APP_NAME = "KT Loop Station"
 AUTHOR = "By Khánh Trà"
-APP_VERSION = "1.8.5"
+APP_VERSION = "1.8.6"
 # nơi lưu cài đặt (registry); KTLS_SETTINGS_ORG dùng cho test để không đụng cài đặt thật
 SETTINGS_ORG = os.environ.get("KTLS_SETTINGS_ORG", "KTLoopStation")
 
@@ -311,6 +311,8 @@ QFrame#suggestBar {{ background: {rgba(t['accent'], 0.14)}; border: 1px solid {r
 QFrame#readyBar {{ background: {rgba(t['success'], 0.10)}; border: 1px solid {rgba(t['success'], 0.45)};
                   border-radius: {R['md']}px; }}
 QFrame#readyBar QLabel {{ background: transparent; color: {t['text']}; }}
+QFrame#warnBar {{ background: {rgba(t['warn'], 0.14)}; border: none; border-bottom: 1px solid {rgba(t['warn'], 0.55)}; }}
+QFrame#warnBar QLabel {{ background: transparent; color: {t['text']}; }}
 QLabel#toastDot {{ background: transparent; font-size: {f['subtitle']}; color: {t['accent_text']}; }}
 QLabel#toastDot[tone="ok"] {{ color: {t['success_text']}; }}
 QLabel#toastDot[tone="warn"] {{ color: {t['warn_text']}; }}

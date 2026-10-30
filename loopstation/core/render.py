@@ -164,15 +164,23 @@ class RenderJob:
         if self.maxrate:
             self.log(f"Giới hạn bitrate hình: tối đa {self.maxrate / 1000:.1f} Mbps "
                      f"({encoders.BITRATE_CAPS.get(ex.bitrate_cap, ex.bitrate_cap)}).")
-        try:
-            blocks = self._encode_blocks(segs, paths, tl, encoder)
-        except ft.FFmpegError as e:
-            if not encoders.is_hardware(encoder) or not _is_encoder_failure(e):
-                raise  # lỗi không do card đồ hoạ (clip hỏng, ổ đầy…): mã hoá lại bằng CPU cũng hỏng y như vậy
-            self.log(f"Encoder {encoder} lỗi, chuyển sang CPU. Chi tiết:\n{e}")
-            encoder = encoders.ENCODERS[preset.codec]["cpu"]
-            self.maxrate = cap_for(encoder)
-            blocks = self._encode_blocks(segs, paths, tl, encoder)
+        blocks = None
+        while blocks is None:
+            try:
+                blocks = self._encode_blocks(segs, paths, tl, encoder)
+            except ft.FFmpegError as e:
+                if not encoders.is_hardware(encoder) or not _is_encoder_failure(e):
+                    raise  # lỗi không do card đồ hoạ (clip hỏng, ổ đầy…): mã hoá lại bằng CPU cũng hỏng y như vậy
+                jobs = gpu_jobs(encoder)
+                if jobs > 1:
+                    # card / driver cũ chỉ cho 2–3 phiên mã hoá cùng lúc: bớt số khối song song, vẫn dùng card
+                    # (khối đã xong nằm trong bộ nhớ đệm, không làm lại). Nhớ mức này cho các lần xuất sau.
+                    _GPU_JOBS[encoder] = jobs - 1
+                    self.log(f"Card đồ hoạ từ chối {jobs} phiên cùng lúc — thử lại với {jobs - 1} phiên.")
+                    continue
+                self.log(f"Encoder {encoder} lỗi, chuyển sang CPU. Chi tiết:\n{e}")
+                encoder = encoders.ENCODERS[preset.codec]["cpu"]
+                self.maxrate = cap_for(encoder)
 
         # ----- 2. tiếng gốc -----
         src_blocks = {}
@@ -427,7 +435,7 @@ class RenderJob:
             self.log("Màu & Logo: " + ", ".join(parts))
         self.log(f"Encoder: {encoder} — {len(uniq)} khối video khác nhau ({n_x} đoạn crossfade), "
                  f"ghép thành {len(segs)} khối.")
-        jobs = encoders.parallel_jobs(encoder)
+        jobs = gpu_jobs(encoder)
         if jobs > 1 and len(uniq) > 1:
             self.log(f"Chuẩn hoá {jobs} khối cùng lúc")
 
@@ -444,6 +452,14 @@ class RenderJob:
         blocks = dict(zip(uniq, _parallel(uniq, one, jobs, step)))
         self.progress(W_VIDEO, "Đã chuẩn hoá xong video.")
         return blocks
+
+
+_GPU_JOBS: dict[str, int] = {}  # encoder → số phiên song song đã giảm (card từ chối nhiều phiên), nhớ tới khi tắt app
+
+
+def gpu_jobs(encoder: str) -> int:
+    """Số khối chuẩn hoá cùng lúc cho encoder này: mức mặc định, hoặc mức đã giảm sau khi card từ chối."""
+    return min(encoders.parallel_jobs(encoder), _GPU_JOBS.get(encoder, 99))
 
 
 def moov_reserve(total: float, fps) -> int:

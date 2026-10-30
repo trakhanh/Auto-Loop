@@ -20,6 +20,7 @@ class QueueItem:
     status: str = "pending"
     message: str = ""
     summary: str = ""  # "Tập 33 · tình huống 1 → 10 · 39 dòng · dài 1:05:00" (tính lúc thêm, hiện ở hàng đợi)
+    seconds: float = 0.0  # độ dài file sẽ xuất — ước tính giờ xong của hàng đợi
 
     @property
     def finished(self) -> bool:
@@ -27,7 +28,7 @@ class QueueItem:
 
     def to_dict(self) -> dict:
         return {"project": self.project.to_dict(None), "output": self.output, "kind": self.kind,
-                "status": self.status, "message": self.message, "summary": self.summary}
+                "status": self.status, "message": self.message, "summary": self.summary, "seconds": self.seconds}
 
     @classmethod
     def from_dict(cls, d: dict) -> "QueueItem":
@@ -36,7 +37,13 @@ class QueueItem:
             status = "pending"
         return cls(project=Project.from_dict(d["project"], None), output=d["output"],
                    kind=d.get("kind", "video"), status=status, message=d.get("message", ""),
-                   summary=d.get("summary", ""))
+                   summary=d.get("summary", ""), seconds=float(d.get("seconds", 0.0) or 0.0))
+
+
+def eta_text(sec: float) -> str:
+    """"~4 phút", "~1 giờ 20 phút" — ước tính, làm tròn cho dễ đọc."""
+    m = max(1, int(round(sec / 60)))
+    return f"~{m} phút" if m < 60 else f"~{m // 60} giờ" + (f" {m % 60} phút" if m % 60 else "")
 
 
 def fmt_len(sec: float) -> str:

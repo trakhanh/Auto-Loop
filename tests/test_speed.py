@@ -53,3 +53,11 @@ def test_moov_reserve_enough_for_long_video():
     # 3 giờ 60 fps: ~650 nghìn khung hình + ~506 nghìn khung âm thanh → cần ~25 MB, giữ dư
     need = (3 * 3600 * 60 + 3 * 3600 * 48000 / 1024) * 24
     assert render.moov_reserve(3 * 3600, 60) > need
+
+
+def test_gpu_jobs_remembers_reduced_sessions():
+    render._GPU_JOBS.clear()
+    assert render.gpu_jobs("h264_nvenc") == 3
+    render._GPU_JOBS["h264_nvenc"] = 2  # card từ chối 3 phiên → lần sau dùng 2
+    assert render.gpu_jobs("h264_nvenc") == 2 and render.gpu_jobs("h264_amf") == 3
+    render._GPU_JOBS.clear()

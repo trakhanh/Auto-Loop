@@ -17,6 +17,8 @@ from ..core import ffmpeg_tools as ft
 from . import icons, theme
 from . import widgets as w
 
+LOW_DISK = 8 * 1024 ** 3  # ổ chứa bộ nhớ đệm / thư mục lưu còn dưới mức này: cảnh báo (video 2K 1 giờ ~10 GB)
+
 FONT_SIZES = [("Nhỏ", 9), ("Vừa (mặc định)", 10), ("Lớn", 11), ("Rất lớn", 12)]
 VENDOR_ROWS = [
     ("NVIDIA NVENC", ["h264_nvenc", "hevc_nvenc", "av1_nvenc"]),
@@ -79,6 +81,7 @@ class SettingsPage(QWidget):
     recheckRequested = Signal()
     welcomeRequested = Signal()  # xem lại màn hình chào
     updateCheckRequested = Signal()  # Giới thiệu → Kiểm tra cập nhật
+    cacheChanged = Signal()  # đổi nơi đặt / xoá bộ nhớ đệm → cửa sổ chính kiểm tra lại ổ đĩa
 
     def set_update_status(self, text: str, tone: str = "", busy: bool = False) -> None:
         self.update_status.setText(text)
@@ -214,10 +217,32 @@ class SettingsPage(QWidget):
         r3.addWidget(self.cache_label)
         r3.addWidget(open_data)
         r3.addWidget(clear)
+        # nơi đặt bộ nhớ đệm: ổ C hay đầy (tới 30 GB khối video) → cho chuyển sang ổ khác
+        self.cache_where = w.ElidedLabel("", Qt.TextElideMode.ElideMiddle)
+        self.cache_where.setObjectName("muted")
+        self.cache_free = QLabel("")
+        self.cache_free.setObjectName("chip")
+        move = QPushButton("Đổi nơi lưu…")
+        move.setObjectName("pill")
+        move.setIcon(icons.icon("folder", 13))
+        move.setToolTip("Chọn thư mục ở ổ còn nhiều chỗ (ví dụ D:\\ hoặc E:\\) để chứa bộ nhớ đệm")
+        move.clicked.connect(self.pick_cache_dir)
+        reset = QPushButton("Về mặc định")
+        reset.setObjectName("ghost")
+        reset.clicked.connect(lambda: self._set_cache_dir(""))
+        self.cache_move_btns = (move, reset)
+        r4_box = QWidget()
+        r4 = w.FlowLayout(r4_box, spacing=8)
+        r4.addWidget(QLabel("Nơi lưu:"))
+        r4.addWidget(self.cache_free)
+        r4.addWidget(move)
+        r4.addWidget(reset)
         g_cache = QGroupBox("Bộ nhớ đệm (Cache)")
         cv = QVBoxLayout(g_cache)
         cv.setSpacing(8)
         cv.addWidget(r3_box)
+        cv.addWidget(r4_box)
+        cv.addWidget(self.cache_where)
         cv.addWidget(w.muted("Lưu các clip đã mã hoá để lần xuất sau nhanh hơn. Xoá thoải mái khi cần chỗ trống; "
                              "lần xuất sau sẽ mã hoá lại."))
 
@@ -447,6 +472,17 @@ class SettingsPage(QWidget):
                                  "khoảng 3 lần). Thử cập nhật driver card đồ hoạ rồi bấm 'Kiểm tra lại phần cứng'.")
 
     def refresh_cache(self) -> None:
+        root = ft.cache_root()
+        custom = bool(ft.OPTIONS.get("cache_dir"))
+        self.cache_where.setText(str(root) + ("" if custom else "  (mặc định)"))
+        free = ft.disk_free(root)
+        if free >= 0:
+            drive = (root.drive or root.anchor).rstrip("\\/")
+            self.cache_free.setText(f"Ổ {drive} còn {free / 1024 ** 3:,.1f} GB".replace(",", "."))
+            self.cache_free.setObjectName("chipWarn" if free < LOW_DISK else "chipOk")
+            self.cache_free.style().unpolish(self.cache_free)
+            self.cache_free.style().polish(self.cache_free)
+
         def work():
             size = ft.cache_size()
             self._bridge.cache.emit(f"Đang dùng {size / 1024 ** 2:,.0f} MB".replace(",", "."))
@@ -516,6 +552,8 @@ class SettingsPage(QWidget):
         """Đang xuất: khoá nút xoá bộ nhớ đệm (xoá giữa chừng làm hỏng lượt xuất đang ghép khối)."""
         self.clear_cache_btn.setEnabled(not running)
         self.clear_cache_btn.setToolTip("Đang xuất file — chờ xuất xong rồi mới xoá được." if running else "")
+        for b in self.cache_move_btns:
+            b.setEnabled(not running)
 
     def _clear_cache(self) -> None:
         if QMessageBox.question(self, "Xoá bộ nhớ đệm", "Xoá các clip đã mã hoá sẵn và các bản xem thử nối? Lần xuất sau sẽ chậm hơn một chút.") \
@@ -523,6 +561,41 @@ class SettingsPage(QWidget):
             return
         ft.clear_cache()
         self.refresh_cache()
+        self.cacheChanged.emit()
+
+    def pick_cache_dir(self) -> None:
+        d = QFileDialog.getExistingDirectory(self, "Chọn thư mục chứa bộ nhớ đệm (nên ở ổ còn nhiều chỗ)",
+                                             ft.OPTIONS.get("cache_dir") or "")
+        if d:
+            self._set_cache_dir(os.path.join(d, "KTLoopStation-cache") if os.path.basename(d) != "KTLoopStation-cache"
+                                else d)
+
+    def _set_cache_dir(self, path: str) -> None:
+        """Chuyển bộ nhớ đệm sang chỗ mới (khối cũ không mang theo — lần xuất sau mã hoá lại). Hỏi có xoá chỗ cũ."""
+        cur = ft.OPTIONS.get("cache_dir") or ""
+        if os.path.normcase(path) == os.path.normcase(cur):
+            return
+        if path and not ft.usable_dir(path):
+            QMessageBox.warning(self, "Không dùng được", f"Không ghi được vào thư mục:\n{path}")
+            return
+        old = ft.cache_root()
+        box = QMessageBox(self)
+        box.setWindowTitle("Đổi nơi lưu bộ nhớ đệm")
+        box.setText(f"Chuyển bộ nhớ đệm sang:\n{path or 'thư mục dữ liệu mặc định (ổ C)'}\n\n"
+                    f"Bộ nhớ đệm cũ ở {old} ({ft.cache_size() / 1024 ** 3:,.1f} GB) không mang theo — lần xuất sau "
+                    "mã hoá lại. Xoá chỗ cũ để lấy lại dung lượng?".replace(",", "."))
+        wipe = box.addButton("Chuyển và xoá chỗ cũ", QMessageBox.ButtonRole.AcceptRole)
+        keep = box.addButton("Chuyển, giữ chỗ cũ", QMessageBox.ButtonRole.ActionRole)
+        box.addButton("Huỷ", QMessageBox.ButtonRole.RejectRole)
+        box.exec()
+        if box.clickedButton() not in (wipe, keep):
+            return
+        if box.clickedButton() is wipe:
+            ft.clear_cache()
+        ft.OPTIONS["cache_dir"] = path
+        self.settings.setValue("pref/cache_dir", path)
+        self.refresh_cache()
+        self.cacheChanged.emit()
 
     # ---------- đọc tuỳ chọn ----------
     def pref(self, key: str, default=False) -> bool:

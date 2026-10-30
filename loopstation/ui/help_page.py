@@ -402,6 +402,19 @@ topic("mau", "Làm video", "eye", "Màu & Logo", hero(
 <li>Không làm chậm việc xuất: mỗi clip vẫn chỉ mã hoá một lần.</li>
 </ul>""")
 
+topic("hoso", "Làm video", "video_music", "Hồ sơ kênh", hero(
+    "Hồ sơ kênh", "Làm nhiều kênh: mỗi kênh một bộ cài đặt, chọn kênh là áp cả bộ — khỏi chỉnh lại từng thứ.",
+    ()) + steps([
+    ("Làm đúng ý một video của kênh", "intro / outro, màu & logo, nhạc, tiếng nền, âm lượng, mẫu bảng, nơi lưu, chất lượng."),
+    ("Lưu thành hồ sơ", "nút <b>Kênh</b> trên cùng → <b>Lưu cài đặt hiện tại thành hồ sơ…</b> → đặt tên kênh."),
+    ("Lần sau chọn kênh", "nút <b>Kênh</b> → bấm tên kênh: áp cả bộ vào dự án đang mở, <b>bảng clip giữ nguyên</b>.")]) + legend([
+    ("Hồ sơ nhớ gì", "intro / outro, màu & logo, kiểu tiếng gốc + âm lượng, <b>thư mục nhạc</b> (bài mới thêm vào thư mục "
+                     "sau này cũng có), tiếng nền, mẫu bảng dùng khi thả file, nơi lưu, độ phân giải / chất lượng / bitrate."),
+    ("Không nhớ", "clip trong bảng, tên file — đổi theo từng video."),
+    ("Quản lý", "<b>Kênh → Quản lý hồ sơ kênh…</b>: Dùng, Cập nhật từ dự án đang mở, Đổi tên, Xoá."),
+    ("Gửi máy khác", "<b>Xuất ra file…</b> (file <code>.ktls</code>, gồm cả mẫu bảng / mẫu xen kẽ của bạn) → máy kia "
+                     "<b>Nhập từ file…</b> ở Hồ sơ kênh hoặc Thư viện mẫu. Trùng tên: chọn ghi đè hay giữ cả hai.")]))
+
 topic("nhac", "Âm thanh", "music", "Trang Nhạc: playlist", hero(
     "Trang Nhạc", "Thêm bài nhạc — nhạc tự lặp cho đủ độ dài video, bài cuối nhỏ dần đúng lúc video kết thúc.",
     (("Mở trang Nhạc", "app:music"),)) + img("music") + legend([
@@ -544,7 +557,12 @@ topic("hangdoi", "Xuất file", "queue", "Hàng đợi (xuất qua đêm)", hero
     ("Lỡ thêm trùng", "thêm một video giống hệt mục đang chờ (cùng clip, số lần phát, intro / outro) thì app hỏi lại."),
     ("Thư mục lưu", "ô <b>Mỗi video một thư mục riêng</b> (trang Xuất, bật sẵn): <i>Thư mục lưu › Tập 33 › Tập 33.mp4</i> "
                     "kèm file mốc thời gian. Tắt: mọi file nằm chung một thư mục. Nút <b>Mở thư mục</b> ở chi tiết mục."),
-    ("Đang Xuất ngay mà thêm mục", "được — xuất xong app hỏi <i>Chạy hàng đợi luôn?</i>.")]) + """
+    ("Đang Xuất ngay mà thêm mục", "được — xuất xong app hỏi <i>Chạy hàng đợi luôn?</i>."),
+    ("Giờ xong", "trên hàng đợi ghi <b>Còn 3 video · ~25 phút · xong khoảng 23:40</b>; mỗi mục đang chờ ghi ước tính. App tự "
+                 "đo tốc độ máy sau mỗi lần xuất nên càng dùng càng sát."),
+    ("Tạm dừng / chạy tiếp", "đang chạy hàng đợi bấm <b>Tạm dừng sau video này</b>: xong video đang làm thì dừng (không bỏ "
+                             "dở). Bấm <b>Chạy hàng đợi</b> để chạy tiếp."),
+    ("Thông báo", "hàng đợi xong thì Windows hiện thông báo ở góc màn hình — đi đâu cũng biết.")]) + """
 <ul>
 <li>Máy <b>không tự ngủ</b> khi đang xuất (màn hình vẫn tắt bình thường).</li>
 <li>Tên file trùng tự thêm <code>_2</code>, <code>_3</code>. Đóng app giữa chừng: mục đang dở quay về <b>Chờ</b> — mở lại app và bấm
@@ -632,6 +650,8 @@ topic("caidat", "Khác", "settings", "Cài đặt & card đồ hoạ", hero(
 <li><b>Tắt máy khi chạy xong hàng đợi</b> (có 2 phút để huỷ) — chỉ có tác dụng tới khi tắt app, lần mở sau phải tick lại.</li>
 <li><b>Đường dẫn FFmpeg</b>: để <i>Tự động</i> (dùng bản kèm theo app); chỉ đổi khi được hướng dẫn.</li>
 <li><b>Xoá bộ nhớ đệm</b>, <b>Mở thư mục dữ liệu</b> (dự án tự lưu, hàng đợi, nhật ký, file lỗi).</li>
+<li><b>Nơi lưu bộ nhớ đệm</b>: mặc định ở ổ C (tới 30 GB). Ổ C hay đầy thì bấm <b>Đổi nơi lưu…</b> chọn ổ khác (D:, E:…).
+Ổ chứa bộ nhớ đệm / thư mục lưu còn dưới 8 GB thì app hiện dải vàng cảnh báo kèm nút xử lý ngay.</li>
 </ul>""" + box("tip", "Tốc độ xuất chủ yếu đến từ bộ mã hoá trên card (NVENC / Quick Sync / AMF) — app luôn tự dùng. "
                      "“Giải mã bằng GPU (CUDA)” thường <b>không</b> nhanh hơn với clip ngắn, chỉ nên bật khi CPU yếu.") + box(
     "tip", "Bộ nhớ đệm giúp lần xuất sau nhanh hơn; app tự dọn khi quá 30 GB. Xoá tay ở đây nếu ổ C sắp đầy."))

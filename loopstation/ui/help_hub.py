@@ -34,6 +34,13 @@ FIRST_STEPS = (
 )
 # "Có gì mới" của bản đang chạy — hiện ở đầu trang Tổng quan (sửa cùng lúc với APP_VERSION khi ra bản mới)
 WHATS_NEW = (
+    ("video_music", "Hồ sơ kênh",
+     "Nút Kênh trên cùng: mỗi kênh một bộ intro / outro, logo, thư mục nhạc, tiếng nền, mẫu bảng, nơi lưu, chất lượng. "
+     "Chọn kênh là áp cả bộ, bảng clip giữ nguyên."),
+    ("upload", "Gửi mẫu & hồ sơ cho máy khác",
+     "Thư viện mẫu / Hồ sơ kênh → Xuất ra file .ktls → máy khác Nhập từ file. Trùng tên thì chọn ghi đè hay giữ cả hai."),
+    ("queue", "Hàng đợi báo giờ xong, tạm dừng được",
+     "Còn 3 video · ~25 phút · xong khoảng 23:40. Tạm dừng sau video này / chạy tiếp; Windows thông báo khi xong."),
     ("zap", "Xuất nhanh hơn ~3 lần",
      "Ghép nhiều clip: app chuẩn hoá 3 clip cùng lúc trên card NVIDIA / AMD, mã hoá nhanh cho mức Cao (độ nét như cũ), bước "
      "cuối không ghi lại cả file. Đo thật: 45 clip 2K, video 22 phút — 229 giây còn 74 giây."),
@@ -43,15 +50,6 @@ WHATS_NEW = (
     ("folder", "Thả file là xong — ít bước hơn",
      "Thả file / cả thư mục vào trang Video: app tự nhận tập, tự áp mẫu dùng lần trước, dải Sẵn sàng có nút Thêm vào hàng "
      "đợi. Thả cả mùa: một câu hỏi là đưa hết các tập vào hàng đợi."),
-    ("sliders", "Tiếng gốc rõ, chỉnh ở một chỗ",
-     "Tiếng gốc tự cân về cùng mức với nhạc. Bảng trộn âm có 3 nút Giữ / Chỉ / Tắt tiếng gốc và chọn nhanh Nhạc là chính · "
-     "Cân bằng · Tiếng gốc là chính."),
-    ("queue", "Hàng đợi dễ dùng, khó nhầm",
-     "Thêm xong app hỏi Làm video tiếp theo hay Chạy hàng đợi; tên file tự gợi ý Tập 33; mỗi mục ghi rõ nội dung, bấm vào "
-     "xem chi tiết, Sửa mục này rồi Cập nhật đúng mục đó; lỡ thêm trùng thì app hỏi lại."),
-    ("plus", "LOOP AB lên đầu tình huống — dòng “Chỉ khi có file”",
-     "Mẫu Loop A ×57 kẹp Loop B có dòng LOOP AB ở đầu: tình huống có file 33_2_LOOP AB thì mở đầu bằng AB, tình huống "
-     "khác giữ nguyên. Tự tạo mẫu: tick Chỉ khi có file. File có vai mẫu chưa có (34_5_LOOP C) được báo tên."),
 )
 SHORTCUTS = (("Space", "Phát / dừng"), ("F1", "Hướng dẫn"), ("Ctrl+S", "Lưu dự án"), ("Ctrl+Z", "Hoàn tác"),
              ("Ctrl+D", "Nhân bản dòng"), ("Ctrl+F", "Tìm"))

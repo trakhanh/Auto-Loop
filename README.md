@@ -6,7 +6,7 @@
 
 **Ghép và loop clip + nhạc thành video YouTube dài hàng giờ — xem trước ngay trong app, xuất nhanh bằng card đồ hoạ.**
 
-<sub>By Khánh Trà · Ứng dụng Windows · Giao diện tiếng Việt · Bản mới nhất: <b>1.8.5</b></sub>
+<sub>By Khánh Trà · Ứng dụng Windows · Giao diện tiếng Việt · Bản mới nhất: <b>1.8.6</b></sub>
 
 <br>
 
@@ -35,6 +35,8 @@
 
 ## Có gì mới ở 1.8
 
+> **1.8.6** · <b>Hồ sơ kênh</b> (nút <i>Kênh</i> trên cùng): mỗi kênh một bộ intro / outro, logo & màu, thư mục nhạc, tiếng nền, âm lượng, mẫu bảng, nơi lưu, chất lượng — chọn kênh là áp cả bộ. <b>Gửi mẫu & hồ sơ cho máy khác</b> bằng file <code>.ktls</code> (Xuất / Nhập ở Thư viện mẫu và Hồ sơ kênh). <b>Hàng đợi</b> báo giờ xong ("xong khoảng 23:40"), <b>Tạm dừng sau video này</b> / chạy tiếp, thông báo Windows khi xong. <b>Bộ nhớ đệm</b> chuyển được sang ổ khác, ổ sắp đầy thì app cảnh báo. Card đồ hoạ đời cũ từ chối nhiều phiên thì app tự giảm phiên, vẫn xuất bằng card (không rơi về CPU).
+>
 > **1.8.5** · <b>Xuất nhanh hơn ~3 lần</b> khi ghép nhiều clip (45 clip 2K, card NVIDIA: 229 s → 74 s): chuẩn hoá 3 clip cùng lúc trên card, chế độ mã hoá nhanh cho mức Cao, bước cuối không ghi lại cả file. <b>Trộn ngẫu nhiên</b> hiện ngay thứ tự sẽ xuất (cửa sổ <i>Xem đủ thứ tự</i> có ảnh từng clip), có Trộn lại / Dùng thứ tự này. Lăn chuột không còn làm đổi ô số / dropdown / thanh âm lượng; thanh tiêu đề mọi cửa sổ cùng màu theme; chữ không còn bị cắt ở cột hẹp / chữ to. <b>Ít bước hơn</b>: thả file (hoặc cả thư mục) vào trang Video là app tự nhận tập, <b>tự áp mẫu dùng lần trước</b>, hiện dải <b>Sẵn sàng</b> (tập, độ dài, intro / outro, nhạc, tiếng gốc, tên file) kèm nút <b>Thêm vào hàng đợi</b>; thả cả mùa thì một câu hỏi là đưa hết các tập vào hàng đợi. <b>Âm thanh</b>: tiếng gốc được tự cân về cùng mức với nhạc (trước đây nhỏ hơn ~11 dB), chọn Giữ / Chỉ / Tắt tiếng gốc ngay ở Bảng trộn âm, nút chọn nhanh Nhạc là chính · Cân bằng · Tiếng gốc là chính. <b>Hàng đợi dễ dùng hơn</b>: thêm xong app báo đã thêm gì, lưu ở đâu và hỏi <b>Làm video tiếp theo</b> (bảng trống, giữ cài đặt) hay <b>Chạy hàng đợi</b>; tên file tự gợi ý <b>Tập 33</b>; mỗi dòng hàng đợi ghi rõ nội dung (tập, tình huống, số dòng, độ dài), bấm vào xem chi tiết, <b>Sửa mục này</b> rồi <b>Cập nhật</b> đúng mục đó; lỡ thêm trùng thì app hỏi lại. Mẫu <b>Loop A ×57 kẹp Loop B</b> có dòng <b>LOOP AB ×1</b> ở đầu mỗi tình huống, <b>chỉ dùng khi có file</b>: thư mục có <code>33_2_LOOP AB.mp4</code> thì tình huống 2 mở đầu bằng AB, các tình huống khác giữ nguyên. Trình <b>Tạo mẫu mới…</b> có cột <b>Chỉ khi có file</b>, ghi rõ 2 kiểu tên và cho xem ví dụ theo <code>33_1_LOOP A</code> hoặc <code>5_loopA</code>. File có vai mẫu chưa có (ví dụ <code>34_5_LOOP C</code>) được báo tên thay vì bị bỏ âm thầm.
 >
 > **1.8.4** · Nhận thêm tên kiểu <b>Tập_STT_Vai</b>: <code>33_4_LOOP A.mp4</code> = tập 33, tình huống 4, vai loopA (<code>LOOP A</code> = <code>Loop_A</code> = <code>loopA</code>). <b>Mỗi tập ra một video riêng</b>: Xuất hàng loạt tự tách thư mục có <code>33_…</code>, <code>34_…</code> thành <b>Tập 33</b>, <b>Tập 34</b> (chọn thẳng thư mục chứa file cũng được); hộp Mẫu bảng clip có ô <b>Tập</b> để chọn. Thiếu file thì app ghi rõ, ví dụ <i>Thiếu 33_7_LOOP B</i>.
