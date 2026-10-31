@@ -108,6 +108,7 @@ def _render(project, start: float, runner: ft.Runner | None, version: int, secon
         m2 = copy.copy(ms)
         m2.fade_in = ms.fade_in if base <= 0 else 0.0
         m2.fade_out = ms.fade_out if end >= total - 1e-3 else 0.0
+        paths = audio_build.usable_paths(runner, paths)  # bài có đoạn hỏng → bản sạch (như lúc xuất)
         graph += audio_build.music_graph(shifted, paths, gains, m2, end - base, "mfull")
         graph.append(f"[mfull]atrim=start={start - base:.6f},asetpts=PTS-STARTPTS[music];")
         music_label = "music"

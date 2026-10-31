@@ -7,7 +7,7 @@ import threading
 from pathlib import Path
 
 from PySide6.QtCore import QObject, QPointF, QRectF, QSize, Qt, QTimer, QUrl, Signal
-from PySide6.QtGui import QColor, QKeySequence, QPainter, QPainterPath, QPen, QPixmap, QShortcut
+from PySide6.QtGui import QColor, QImage, QKeySequence, QPainter, QPainterPath, QPen, QPixmap, QShortcut
 from PySide6.QtWidgets import (
     QCheckBox, QDialog, QDoubleSpinBox, QFrame, QGridLayout, QHBoxLayout, QLabel, QPushButton, QVBoxLayout,
     QWidget,
@@ -152,20 +152,198 @@ class _Grabber(QObject):
     """Lấy 1 khung hình tại thời điểm t (luồng nền, có cache)."""
     ready = Signal(str, str)  # (tag, file ảnh)
 
-    def grab(self, tag: str, path: str, t: float) -> None:
+    def grab(self, tag: str, path: str, t: float, full: bool = False) -> None:
+        """`full`: độ nét gốc (tối đa 1920 px ngang) cho cửa sổ phóng to so sánh; mặc định ảnh nhỏ 320 px."""
         def work():
             from ..core.video_build import color_fix, color_key, tone_chain
-            key = hashlib.sha1(f"{path}|{t:.2f}|{color_key(path)}".encode("utf-8")).hexdigest()[:20]
-            out = ft.cache_dir("thumbs") / f"trim_{key}.jpg"
+            key = hashlib.sha1(f"{path}|{t:.2f}|{color_key(path)}|{'full' if full else 'small'}"
+                               .encode("utf-8")).hexdigest()[:20]
+            out = ft.cache_dir("thumbs") / f"trim_{key}.{'png' if full else 'jpg'}"
+            size = "scale='min(1920,iw)':-2" if full else "scale=320:-2"
             if not out.is_file():
                 try:
                     ft.run([ft.ffmpeg(), "-v", "error", "-y", "-ss", f"{t:.3f}", "-i", path, "-frames:v", "1",
-                            "-vf", f"{color_fix(path)}scale=320:-2,{tone_chain(path)}null", "-q:v", "4", str(out)], timeout=30)
+                            "-vf", f"{color_fix(path)}{size},{tone_chain(path)}null",
+                            *([] if full else ["-q:v", "4"]), str(out)], timeout=30)
                 except Exception:  # noqa: BLE001
                     return
             if out.is_file():
                 self.ready.emit(tag, str(out))
         threading.Thread(target=work, daemon=True).start()
+
+    def grab_diff(self, tag: str, img_a: str, img_b: str) -> None:
+        """Ảnh "chỗ khác nhau" giữa 2 ảnh khung đã lấy (đen = giống hệt, sáng = khác), tăng sáng để thấy rõ chỗ lệch.
+        So 2 ảnh đã lấy (không tua lại video): đúng hai khung đang xem, kể cả khung sát cuối clip."""
+        def work():
+            key = hashlib.sha1(f"diff2|{img_a}|{img_b}".encode("utf-8")).hexdigest()[:20]
+            out = ft.cache_dir("thumbs") / f"trim_{key}.png"
+            if not out.is_file():
+                try:
+                    ft.run([ft.ffmpeg(), "-v", "error", "-y", "-i", img_a, "-i", img_b, "-filter_complex",
+                            "[0:v]format=gbrp[a];[1:v]format=gbrp[b];[a][b]blend=all_mode=difference,"
+                            "lutrgb=r='min(val*4,255)':g='min(val*4,255)':b='min(val*4,255)'",
+                            "-frames:v", "1", str(out)], timeout=60)
+                except Exception:  # noqa: BLE001
+                    return
+            if out.is_file():
+                self.ready.emit(tag, str(out))
+        threading.Thread(target=work, daemon=True).start()
+
+
+def similarity(a: QImage, b: QImage) -> float:
+    """Độ giống nhau 0–100% của 2 khung (thu nhỏ 96×54 xám rồi so từng điểm) — 100% = nối loop không thấy giật.
+    Lệch trung bình 25% độ sáng trở lên tính là 0%."""
+    if a.isNull() or b.isNull():
+        return 0.0
+    w_, h_ = 96, 54
+    ga, gb = (x.scaled(w_, h_, Qt.AspectRatioMode.IgnoreAspectRatio, Qt.TransformationMode.SmoothTransformation)
+              .convertToFormat(QImage.Format.Format_Grayscale8) for x in (a, b))
+    la, lb = ga.bytesPerLine(), gb.bytesPerLine()
+    da, db = bytes(ga.constBits()), bytes(gb.constBits())
+    total = sum(abs(da[y * la + x] - db[y * lb + x]) for y in range(h_) for x in range(w_))
+    return max(0.0, 100.0 - total / (w_ * h_) / 255 * 100 * 4)
+
+
+class FrameCompareDialog(QDialog):
+    """Phóng to khung đầu / cuối của đoạn lấy để kiểm tra chỗ nối loop: Cạnh nhau · Nhấp nháy đầu ↔ cuối · Chỗ khác nhau."""
+
+    MODES = (("side", "Cạnh nhau"), ("flick", "Nhấp nháy đầu ↔ cuối"), ("diff", "Chỗ khác nhau"))
+
+    def __init__(self, path: str, start: float, end: float, parent=None):
+        super().__init__(parent)
+        from PySide6.QtWidgets import QButtonGroup, QSizePolicy
+        self.setWindowTitle(f"So sánh khung đầu / cuối — {Path(path).name}")
+        self.resize(1280, 760)
+        self._img: dict[str, QImage] = {}
+        self._flip = False
+        self.mode = "side"
+
+        self.info = QLabel(f"Đầu · {start:.1f}s   ↔   Cuối · {end:.1f}s — khi loop, khung cuối nối thẳng vào khung đầu. "
+                           "Hai khung càng giống nhau thì chỗ nối càng khó thấy.")
+        self.info.setObjectName("muted")
+        self.info.setWordWrap(True)
+        self.score = QLabel("Đang so…")
+        self.score.setObjectName("chip")
+        bar = QHBoxLayout()
+        group = QButtonGroup(self)
+        self.mode_btns = {}
+        for key, text in self.MODES:
+            b = QPushButton(text)
+            b.setObjectName("pill")
+            b.setCheckable(True)
+            group.addButton(b)
+            b.clicked.connect(lambda _=False, k=key: self._set_mode(k))
+            bar.addWidget(b)
+            self.mode_btns[key] = b
+        self.mode_btns["side"].setChecked(True)
+        bar.addStretch(1)
+        bar.addWidget(self.score)
+
+        def big() -> QLabel:
+            lab = QLabel("Đang lấy khung hình…")
+            lab.setAlignment(Qt.AlignmentFlag.AlignCenter)
+            lab.setProperty("role", "thumb")
+            lab.setMinimumSize(320, 180)
+            lab.setSizePolicy(QSizePolicy.Policy.Ignored, QSizePolicy.Policy.Ignored)
+            return lab
+        self.left, self.right = big(), big()
+        self.cap_l, self.cap_r = QLabel(f"Đầu · {start:.1f}s"), QLabel(f"Cuối · {end:.1f}s")
+        for c in (self.cap_l, self.cap_r):
+            c.setObjectName("h2")
+            c.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        grid = QGridLayout()
+        grid.setHorizontalSpacing(10)
+        grid.addWidget(self.cap_l, 0, 0)
+        grid.addWidget(self.cap_r, 0, 1)
+        grid.addWidget(self.left, 1, 0)
+        grid.addWidget(self.right, 1, 1)
+        grid.setRowStretch(1, 1)
+        close = QPushButton("Đóng")
+        close.clicked.connect(self.accept)
+        foot = QHBoxLayout()
+        self.hint = QLabel("")
+        self.hint.setObjectName("muted")
+        foot.addWidget(self.hint, 1)
+        foot.addWidget(close)
+        lay = QVBoxLayout(self)
+        lay.addWidget(self.info)
+        lay.addLayout(bar)
+        lay.addLayout(grid, 1)
+        lay.addLayout(foot)
+
+        self._timer = QTimer(self)
+        self._timer.setInterval(450)
+        self._timer.timeout.connect(self._tick)
+        self._grabber = _Grabber(self)
+        self._grabber.ready.connect(self._on_frame)
+        self._grabber.grab("start", path, start, full=True)
+        self._grabber.grab("end", path, max(start, end - 0.05), full=True)
+        self._files: dict[str, str] = {}
+        self._set_mode("side")
+
+    def _on_frame(self, tag: str, file: str) -> None:
+        img = QImage(file)
+        if img.isNull():
+            return
+        self._img[tag] = img
+        self._files[tag] = file
+        if tag != "diff" and "start" in self._files and "end" in self._files:
+            self._grabber.grab_diff("diff", self._files["start"], self._files["end"])
+        if "start" in self._img and "end" in self._img:
+            s = similarity(self._img["start"], self._img["end"])
+            verdict = "rất khớp — nối loop gần như không thấy" if s >= 95 else (
+                "khá khớp — có thể thấy nhẹ" if s >= 85 else "lệch rõ — nên chỉnh điểm đầu / cuối hoặc dùng Nối loop")
+            self.score.setText(f"Giống nhau {s:.0f}% · {verdict}")
+            self.score.setObjectName("chipOk" if s >= 95 else ("chipWarn" if s >= 85 else "chipError"))
+            self.score.style().unpolish(self.score)
+            self.score.style().polish(self.score)
+        self._render()
+
+    def _set_mode(self, mode: str) -> None:
+        self.mode = mode
+        self.mode_btns[mode].setChecked(True)
+        one = mode != "side"
+        self.right.setVisible(not one)
+        self.cap_r.setVisible(not one)
+        self.hint.setText({"side": "Đặt cạnh nhau để so bố cục, màu, vị trí vật.",
+                           "flick": "Đổi đầu ↔ cuối liên tục như lúc loop — chỗ nào nhảy là chỗ nối bị giật.",
+                           "diff": "Đen = giống hệt, chỗ sáng = khác nhau giữa khung đầu và khung cuối."}[mode])
+        if mode == "flick":
+            self._timer.start()
+        else:
+            self._timer.stop()
+        self._render()
+
+    def _tick(self) -> None:
+        self._flip = not self._flip
+        self._render()
+
+    def _show(self, lab: QLabel, img: QImage | None) -> None:
+        if img is None:
+            return
+        lab.setPixmap(QPixmap.fromImage(img).scaled(lab.size() - QSize(4, 4), Qt.AspectRatioMode.KeepAspectRatio,
+                                                    Qt.TransformationMode.SmoothTransformation))
+
+    def _render(self) -> None:
+        if self.mode == "side":
+            self.cap_l.setText(self.cap_l.text().split("  ")[0])
+            self._show(self.left, self._img.get("start"))
+            self._show(self.right, self._img.get("end"))
+        elif self.mode == "flick":
+            tag = "end" if self._flip else "start"
+            self.cap_l.setText("Cuối  ▶  (nối vào đầu)" if self._flip else "Đầu")
+            self._show(self.left, self._img.get(tag))
+        else:
+            self.cap_l.setText("Chỗ khác nhau giữa đầu và cuối")
+            self._show(self.left, self._img.get("diff"))
+
+    def resizeEvent(self, e) -> None:  # noqa: N802
+        super().resizeEvent(e)
+        self._render()
+
+    def done(self, r: int) -> None:
+        self._timer.stop()
+        super().done(r)
 
 
 def _fmt(t: float) -> str:
@@ -290,8 +468,17 @@ class TrimDialog(QDialog):
             img.setText("…")
             cap.setObjectName("muted")
             cap.setAlignment(Qt.AlignmentFlag.AlignCenter)
+            img.setCursor(Qt.CursorShape.PointingHandCursor)
+            img.setToolTip("Bấm để phóng to so sánh khung đầu / cuối (kiểm tra chỗ nối loop)")
+            img.mousePressEvent = lambda _e: self._compare()
             thumbs.addWidget(img, 0, col)
             thumbs.addWidget(cap, 1, col)
+        zoom = QPushButton("Phóng to so sánh đầu / cuối")
+        zoom.setObjectName("pill")
+        zoom.setIcon(icons.icon("eye", 13))
+        zoom.setToolTip("Xem lớn khung đầu và khung cuối: cạnh nhau, nhấp nháy như lúc loop, chỗ khác nhau")
+        zoom.clicked.connect(self._compare)
+        thumbs.addWidget(zoom, 2, 0, 1, 2)
 
         form = QGridLayout()
         form.setVerticalSpacing(8)
@@ -520,6 +707,10 @@ class TrimDialog(QDialog):
         lab = self.img_start if tag == "start" else self.img_end
         lab.setPixmap(pm.scaled(lab.size() - QSize(4, 4), Qt.AspectRatioMode.KeepAspectRatio,
                                 Qt.TransformationMode.SmoothTransformation))
+
+    def _compare(self) -> None:
+        start, end = self._sel()
+        FrameCompareDialog(self.path, start, end, self).exec()
 
     def _play_external(self, ffplay: Path) -> None:
         start, end = self._sel()

@@ -36,6 +36,81 @@ def cached_loudness(path: str) -> float | None:
         return None
 
 
+# ----- file nhạc có đoạn hỏng -----
+# Nhạc được đọc bằng bộ lọc amovie: gặp một gói dữ liệu hỏng (vd "[aac] Pulse data corrupt or invalid") là CẢ lượt xuất
+# dừng (ffmpeg lỗi mã 3199971767), trong khi đọc kiểu "-i" thì ffmpeg chỉ bỏ qua đoạn hỏng. → Kiểm tra từng bài một lần
+# (nhớ theo file), bài hỏng thì tạo bản sạch (FLAC, đã bỏ đoạn hỏng) trong bộ nhớ đệm rồi ghép bằng bản đó.
+_DAMAGE_HINTS = ("invalid data", "corrupt", "error", "exhausted", "concealing", "decode")
+
+
+def _check_db_path() -> Path:
+    return ft.data_dir() / "audiocheck.json"
+
+
+def is_damaged(runner: ft.Runner, path: str) -> bool:
+    """Giải mã thử cả bài (nhanh: vài giây cho 1 giờ nhạc); có báo lỗi giải mã → bài có đoạn hỏng. Nhớ kết quả."""
+    try:
+        fid = _file_id(path)
+    except OSError:
+        return False
+    with _lock:
+        try:
+            db = json.loads(_check_db_path().read_text(encoding="utf-8")) if _check_db_path().is_file() else {}
+        except (OSError, ValueError):
+            db = {}
+    if fid in db:
+        return bool(db[fid])
+    try:
+        err = runner.ffmpeg(["-v", "error", "-i", path, "-vn", "-map", "0:a:0", "-f", "null", "-"])
+    except ft.FFmpegError as e:
+        err = e.stderr or str(e)
+    bad = any(h in err.lower() for h in _DAMAGE_HINTS)
+    with _lock:
+        try:
+            db = json.loads(_check_db_path().read_text(encoding="utf-8")) if _check_db_path().is_file() else {}
+        except (OSError, ValueError):
+            db = {}
+        db[fid] = bad
+        try:
+            _check_db_path().write_text(json.dumps(db, ensure_ascii=False), encoding="utf-8")
+        except OSError:
+            pass
+    return bad
+
+
+def clean_copy(runner: ft.Runner, path: str) -> str:
+    """Bản sạch của bài có đoạn hỏng: giải mã bỏ qua lỗi → FLAC trong bộ nhớ đệm (giữ nguyên chất lượng)."""
+    import hashlib
+    key = hashlib.sha1(_file_id(path).encode("utf-8")).hexdigest()[:20]
+    out = ft.cache_dir("cleanaudio") / f"{key}.flac"
+    if out.is_file() and out.stat().st_size > 0:
+        return str(out)
+    tmp = out.with_name(f"{key}.{os.getpid()}-{threading.get_ident()}.tmp.flac")
+    try:
+        runner.ffmpeg(["-v", "error", "-err_detect", "ignore_err", "-i", path, "-vn", "-map", "0:a:0",
+                       "-c:a", "flac", str(tmp)])
+    except BaseException:
+        tmp.unlink(missing_ok=True)
+        raise
+    os.replace(tmp, out)
+    return str(out)
+
+
+def usable_paths(runner: ft.Runner, paths: dict[int, str], log=None) -> dict[int, str]:
+    """Đường dẫn để ghép nhạc: bài nào có đoạn hỏng thì thay bằng bản sạch (kiểm tra 4 bài cùng lúc)."""
+    from concurrent.futures import ThreadPoolExecutor
+    files = list(dict.fromkeys(paths.values()))
+    with ThreadPoolExecutor(max_workers=4) as pool:
+        damaged = dict(zip(files, pool.map(lambda p: is_damaged(runner, p), files)))
+    fixed: dict[str, str] = {}
+    for p in files:
+        if damaged[p]:
+            fixed[p] = clean_copy(runner, p)
+            if log:
+                log(f"  Bài {Path(p).name} có đoạn bị hỏng — đã tự tạo bản sạch (bỏ đoạn hỏng) để ghép.")
+    return {k: fixed.get(p, p) for k, p in paths.items()}
+
+
 def volume_db(pct: int) -> float:
     """% âm lượng (100 = giữ nguyên) → dB. 0% = tắt hẳn."""
     import math

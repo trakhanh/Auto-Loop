@@ -380,6 +380,10 @@ rồi bấm <i>Đặt điểm đầu tại đây</i> / <i>Đặt điểm cuối 
 <ul>
 <li>Nút nhanh: <b>Lấy toàn bộ</b> · <b>Bỏ 0.5s / 1s / 2s mỗi đầu</b> · <b>Giữ đoạn giữa</b> (lấy đúng chính giữa clip, dài bằng số giây bên cạnh).</li>
 <li><b>Lặp đoạn đã chọn</b>: trình phát lặp lại đoạn để nghe / nhìn chỗ nối. <b>Mở cửa sổ xem lớn</b> để xem toàn màn hình.</li>
+<li><b>Phóng to so sánh đầu / cuối</b> (hoặc bấm vào ảnh Đầu / Cuối): xem lớn khung đầu và khung cuối của đoạn lấy —
+<b>Cạnh nhau</b>, <b>Nhấp nháy đầu ↔ cuối</b> (đổi qua lại như lúc loop, chỗ nào nhảy là chỗ nối giật), <b>Chỗ khác nhau</b>
+(đen = giống, sáng = khác). Kèm điểm <b>Giống nhau %</b>: từ 95% trở lên là nối gần như không thấy; thấp hơn thì chỉnh điểm
+đầu / cuối hoặc đặt <b>Nối loop</b> 0.5–1 giây.</li>
 <li>Đang chọn nhiều dòng: tick <b>Áp dụng cho cả N clip đang chọn</b>. Hoặc bôi đen các dòng → <i>Cắt đoạn &amp; hoà hình ▾</i> → Áp dụng cắt.</li>
 </ul>
 <h2>Crossfade (hoà hình)</h2>""" + examples([
@@ -697,6 +701,10 @@ topic("hoi", "Khác", "help", "Câu hỏi thường gặp", hero(
         ("Video dài tối đa bao nhiêu?", "48 giờ cho mỗi video / file nhạc, mỗi clip phát tối đa 99.999 lần. YouTube nhận video tối đa 12 giờ."),
         ("Cài đặt báo CUDA ✗?", "CUDA chỉ dùng để <b>giải mã</b> trên card NVIDIA, không bắt buộc. Chỉ cần một dòng <b>NVENC / Quick Sync / AMF</b> "
                                 "xanh là xuất nhanh; không có dòng nào xanh thì app dùng CPU (chậm hơn nhưng vẫn xuất được)."),
+        ("Xuất lỗi “Pulse data corrupt” / “Invalid data found”?", "Một file nhạc (thường .m4a tải về) có <b>đoạn dữ liệu "
+                                                                 "bị hỏng</b>. Từ bản 1.8.7 app tự kiểm tra từng bài trước khi "
+                                                                 "ghép, bài hỏng thì tự tạo bản sạch (bỏ đoạn hỏng) — nhật ký ghi "
+                                                                 "rõ tên bài. Mục đã lỗi: chuột phải → <b>Chạy lại</b>."),
         ("Báo lỗi khi xuất?", "Xem <b>Nhật ký</b> ở trang Xuất (đầy đủ trong <i>Thư mục nhật ký</i> ở đầu trang này). Card đồ hoạ lỗi thì app tự "
                               "chuyển sang CPU; vẫn lỗi thì trang Xuất → Tuỳ chọn nâng cao ▾ → Bộ mã hoá: CPU rồi xuất lại. Lỗi bất ngờ của app "
                               "được ghi vào <code>loi-ung-dung.log</code> (Cài đặt → <i>Mở thư mục dữ liệu</i>) — gửi file này cho người hỗ trợ."),

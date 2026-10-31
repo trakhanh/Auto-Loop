@@ -226,6 +226,8 @@ class RenderJob:
         music_label = None
         if tl.use_music and tl.music_items:
             t_paths = {t: tl.track_infos[t].path for t in used_tracks}
+            self.progress(W_VIDEO + W_SRC + W_LOUD, "Đang kiểm tra file nhạc…")
+            t_paths = audio_build.usable_paths(self.runner, t_paths, self.log)  # bài có đoạn hỏng → bản sạch
             graph += audio_build.music_graph(tl.music_items, t_paths, gains, ms, total)
             music_label = "music"
         ambient_labels = []
@@ -347,6 +349,7 @@ class RenderJob:
         used_tracks = sorted({it.track for it in tl.music_items})
         gains = self._measure_gains(tl, used_tracks, 0.0, 0.2)
         t_paths = {t: tl.track_infos[t].path for t in used_tracks}
+        t_paths = audio_build.usable_paths(self.runner, t_paths, self.log)  # bài có đoạn hỏng → bản sạch
         # chỉ có tiếng nền (không bài nhạc nào): xuất âm thanh môi trường / ASMR
         graph = audio_build.music_graph(tl.music_items, t_paths, gains, ms, total) if tl.music_items else []
         ambient_labels = []

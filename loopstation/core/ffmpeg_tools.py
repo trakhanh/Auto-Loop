@@ -118,7 +118,7 @@ def cache_dir(sub: str = "") -> Path:
     return d
 
 
-CACHE_PARTS = ("blocks", "srcaudio", "thumbs", "jobs", "estimate", "ambient", "ambientlib", "lookpreview")
+CACHE_PARTS = ("blocks", "srcaudio", "thumbs", "jobs", "estimate", "ambient", "ambientlib", "lookpreview", "cleanaudio")
 
 
 def preview_dir() -> Path:
