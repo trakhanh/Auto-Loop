@@ -6,7 +6,7 @@
 
 **Ghép và loop clip + nhạc thành video YouTube dài hàng giờ — xem trước ngay trong app, xuất nhanh bằng card đồ hoạ.**
 
-<sub>By Khánh Trà · Ứng dụng Windows · Giao diện tiếng Việt · Bản mới nhất: <b>1.8.7</b></sub>
+<sub>By Khánh Trà · Ứng dụng Windows · Giao diện tiếng Việt · Bản mới nhất: <b>1.8.8</b></sub>
 
 <br>
 
@@ -34,6 +34,8 @@
 <br>
 
 ## Có gì mới ở 1.8
+
+> **1.8.8** · <b>Mất điện cũng không mất việc</b>: sửa gì app cũng tự lưu sau ~3 giây và giữ 5 bản lưu gần nhất (<b>Bản lưu trước…</b>). App bị tắt ngang thì mở lại báo đã khôi phục dự án; hàng đợi đang chạy dở thì hỏi <b>Chạy tiếp</b>, để yên 60 giây là tự chạy. Sửa tận gốc lỗi <i>“Pulse data corrupt”</i> vẫn còn ở 1.8.7: file nhạc có 2 luồng âm thanh (luồng hỏng không phải luồng đầu) giờ được phát hiện; tiếng nền hỏng cũng được thay bản sạch; file nào lọt bước kiểm tra mà làm lỗi lượt ghép thì app tự dùng bản sạch rồi ghép lại.
 
 > **1.8.7** · Sửa lỗi xuất dừng giữa chừng với <i>“Pulse data corrupt”</i> / <i>“Invalid data found”</i> (mã 3199971767): file nhạc có đoạn bị hỏng giờ được app tự phát hiện và thay bằng bản sạch (bỏ đoạn hỏng) khi ghép, xuất Chỉ nhạc và Nghe thử. Hộp <b>Đoạn lấy</b> có <b>Phóng to so sánh đầu / cuối</b> (cạnh nhau · nhấp nháy · chỗ khác nhau, kèm điểm Giống nhau %) để kiểm tra chỗ nối loop.
 >

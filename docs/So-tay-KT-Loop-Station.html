@@ -137,7 +137,7 @@ footer { margin-top: 56px; padding-top: 18px; border-top: 1px solid var(--line);
 <div class="wrap">
 <nav class="toc" aria-label="Mục lục">
   <div class="brand">KT Loop Station</div>
-  <div class="ver">Sổ tay nhân viên · bản 1.8.7</div>
+  <div class="ver">Sổ tay nhân viên · bản 1.8.8</div>
   <ol>
     <li><a href="#cai-dat"><span>1</span><span>Cài đặt &amp; cập nhật</span></a></li>
     <li><a href="#lam-quen"><span>2</span><span>Làm quen màn hình</span></a></li>
@@ -164,7 +164,7 @@ footer { margin-top: 56px; padding-top: 18px; border-top: 1px solid var(--line);
   <h1>KT Loop Station — hướng dẫn sử dụng</h1>
   <p class="lede">App ghép và loop video, nhạc thành file dài hàng giờ cho YouTube. Đọc mục 1–3 là làm được video đầu tiên; các mục sau tra khi cần.</p>
   <div class="facts">
-    <span><b>Phiên bản</b> 1.8.7</span>
+    <span><b>Phiên bản</b> 1.8.8</span>
     <span><b>Máy</b> Windows 10 / 11 64-bit</span>
     <span><b>Tác giả</b> Khánh Trà</span>
     <span><b>Trong app</b> phím <kbd>F1</kbd> mở Hướng dẫn</span>
@@ -221,6 +221,11 @@ footer { margin-top: 56px; padding-top: 18px; border-top: 1px solid var(--line);
   </ol>
   <div class="note"><b class="t">Thử ngay:</b>chưa có clip thì bấm <b>Thử: Loop 70 lần</b> hoặc <b>Thử: 3 tiếng</b> ở màn hình Bắt đầu — có sẵn clip, nhạc, tiếng nền để bấm Xuất thử.</div>
   <div class="note"><b class="t">App tự lưu:</b>đóng app lúc nào cũng được, dự án đang làm và hàng đợi còn nguyên khi mở lại (nút <b>Tiếp tục dự án đang làm</b>). Muốn giữ một bản riêng thì bấm <b>Lưu</b> (<kbd>Ctrl</kbd>+<kbd>S</kbd>) thành file <code>.lsproj</code>.</div>
+  <ul>
+    <li><b>Lưu liên tục:</b> sửa gì thì khoảng 3 giây sau app tự lưu — mất điện, máy tự khởi động lại cũng không mất phần đã chỉnh. App giữ thêm <b>5 bản lưu gần nhất</b> (cách nhau ít nhất 2 phút).</li>
+    <li><b>App bị tắt ngang:</b> mở lại thấy dải báo <i>“Lần trước app bị tắt đột ngột… đã khôi phục dự án lúc 15:42”</i>. Muốn lấy bản cũ hơn: bấm <b>Bản lưu trước…</b>.</li>
+    <li><b>Hàng đợi chạy dở:</b> mở lại app sẽ hỏi <i>“Lần trước hàng đợi đang chạy dở — còn N video”</i>. Bấm <b>Chạy tiếp ngay</b>, hoặc để yên <b>60 giây</b> app tự chạy tiếp. <b>Để sau</b> thì hàng đợi giữ nguyên.</li>
+  </ul>
   <h3>Màu chủ đạo</h3>
   <p>Mặc định app dùng tông <b>Tím neon</b>. Đổi ở <b>Cài đặt → Giao diện hiển thị → Màu chủ đạo</b>: <b>Tím neon</b>,
   <b>Đại dương</b>, <b>Hoàng hôn</b>, <b>Tím xanh</b> (giống bản cũ). Đổi là thấy ngay. Màu chỉ để nhìn, không ảnh hưởng
@@ -661,8 +666,9 @@ footer { margin-top: 56px; padding-top: 18px; border-top: 1px solid var(--line);
   <details class="faq" open><summary>Cài đặt báo “CUDA ✗”</summary>
     <p>CUDA chỉ dùng để giải mã trên card NVIDIA, không bắt buộc. Chỉ cần một dòng NVENC / Quick Sync / AMF xanh là xuất nhanh. Không có dòng nào xanh thì app dùng CPU — chậm hơn nhưng vẫn xuất được.</p></details>
   <details class="faq" open><summary>Xuất lỗi “Pulse data corrupt” / “Invalid data found”</summary>
-    <p>Một file nhạc (thường <code>.m4a</code> tải về) có <b>đoạn dữ liệu bị hỏng</b>. Từ bản 1.8.7 app tự kiểm tra từng bài
-    trước khi ghép, bài hỏng thì tự tạo bản sạch (bỏ đoạn hỏng); nhật ký ghi rõ tên bài. Mục đã lỗi trong hàng đợi: chuột phải →
+    <p>Một file nhạc / tiếng nền (thường <code>.m4a</code> tải về) có <b>đoạn dữ liệu bị hỏng</b>. App tự kiểm tra từng file
+    trước khi ghép, file hỏng thì tự tạo bản sạch (bỏ đoạn hỏng). Từ bản 1.8.8: file nào lọt bước kiểm tra mà làm lỗi lượt ghép
+    thì app tự dùng bản sạch cho mọi file âm thanh rồi ghép lại; nhật ký ghi rõ. Mục đã lỗi trong hàng đợi: chuột phải →
     <b>Chạy lại</b>.</p></details>
   <details class="faq" open><summary>Báo lỗi khi xuất</summary>
     <p>Xem <b>Nhật ký</b> ở trang Xuất. Card đồ hoạ lỗi thì app tự chuyển sang CPU; vẫn lỗi thì trang Xuất → Tuỳ chọn nâng cao ▾ → Bộ mã hoá: CPU rồi xuất lại. Không được nữa thì gửi file lỗi (xem <a href="#du-lieu">mục 14</a>).</p></details>
@@ -717,6 +723,7 @@ footer { margin-top: 56px; padding-top: 18px; border-top: 1px solid var(--line);
   <div class="tbl"><table>
     <tr><th>File / thư mục</th><th>Là gì</th></tr>
     <tr><td><code>autosave.lsproj</code></td><td>Dự án đang làm (tự lưu liên tục).</td></tr>
+    <tr><td><code>ban-luu\</code></td><td>5 bản tự lưu gần nhất (nút <b>Bản lưu trước…</b>).</td></tr>
     <tr><td><code>queue.json</code></td><td>Hàng đợi xuất.</td></tr>
     <tr><td><code>logs\</code></td><td>Nhật ký từng lần xuất.</td></tr>
     <tr><td><code>loi-ung-dung.log</code></td><td>Lỗi bất ngờ của app.</td></tr>
@@ -732,7 +739,7 @@ footer { margin-top: 56px; padding-top: 18px; border-top: 1px solid var(--line);
   </ol>
 </section>
 
-<footer>KT Loop Station 1.8.7 · By Khánh Trà · Trong app bấm <kbd>F1</kbd> để xem hướng dẫn có ảnh và nút đi thẳng tới đúng chỗ.</footer>
+<footer>KT Loop Station 1.8.8 · By Khánh Trà · Trong app bấm <kbd>F1</kbd> để xem hướng dẫn có ảnh và nút đi thẳng tới đúng chỗ.</footer>
 </main>
 </div>
 

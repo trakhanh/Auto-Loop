@@ -44,7 +44,8 @@ _DAMAGE_HINTS = ("invalid data", "corrupt", "error", "exhausted", "concealing", 
 
 
 def _check_db_path() -> Path:
-    return ft.data_dir() / "audiocheck.json"
+    # v2: kiểm tra mọi luồng âm thanh (bản 1.8.7 chỉ kiểm tra luồng đầu → sổ cũ có thể ghi "lành" sai, bỏ đi)
+    return ft.data_dir() / "audiocheck2.json"
 
 
 def is_damaged(runner: ft.Runner, path: str) -> bool:
@@ -61,10 +62,25 @@ def is_damaged(runner: ft.Runner, path: str) -> bool:
     if fid in db:
         return bool(db[fid])
     try:
-        err = runner.ffmpeg(["-v", "error", "-i", path, "-vn", "-map", "0:a:0", "-f", "null", "-"])
+        # mọi luồng âm thanh: file tải về có thể có 2 luồng, ghép nhạc (amovie) lấy luồng "tốt nhất" chứ không phải
+        # luồng đầu — chỉ kiểm tra luồng đầu là bỏ sót đúng luồng sẽ dùng
+        err = runner.ffmpeg(["-v", "error", "-i", path, "-vn", "-map", "0:a", "-f", "null", "-"])
     except ft.FFmpegError as e:
         err = e.stderr or str(e)
     bad = any(h in err.lower() for h in _DAMAGE_HINTS)
+    _remember(fid, bad)
+    return bad
+
+
+def mark_damaged(path: str) -> None:
+    """Bài lọt qua bước kiểm tra nhanh nhưng làm hỏng lượt ghép: nhớ là "hỏng" để các lần sau dùng bản sạch ngay."""
+    try:
+        _remember(_file_id(path), True)
+    except OSError:
+        pass
+
+
+def _remember(fid: str, bad: bool) -> None:
     with _lock:
         try:
             db = json.loads(_check_db_path().read_text(encoding="utf-8")) if _check_db_path().is_file() else {}
@@ -75,19 +91,19 @@ def is_damaged(runner: ft.Runner, path: str) -> bool:
             _check_db_path().write_text(json.dumps(db, ensure_ascii=False), encoding="utf-8")
         except OSError:
             pass
-    return bad
 
 
 def clean_copy(runner: ft.Runner, path: str) -> str:
     """Bản sạch của bài có đoạn hỏng: giải mã bỏ qua lỗi → FLAC trong bộ nhớ đệm (giữ nguyên chất lượng)."""
     import hashlib
-    key = hashlib.sha1(_file_id(path).encode("utf-8")).hexdigest()[:20]
+    key = hashlib.sha1(f"v2|{_file_id(path)}".encode("utf-8")).hexdigest()[:20]  # v2: đúng luồng amovie dùng
     out = ft.cache_dir("cleanaudio") / f"{key}.flac"
     if out.is_file() and out.stat().st_size > 0:
         return str(out)
     tmp = out.with_name(f"{key}.{os.getpid()}-{threading.get_ident()}.tmp.flac")
     try:
-        runner.ffmpeg(["-v", "error", "-err_detect", "ignore_err", "-i", path, "-vn", "-map", "0:a:0",
+        # không -map: ffmpeg tự chọn luồng âm thanh tốt nhất — cùng luồng mà amovie dùng khi ghép
+        runner.ffmpeg(["-v", "error", "-err_detect", "ignore_err", "-i", path, "-vn", "-sn", "-dn",
                        "-c:a", "flac", str(tmp)])
     except BaseException:
         tmp.unlink(missing_ok=True)
@@ -96,10 +112,14 @@ def clean_copy(runner: ft.Runner, path: str) -> str:
     return str(out)
 
 
-def usable_paths(runner: ft.Runner, paths: dict[int, str], log=None) -> dict[int, str]:
-    """Đường dẫn để ghép nhạc: bài nào có đoạn hỏng thì thay bằng bản sạch (kiểm tra 4 bài cùng lúc)."""
+def usable_paths(runner: ft.Runner, paths: dict[int, str], log=None, force: bool = False) -> dict[int, str]:
+    """Đường dẫn để ghép nhạc / tiếng nền: file nào có đoạn hỏng thì thay bằng bản sạch (kiểm tra 4 file cùng lúc).
+    `force`: lượt ghép trước vẫn hỏng vì một file lọt kiểm tra → dùng bản sạch cho TẤT CẢ (và nhớ lại)."""
     from concurrent.futures import ThreadPoolExecutor
     files = list(dict.fromkeys(paths.values()))
+    if force:
+        for p in files:
+            mark_damaged(p)
     with ThreadPoolExecutor(max_workers=4) as pool:
         damaged = dict(zip(files, pool.map(lambda p: is_damaged(runner, p), files)))
     fixed: dict[str, str] = {}
@@ -107,8 +127,15 @@ def usable_paths(runner: ft.Runner, paths: dict[int, str], log=None) -> dict[int
         if damaged[p]:
             fixed[p] = clean_copy(runner, p)
             if log:
-                log(f"  Bài {Path(p).name} có đoạn bị hỏng — đã tự tạo bản sạch (bỏ đoạn hỏng) để ghép.")
+                log(f"  {Path(p).name} có đoạn bị hỏng — đã tự tạo bản sạch (bỏ đoạn hỏng) để ghép.")
     return {k: fixed.get(p, p) for k, p in paths.items()}
+
+
+def is_decode_failure(err: BaseException) -> bool:
+    """Lượt ghép hỏng vì đọc file âm thanh trong filtergraph (amovie) gặp gói dữ liệu hỏng
+    — "[aac] Pulse data corrupt…", "Error requesting a frame from the filtergraph: Invalid data found…"."""
+    s = (getattr(err, "stderr", "") or str(err)).lower()
+    return "filtergraph" in s and any(h in s for h in ("invalid data", "corrupt", "decod"))
 
 
 def volume_db(pct: int) -> float:

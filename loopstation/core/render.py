@@ -223,25 +223,32 @@ class RenderJob:
             video_build.write_concat(alist, a_items)
             args += ["-f", "concat", "-safe", "0", "-i", str(alist)]
             source_label = "1:a"
-        music_label = None
-        if tl.use_music and tl.music_items:
-            t_paths = {t: tl.track_infos[t].path for t in used_tracks}
-            self.progress(W_VIDEO + W_SRC + W_LOUD, "Đang kiểm tra file nhạc…")
-            t_paths = audio_build.usable_paths(self.runner, t_paths, self.log)  # bài có đoạn hỏng → bản sạch
-            graph += audio_build.music_graph(tl.music_items, t_paths, gains, ms, total)
-            music_label = "music"
-        ambient_labels = []
-        if tl.ambient_infos:
-            keys = sorted(tl.ambient_infos)
-            lines, ambient_labels = audio_build.ambient_graph(
-                self._ambient_paths(tl, keys), [ms.ambient[k].volume for k in keys], total,
-                ms.fade_in, ms.fade_out)
-            graph += lines
-            self.log(f"Lớp tiếng nền: {len(keys)}")
-        if music_label or source_label or ambient_labels:
-            graph += audio_build.master_graph(music_label, source_label, vs.music_volume,
+        def audio_graph(force: bool = False) -> list[str]:
+            g: list[str] = []
+            music_label = None
+            if tl.use_music and tl.music_items:
+                t_paths = {t: tl.track_infos[t].path for t in used_tracks}
+                self.progress(W_VIDEO + W_SRC + W_LOUD, "Đang kiểm tra file nhạc…")
+                t_paths = audio_build.usable_paths(self.runner, t_paths, self.log, force)  # đoạn hỏng → bản sạch
+                g += audio_build.music_graph(tl.music_items, t_paths, gains, ms, total)
+                music_label = "music"
+            ambient_labels = []
+            if tl.ambient_infos:
+                keys = sorted(tl.ambient_infos)
+                lines, ambient_labels = audio_build.ambient_graph(
+                    self._ambient_paths(tl, keys, force), [ms.ambient[k].volume for k in keys], total,
+                    ms.fade_in, ms.fade_out)
+                g += lines
+                if not force:
+                    self.log(f"Lớp tiếng nền: {len(keys)}")
+            if music_label or source_label or ambient_labels:
+                g += audio_build.master_graph(music_label, source_label, vs.music_volume,
                                               vs.source_volume, total, ambient_labels)
-            gpath = job_dir / "graph.txt"
+            return g
+
+        graph += audio_graph()
+        gpath = job_dir / "graph.txt"
+        if graph:
             gpath.write_text("\n".join(graph), encoding="utf-8")
             args += ["-/filter_complex", str(gpath), "-map", "0:v", "-map", "[aout]",
                      *encoders.audio_args(ex.audio, self.available), "-ar", "48000", "-ac", "2"]
@@ -279,7 +286,19 @@ class RenderJob:
 
         self.log("Đang ghép…")
         try:
-            self.runner.ffmpeg(args, on_progress=on_mux)
+            try:
+                self.runner.ffmpeg(args, on_progress=on_mux)
+            except ft.FFmpegError as e:
+                if not (graph and audio_build.is_decode_failure(e)):
+                    raise
+                # một file nhạc / tiếng nền có gói dữ liệu hỏng lọt qua bước kiểm tra nhanh: dùng bản sạch cho mọi
+                # file âm thanh rồi ghép lại (khối hình đã mã hoá xong, chỉ làm lại bước ghép)
+                self.log("Một file nhạc / tiếng nền có đoạn hỏng làm lỗi lượt ghép — tạo bản sạch cho mọi file âm "
+                         f"thanh rồi ghép lại. Chi tiết:\n{e}")
+                partial.unlink(missing_ok=True)
+                gpath.write_text("\n".join(audio_graph(force=True)), encoding="utf-8")
+                start = time.time()
+                self.runner.ffmpeg(args, on_progress=on_mux)
         except BaseException:
             partial.unlink(missing_ok=True)
             shutil.rmtree(job_dir, ignore_errors=True)
@@ -313,13 +332,14 @@ class RenderJob:
         self.progress(1.0, "Xong!")
         return self.output
 
-    def _ambient_paths(self, tl: timeline.Timeline, keys: list[int]) -> list[str]:
-        """Bản lặp liền mạch (hoà đuôi vào đầu) của từng lớp tiếng nền."""
+    def _ambient_paths(self, tl: timeline.Timeline, keys: list[int], force: bool = False) -> list[str]:
+        """Bản lặp liền mạch (hoà đuôi vào đầu) của từng lớp tiếng nền; file có đoạn hỏng → dùng bản sạch."""
+        clean = audio_build.usable_paths(self.runner, {k: tl.ambient_infos[k].path for k in keys}, self.log, force)
         out = []
         for k in keys:
             info = tl.ambient_infos[k]
-            p = audio_build.seamless_loop(self.runner, info.path, info.duration)
-            if p != info.path:
+            p = audio_build.seamless_loop(self.runner, clean[k], info.duration)
+            if p != info.path and not force:
                 self.log(f"  Tiếng nền {Path(info.path).name}: tạo bản lặp liền mạch")
             out.append(p)
         return out
@@ -349,20 +369,26 @@ class RenderJob:
         used_tracks = sorted({it.track for it in tl.music_items})
         gains = self._measure_gains(tl, used_tracks, 0.0, 0.2)
         t_paths = {t: tl.track_infos[t].path for t in used_tracks}
-        t_paths = audio_build.usable_paths(self.runner, t_paths, self.log)  # bài có đoạn hỏng → bản sạch
-        # chỉ có tiếng nền (không bài nhạc nào): xuất âm thanh môi trường / ASMR
-        graph = audio_build.music_graph(tl.music_items, t_paths, gains, ms, total) if tl.music_items else []
-        ambient_labels = []
-        if tl.ambient_infos:
-            keys = sorted(tl.ambient_infos)
-            lines, ambient_labels = audio_build.ambient_graph(
-                self._ambient_paths(tl, keys), [ms.ambient[k].volume for k in keys], total,
-                ms.fade_in, ms.fade_out)
-            graph += lines
-            self.log(f"Lớp tiếng nền: {len(keys)}")
-        # âm lượng nhạc của Bảng trộn âm (dùng chung mọi chế độ)
-        graph += audio_build.master_graph("music" if tl.music_items else None, None, proj.video.music_volume, 0, total,
-                                          ambient_labels)
+
+        def audio_graph(force: bool = False) -> list[str]:
+            paths = audio_build.usable_paths(self.runner, t_paths, self.log, force)  # đoạn hỏng → bản sạch
+            # chỉ có tiếng nền (không bài nhạc nào): xuất âm thanh môi trường / ASMR
+            g = audio_build.music_graph(tl.music_items, paths, gains, ms, total) if tl.music_items else []
+            ambient_labels = []
+            if tl.ambient_infos:
+                keys = sorted(tl.ambient_infos)
+                lines, ambient_labels = audio_build.ambient_graph(
+                    self._ambient_paths(tl, keys, force), [ms.ambient[k].volume for k in keys], total,
+                    ms.fade_in, ms.fade_out)
+                g += lines
+                if not force:
+                    self.log(f"Lớp tiếng nền: {len(keys)}")
+            # âm lượng nhạc của Bảng trộn âm (dùng chung mọi chế độ)
+            g += audio_build.master_graph("music" if tl.music_items else None, None, proj.video.music_volume, 0,
+                                          total, ambient_labels)
+            return g
+
+        graph = audio_graph()
         job_dir = ft.cache_dir("jobs") / datetime.now().strftime("%Y%m%d_%H%M%S_%f")
         job_dir.mkdir(parents=True)
         gpath = job_dir / "graph.txt"
@@ -385,7 +411,17 @@ class RenderJob:
 
         self.log("Đang dựng nhạc…")
         try:
-            self.runner.ffmpeg(args, on_progress=on_prog)
+            try:
+                self.runner.ffmpeg(args, on_progress=on_prog)
+            except ft.FFmpegError as e:
+                if not audio_build.is_decode_failure(e):
+                    raise
+                self.log("Một file nhạc / tiếng nền có đoạn hỏng làm lỗi lượt dựng — tạo bản sạch cho mọi file âm "
+                         f"thanh rồi dựng lại. Chi tiết:\n{e}")
+                partial.unlink(missing_ok=True)
+                gpath.write_text("\n".join(audio_graph(force=True)), encoding="utf-8")
+                start = time.time()
+                self.runner.ffmpeg(args, on_progress=on_prog)
         except BaseException:
             partial.unlink(missing_ok=True)
             shutil.rmtree(job_dir, ignore_errors=True)

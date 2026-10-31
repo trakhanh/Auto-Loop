@@ -182,7 +182,17 @@ bước mấy và <b>việc cần làm tiếp</b> (bấm vào số bước để
            "đầu — có sẵn clip, nhạc, tiếng nền để bấm Xuất thử.") + """
 <h2>App tự lưu</h2>
 <p>Đóng app lúc nào cũng được: dự án đang làm và hàng đợi được tự lưu, mở lại là còn nguyên (màn hình Bắt đầu có nút
-<b>Tiếp tục dự án đang làm</b>). Muốn giữ một bản riêng thì bấm <b>Lưu</b> (Ctrl+S) thành file <code>.lsproj</code>.</p>""")
+<b>Tiếp tục dự án đang làm</b>). Muốn giữ một bản riêng thì bấm <b>Lưu</b> (Ctrl+S) thành file <code>.lsproj</code>.</p>
+<ul>
+<li><b>Lưu liên tục</b>: sửa gì thì khoảng 3 giây sau app tự lưu — mất điện, máy tự khởi động lại cũng không mất phần
+đã chỉnh. App giữ thêm <b>5 bản lưu gần nhất</b> (cách nhau ít nhất 2 phút) để lấy lại khi lỡ tay.</li>
+<li><b>App bị tắt ngang</b>: mở lại sẽ thấy dải báo <i>“Lần trước app bị tắt đột ngột… đã khôi phục dự án lúc 15:42”</i>.
+Muốn lấy bản cũ hơn: bấm <b>Bản lưu trước…</b> (tên file là ngày giờ lưu).</li>
+<li><b>Hàng đợi đang chạy dở</b>: mở lại app sẽ hỏi <i>“Lần trước hàng đợi đang chạy dở — còn N video”</i>. Bấm
+<b>Chạy tiếp ngay</b>, hoặc để yên <b>60 giây</b> app tự chạy tiếp (máy chạy qua đêm mà Windows tự khởi động lại thì sáng
+ra vẫn xong). <b>Để sau</b>: hàng đợi giữ nguyên, chạy lúc nào cũng được. Clip đã chuẩn hoá vẫn còn trong bộ nhớ đệm nên
+chạy tiếp nhanh hơn chạy từ đầu.</li>
+</ul>""")
 
 topic("kieu", "Bắt đầu", "video_music", "Chọn kiểu sản phẩm", hero(
     "Chọn kiểu sản phẩm", "3 nút ở thanh trên cùng, cạnh tên dự án. Đổi lúc nào cũng được — các trang tự đổi theo.") + cards([
@@ -671,7 +681,8 @@ topic("dulieu", "Khác", "folder", "Cài app, cập nhật & dữ liệu", hero(
 <li><b>Gỡ app</b>: Windows Settings → Apps → KT Loop Station → Uninstall. Dữ liệu và video đã xuất <b>không</b> bị xoá.</li>
 </ul>
 <h2>App lưu gì, ở đâu?</h2>""" + examples([
-    ("autosave.lsproj", "dự án đang làm (tự lưu liên tục)"), ("queue.json", "hàng đợi xuất"),
+    ("autosave.lsproj", "dự án đang làm (tự lưu liên tục)"), ("ban-luu\\", "5 bản tự lưu gần nhất (Bản lưu trước…)"),
+    ("queue.json", "hàng đợi xuất"),
     ("logs\\", "nhật ký từng lần xuất (nút <i>Thư mục nhật ký</i> ở đầu trang này)"),
     ("loi-ung-dung.log", "lỗi bất ngờ của app — gửi file này khi cần hỗ trợ"),
     ("cache\\", "bộ nhớ đệm giúp xuất lần sau nhanh hơn; tự dọn khi quá 30 GB")], ("File / thư mục", "Là gì")) + box(
@@ -701,10 +712,12 @@ topic("hoi", "Khác", "help", "Câu hỏi thường gặp", hero(
         ("Video dài tối đa bao nhiêu?", "48 giờ cho mỗi video / file nhạc, mỗi clip phát tối đa 99.999 lần. YouTube nhận video tối đa 12 giờ."),
         ("Cài đặt báo CUDA ✗?", "CUDA chỉ dùng để <b>giải mã</b> trên card NVIDIA, không bắt buộc. Chỉ cần một dòng <b>NVENC / Quick Sync / AMF</b> "
                                 "xanh là xuất nhanh; không có dòng nào xanh thì app dùng CPU (chậm hơn nhưng vẫn xuất được)."),
-        ("Xuất lỗi “Pulse data corrupt” / “Invalid data found”?", "Một file nhạc (thường .m4a tải về) có <b>đoạn dữ liệu "
-                                                                 "bị hỏng</b>. Từ bản 1.8.7 app tự kiểm tra từng bài trước khi "
-                                                                 "ghép, bài hỏng thì tự tạo bản sạch (bỏ đoạn hỏng) — nhật ký ghi "
-                                                                 "rõ tên bài. Mục đã lỗi: chuột phải → <b>Chạy lại</b>."),
+        ("Xuất lỗi “Pulse data corrupt” / “Invalid data found”?", "Một file nhạc / tiếng nền (thường .m4a tải về) có "
+                                                                 "<b>đoạn dữ liệu bị hỏng</b>. App tự kiểm tra từng file trước "
+                                                                 "khi ghép, file hỏng thì tự tạo bản sạch (bỏ đoạn hỏng). Từ bản "
+                                                                 "1.8.8: file nào lọt bước kiểm tra mà làm lỗi lượt ghép thì app "
+                                                                 "tự dùng bản sạch cho mọi file âm thanh rồi ghép lại — nhật ký "
+                                                                 "ghi rõ. Mục đã lỗi: chuột phải → <b>Chạy lại</b>."),
         ("Báo lỗi khi xuất?", "Xem <b>Nhật ký</b> ở trang Xuất (đầy đủ trong <i>Thư mục nhật ký</i> ở đầu trang này). Card đồ hoạ lỗi thì app tự "
                               "chuyển sang CPU; vẫn lỗi thì trang Xuất → Tuỳ chọn nâng cao ▾ → Bộ mã hoá: CPU rồi xuất lại. Lỗi bất ngờ của app "
                               "được ghi vào <code>loi-ung-dung.log</code> (Cài đặt → <i>Mở thư mục dữ liệu</i>) — gửi file này cho người hỗ trợ."),

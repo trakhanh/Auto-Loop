@@ -34,11 +34,14 @@ FIRST_STEPS = (
 )
 # "Có gì mới" của bản đang chạy — hiện ở đầu trang Tổng quan (sửa cùng lúc với APP_VERSION khi ra bản mới)
 WHATS_NEW = (
+    ("save", "Mất điện cũng không mất việc",
+     "Sửa gì app cũng tự lưu sau ~3 giây, giữ 5 bản gần nhất. App bị tắt ngang lúc đang xuất: mở lại hỏi chạy tiếp hàng "
+     "đợi, để yên 60 giây là tự chạy."),
     ("eye", "Phóng to so sánh khung đầu / cuối",
      "Hộp Đoạn lấy: bấm ảnh Đầu / Cuối để xem lớn — cạnh nhau, nhấp nháy như lúc loop, chỗ khác nhau, kèm điểm Giống nhau %."),
     ("check", "File nhạc hỏng không làm dừng việc xuất",
-     "Bài nhạc có đoạn dữ liệu hỏng (lỗi “Pulse data corrupt”) giờ được tự phát hiện và thay bằng bản sạch khi ghép. "
-     "Mục đã lỗi: chuột phải → Chạy lại."),
+     "Nhạc / tiếng nền có đoạn dữ liệu hỏng (lỗi “Pulse data corrupt”): tự thay bằng bản sạch; lọt bước kiểm tra thì tự "
+     "ghép lại bằng bản sạch. Mục đã lỗi: chuột phải → Chạy lại."),
     ("video_music", "Hồ sơ kênh",
      "Nút Kênh trên cùng: mỗi kênh một bộ intro / outro, logo, thư mục nhạc, tiếng nền, mẫu bảng, nơi lưu, chất lượng. "
      "Chọn kênh là áp cả bộ, bảng clip giữ nguyên."),
@@ -46,9 +49,6 @@ WHATS_NEW = (
      "Thư viện mẫu / Hồ sơ kênh → Xuất ra file .ktls → máy khác Nhập từ file. Trùng tên thì chọn ghi đè hay giữ cả hai."),
     ("queue", "Hàng đợi báo giờ xong, tạm dừng được",
      "Còn 3 video · ~25 phút · xong khoảng 23:40. Tạm dừng sau video này / chạy tiếp; Windows thông báo khi xong."),
-    ("zap", "Xuất nhanh hơn ~3 lần",
-     "Ghép nhiều clip: app chuẩn hoá 3 clip cùng lúc trên card NVIDIA / AMD, mã hoá nhanh cho mức Cao (độ nét như cũ), bước "
-     "cuối không ghi lại cả file. Đo thật: 45 clip 2K, video 22 phút — 229 giây còn 74 giây."),
 )
 SHORTCUTS = (("Space", "Phát / dừng"), ("F1", "Hướng dẫn"), ("Ctrl+S", "Lưu dự án"), ("Ctrl+Z", "Hoàn tác"),
              ("Ctrl+D", "Nhân bản dòng"), ("Ctrl+F", "Tìm"))

@@ -188,3 +188,76 @@ class SeasonDialog(QDialog):
         self.choice = choice
         self.episode = self.pick.currentData()
         self.accept()
+
+
+class ResumeQueueDialog(QDialog):
+    """Mở app sau khi bị tắt ngang (máy khởi động lại / mất điện) lúc hàng đợi đang chạy: hỏi chạy tiếp, đếm ngược rồi tự
+    chạy — để máy chạy qua đêm mà Windows tự khởi động lại thì sáng ra vẫn xong. `run` = True nếu chạy tiếp."""
+
+    def __init__(self, names: list[str], seconds: int = 60, parent=None):
+        super().__init__(parent)
+        from PySide6.QtCore import QTimer
+        self.setWindowTitle("Hàng đợi đang chạy dở")
+        self.run = False
+        self._left = seconds
+        head = QHBoxLayout()
+        head.setSpacing(theme.SP["md"])
+        head.addWidget(badge("queue", "warn", 38, 20))
+        title = QLabel("Lần trước hàng đợi đang chạy dở")
+        title.setObjectName("updateTitle")
+        head.addWidget(title, 1)
+        card = QFrame()
+        card.setObjectName("presetCard")
+        cv = QVBoxLayout(card)
+        cv.setContentsMargins(theme.SP["lg"], theme.SP["md"], theme.SP["lg"], theme.SP["md"])
+        why = w.muted("App bị tắt khi đang xuất (máy khởi động lại, mất điện, app bị đóng ngang…). Các clip đã chuẩn hoá "
+                      "vẫn còn trong bộ nhớ đệm — chạy tiếp chỉ làm phần còn thiếu.")
+        why.setWordWrap(True)
+        cv.addWidget(why)
+        shown = ", ".join(names[:4]) + (f" và {len(names) - 4} video khác" if len(names) > 4 else "")
+        left = QLabel(f"Còn <b>{len(names)} video</b> chờ: {shown}")
+        left.setObjectName("queueDetail")
+        left.setWordWrap(True)
+        cv.addWidget(left)
+        self.count = QLabel()
+        self.count.setObjectName("chipWarn")
+        run = _choice("play", "Chạy tiếp ngay", "Xuất nốt các video đang chờ.", primary=True)
+        run.clicked.connect(self._go)
+        later = QPushButton("Để sau")
+        later.setObjectName("ghost")
+        later.setToolTip("Hàng đợi vẫn giữ nguyên — bấm Chạy hàng đợi ở trang Xuất lúc nào cũng được")
+        later.clicked.connect(self.reject)
+        row = QHBoxLayout()
+        row.addWidget(self.count)
+        row.addStretch(1)
+        row.addWidget(later)
+        lay = QVBoxLayout(self)
+        lay.setSpacing(theme.SP["md"])
+        lay.addLayout(head)
+        lay.addWidget(card)
+        lay.addWidget(run)
+        lay.addLayout(row)
+        run.setFocus()
+        _fit(self, 560)
+        self._timer = QTimer(self)
+        self._timer.setInterval(1000)
+        self._timer.timeout.connect(self._tick)
+        self._timer.start()
+        self._tick(first=True)
+
+    def _tick(self, first: bool = False) -> None:
+        if not first:
+            self._left -= 1
+        if self._left <= 0:
+            self._go()
+            return
+        self.count.setText(f"Tự chạy tiếp sau {self._left} giây…")
+
+    def _go(self) -> None:
+        self._timer.stop()
+        self.run = True
+        self.accept()
+
+    def done(self, r: int) -> None:
+        self._timer.stop()
+        super().done(r)

@@ -146,8 +146,8 @@ def _render(project, start: float, runner: ft.Runner | None, version: int, secon
     ambient_labels: list[str] = []
     if tl.ambient_infos:
         keys = sorted(tl.ambient_infos)
-        a_paths = [audio_build.seamless_loop(runner, tl.ambient_infos[k].path, tl.ambient_infos[k].duration)
-                   for k in keys]
+        clean = audio_build.usable_paths(runner, {k: tl.ambient_infos[k].path for k in keys})  # đoạn hỏng → bản sạch
+        a_paths = [audio_build.seamless_loop(runner, clean[k], tl.ambient_infos[k].duration) for k in keys]
         offsets = []  # đang ở giây thứ mấy của vòng lặp tiếng nền tại mốc `start` (giống bản xuất)
         for ap in a_paths:
             loop_len = probe(ap).duration

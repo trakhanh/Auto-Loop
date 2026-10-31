@@ -35,6 +35,11 @@ from .video_tab import VideoTab
 from .widgets import fmt_dur
 
 AUTOSAVE = "autosave" + PROJECT_EXT
+BACKUP_DIR = "ban-luu"  # 5 bản tự lưu gần nhất (khôi phục khi lỡ tay / app bị tắt ngang)
+BACKUP_KEEP = 5
+BACKUP_EVERY = 120  # giây: tối đa một bản lưu dự phòng mỗi 2 phút
+AUTOSAVE_DELAY_MS = 3000
+SESSION_FLAG = "phien-dang-mo.txt"  # còn file này lúc mở app = lần trước app không đóng đúng cách
 HOME_PAGE = 5  # trang "Bắt đầu" trong self.stack
 QUEUE_FILE = "queue.json"
 
@@ -217,6 +222,21 @@ class MainWindow(QMainWindow):
         self._timer.setSingleShot(True)
         self._timer.setInterval(250)
         self._timer.timeout.connect(self.recompute)
+        # tự lưu liên tục: có thay đổi → vài giây sau ghi bản tự lưu (trước đây chỉ lưu lúc đóng app bình thường —
+        # mất điện / máy tự khởi động lại / app bị tắt ngang là mất hết phần đã chỉnh)
+        self._autosave_timer = QTimer(self)
+        self._autosave_timer.setSingleShot(True)
+        self._autosave_timer.setInterval(AUTOSAVE_DELAY_MS)
+        self._autosave_timer.timeout.connect(self._autosave)
+        self._last_saved = ""
+        self._last_backup = 0.0
+        # phiên trước có đóng đúng cách không: cờ "đang mở" còn nằm đó = app bị tắt ngang
+        flag = ffmpeg_tools.data_dir() / SESSION_FLAG
+        self._crashed_last = flag.is_file()
+        try:
+            flag.write_text(datetime.now().isoformat(timespec="seconds"), encoding="utf-8")
+        except OSError:
+            pass
         self._probe_tried: set = set()
         self._probe_inflight: set = set()
         self._probe_warm: set = set()  # đường dẫn đã chắc chắn có trong bộ nhớ đệm probe
@@ -322,8 +342,14 @@ class MainWindow(QMainWindow):
         if self.project_path and not os.path.isfile(self.project_path):
             self.project_path = None
         self.load_project(proj)
+        self._last_saved = self._project_json(proj)
         if not (proj.video.clips or proj.music.tracks or proj.music.ambient):
             self.go_to(HOME_PAGE)  # dự án trống: mở màn hình Bắt đầu
+        if self._crashed_last and autosave.is_file():
+            when = datetime.fromtimestamp(autosave.stat().st_mtime).strftime("%H:%M %d/%m")
+            self.restore_text.setText(f"Lần trước app bị tắt đột ngột (mất điện, máy khởi động lại…). Đã khôi phục dự án "
+                                      f"từ bản tự lưu lúc <b>{when}</b>. Muốn lấy bản cũ hơn: <b>Bản lưu trước…</b>")
+            self.restore_banner.setVisible(True)
 
     # ---------- khung giao diện ----------
     def _build_shell(self) -> QWidget:
@@ -662,6 +688,29 @@ class MainWindow(QMainWindow):
         self.disk_banner.setVisible(False)
         self._disk_hidden = False
         mv.addWidget(self.disk_banner)
+        # lần trước app bị tắt ngang: báo đã khôi phục từ bản tự lưu, cho mở bản lưu cũ hơn
+        self.restore_banner = QFrame()
+        self.restore_banner.setObjectName("editBanner")
+        rb = QHBoxLayout(self.restore_banner)
+        rb.setContentsMargins(16, 6, 12, 6)
+        rb.setSpacing(10)
+        rb_icon = QLabel()
+        icons.bind(rb_icon, "undo", 15, "accent_text")
+        self.restore_text = QLabel()
+        self.restore_text.setWordWrap(True)
+        rb_old = QPushButton("Bản lưu trước…")
+        rb_old.setObjectName("pill")
+        rb_old.setToolTip("Mở một trong 5 bản tự lưu gần nhất (mỗi bản cách nhau ít nhất 2 phút)")
+        rb_old.clicked.connect(self._open_backup)
+        rb_ok = QPushButton("OK")
+        rb_ok.setObjectName("ghost")
+        rb_ok.clicked.connect(lambda: self.restore_banner.setVisible(False))
+        rb.addWidget(rb_icon)
+        rb.addWidget(self.restore_text, 1)
+        rb.addWidget(rb_old)
+        rb.addWidget(rb_ok)
+        self.restore_banner.setVisible(False)
+        mv.addWidget(self.restore_banner)
         mv.addWidget(self.work, 1)
         mv.addWidget(self.timeline_wrap)
         shell = QWidget()
@@ -1096,6 +1145,8 @@ class MainWindow(QMainWindow):
             self._probes_done(frozenset(self._probe_inflight))
 
     def recompute(self) -> None:
+        if self._initial_loaded and not self._closing:
+            self._autosave_timer.start()  # mọi thay đổi đều qua đây → vài giây sau tự lưu
         cold = self._cold_media()
         if cold:
             self._probe_inflight |= set(cold)
@@ -1540,6 +1591,7 @@ class MainWindow(QMainWindow):
         self.export_tab.set_available(available)
         self.gpu_label.setText(self.export_tab.gpu_text())
         self.recompute()
+        QTimer.singleShot(1500, self._maybe_resume_queue)  # cần biết card đồ hoạ rồi mới chạy được hàng đợi
 
     # ---------- xuất ----------
     def _check_ready(self) -> bool:
@@ -1766,6 +1818,72 @@ class MainWindow(QMainWindow):
                                        "sửa xong bấm <b>Cập nhật mục</b>. Mục chỉ đổi khi bạn bấm Cập nhật.")
             banner.setVisible(item is not None)
 
+    # ---------- tự lưu + khôi phục phiên ----------
+    @staticmethod
+    def _project_json(proj: Project) -> str:
+        import json
+        return json.dumps(proj.to_dict(None), ensure_ascii=False, sort_keys=True)
+
+    def _autosave(self) -> None:
+        """Ghi bản tự lưu khi dự án đổi; mỗi ≥ 2 phút giữ thêm một bản dự phòng (giữ 5 bản gần nhất)."""
+        if not self._initial_loaded or self._closing:
+            return
+        proj = self.collect_project()
+        text = self._project_json(proj)
+        if text == self._last_saved:
+            return
+        data = ffmpeg_tools.data_dir()
+        try:
+            proj.save(str(data / AUTOSAVE))
+        except OSError:
+            return
+        self._last_saved = text
+        if time.time() - self._last_backup < BACKUP_EVERY:
+            return
+        self._last_backup = time.time()
+        folder = data / BACKUP_DIR
+        try:
+            folder.mkdir(exist_ok=True)
+            proj.save(str(folder / f"tu-luu_{datetime.now():%Y%m%d_%H%M%S}{PROJECT_EXT}"))
+            for old in sorted(folder.glob(f"tu-luu_*{PROJECT_EXT}"))[:-BACKUP_KEEP]:
+                old.unlink(missing_ok=True)
+        except OSError:
+            pass
+
+    def _open_backup(self) -> None:
+        folder = ffmpeg_tools.data_dir() / BACKUP_DIR
+        folder.mkdir(exist_ok=True)
+        path, _ = QFileDialog.getOpenFileName(self, "Mở bản tự lưu (tên file = ngày giờ lưu)", str(folder),
+                                              f"Dự án {APP_NAME} (*{PROJECT_EXT})")
+        if not path:
+            return
+        try:
+            proj = Project.load(path)
+        except Exception as e:  # noqa: BLE001
+            QMessageBox.critical(self, "Không mở được", str(e))
+            return
+        self.load_project(proj)
+        self.restore_banner.setVisible(False)
+        self.notify(f"Đã mở bản tự lưu {Path(path).stem.removeprefix('tu-luu_')}.", "ok", 4000)
+
+    def _maybe_resume_queue(self) -> None:
+        """Lần trước app tắt ngang lúc hàng đợi đang chạy: hỏi chạy tiếp (đếm ngược 60 giây rồi tự chạy)."""
+        if getattr(self, "_resume_asked", False) or self._closing:
+            return
+        self._resume_asked = True
+        if str(self.settings.value("queue/was_running", "")) != "running":
+            return
+        pending = [i for i in self.queue if i.status == "pending"]
+        self.settings.setValue("queue/was_running", "")
+        if not pending or self.job or self._queue_running:
+            return
+        from .queue_dialogs import ResumeQueueDialog
+        dlg = ResumeQueueDialog([Path(i.output).stem for i in pending], 60, self)
+        dlg.exec()
+        if dlg.run:
+            self.go_to(2)
+            self.run_queue()
+
     def _check_disk(self) -> None:
         """Ổ chứa bộ nhớ đệm / thư mục lưu còn dưới ~8 GB: hiện dải cảnh báo (xuất video dài dễ lỗi thiếu chỗ)."""
         if self._closing or self._disk_hidden:
@@ -1876,6 +1994,7 @@ class MainWindow(QMainWindow):
         self._queue_only = {id(i) for i in only} if only else None
         self._pause_after = False
         self.export_tab.set_paused(False)
+        self.settings.setValue("queue/was_running", "running")  # app bị tắt ngang lúc này → lần mở sau hỏi chạy tiếp
         self._queue_running = True
         self._queue_results = []
         self._run_next()
@@ -1885,6 +2004,7 @@ class MainWindow(QMainWindow):
             return
         only = self._queue_only
         if self._pause_after and self._queue_results:  # "Tạm dừng sau video này": dừng êm, chạy tiếp lúc nào cũng được
+            self.settings.setValue("queue/was_running", "")
             self._pause_after = False
             self._queue_running = False
             self._queue_item = None
@@ -1900,6 +2020,7 @@ class MainWindow(QMainWindow):
             return
         item = next((i for i in self.queue if i.status == "pending" and (only is None or id(i) in only)), None)
         if item is None:
+            self.settings.setValue("queue/was_running", "")
             self._queue_running = False
             self._queue_item = None
             self._queue_only = None
@@ -2450,6 +2571,7 @@ class MainWindow(QMainWindow):
             self.export_tab.set_queue(self.queue)
             self._save_queue()
             if error == "cancel":
+                self.settings.setValue("queue/was_running", "")
                 self._queue_running = False
                 self._queue_item = None
                 self.export_tab.on_progress(0, "Đã dừng hàng đợi.")
@@ -2489,6 +2611,7 @@ class MainWindow(QMainWindow):
                 e.ignore()
                 return
             self._closing = True
+            self.settings.setValue("queue/was_running", "")  # tự đóng giữa chừng (có hỏi): lần sau không hỏi chạy tiếp
             if self._queue_running and self._queue_item is not None and self._queue_item.status == "running":
                 self._queue_item.status, self._queue_item.message = "pending", ""  # mở app lần sau chạy lại
             self._queue_running = False
@@ -2518,4 +2641,8 @@ class MainWindow(QMainWindow):
                 pass
         self.settings.setValue("window/geometry", self.saveGeometry())
         self.settings.setValue("project/path", self.project_path or "")
+        try:
+            (ffmpeg_tools.data_dir() / SESSION_FLAG).unlink(missing_ok=True)  # đóng đúng cách
+        except OSError:
+            pass
         super().closeEvent(e)
