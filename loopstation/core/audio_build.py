@@ -4,6 +4,7 @@ from __future__ import annotations
 import json
 import os
 import re
+import subprocess
 import threading
 from pathlib import Path
 
@@ -101,10 +102,18 @@ def clean_copy(runner: ft.Runner, path: str) -> str:
     if out.is_file() and out.stat().st_size > 0:
         return str(out)
     tmp = out.with_name(f"{key}.{os.getpid()}-{threading.get_ident()}.tmp.flac")
+    total = _seconds(Path(path))
+    keep = ["-t", f"{total:.3f}"] if total else []  # mốc giờ rác có thể làm phần lấp im lặng dài quá bài gốc
     try:
-        # không -map: ffmpeg tự chọn luồng âm thanh tốt nhất — cùng luồng mà amovie dùng khi ghép
-        runner.ffmpeg(["-v", "error", "-err_detect", "ignore_err", "-i", path, "-vn", "-sn", "-dn",
-                       "-c:a", "flac", str(tmp)])
+        try:
+            # không -map: ffmpeg tự chọn luồng âm thanh tốt nhất — cùng luồng mà amovie dùng khi ghép.
+            # aresample async: chỗ gói hỏng bị bỏ thì lấp bằng im lặng → bài giữ đúng độ dài, nhạc phía sau không bị
+            # dồn sớm (trước đây bản sạch có thể ngắn hơn bài gốc cả chục giây)
+            runner.ffmpeg(["-v", "error", "-err_detect", "ignore_err", "-i", path, "-vn", "-sn", "-dn",
+                           "-af", "aresample=async=1:first_pts=0", *keep, "-c:a", "flac", str(tmp)])
+        except ft.FFmpegError:
+            tmp.unlink(missing_ok=True)
+            _decode_skipping(runner, path, tmp, total)
     except BaseException:
         tmp.unlink(missing_ok=True)
         raise
@@ -117,6 +126,65 @@ def clean_copy(runner: ft.Runner, path: str) -> str:
             return str(out)
         raise
     return str(out)
+
+
+CLEAN_FMT = "aresample=48000,aformat=sample_fmts=s16:sample_rates=48000:channel_layouts=stereo"
+MAX_PIECES = 400  # bài hỏng ở quá nhiều chỗ thì thôi (báo lỗi), không chạy mãi
+
+
+def _seconds(path: Path) -> float:
+    try:
+        out = subprocess.run([ft.ffprobe(), "-v", "error", "-show_entries", "format=duration", "-of", "csv=p=0",
+                              str(path)], capture_output=True, text=True, timeout=60,
+                             creationflags=ft.CREATE_NO_WINDOW).stdout
+        return max(0.0, float(out.strip() or 0))
+    except (OSError, ValueError, subprocess.SubprocessError):
+        return 0.0
+
+
+def _decode_skipping(runner: ft.Runner, path: str, out: Path, total: float = 0.0) -> None:
+    """Bản sạch cho file hỏng nặng. Gói dữ liệu rác có thể giải ra âm thanh "37 kênh" → ffmpeg dừng cả lệnh
+    ("Rematrix is needed…", "Error reinitializing filters"), -err_detect ignore_err cũng không cứu được. Ở đây giải mã
+    từng đoạn: dừng ở đâu thì chèn khoảng im lặng (0,25 giây; vẫn hỏng thì 0,5 → 1 → … → 8 giây) rồi đọc tiếp từ sau
+    chỗ đó — bài giữ đúng độ dài (`total` giây) nên nhạc không lệch giờ."""
+    parts: list[Path] = []
+    lst = out.with_name(out.stem + ".txt")
+    start, skip = 0.0, 0.25
+    try:
+        for n in range(MAX_PIECES):
+            if total and start >= total - 0.05:  # hỏng tới tận cuối bài: đọc tới đây là xong
+                break
+            piece = out.with_name(f"{out.stem}.p{n}.flac")
+            seek = ["-ss", f"{start:.3f}"] if start > 0 else []
+            try:
+                runner.ffmpeg(["-v", "error", "-err_detect", "ignore_err", *seek, "-i", path, "-vn", "-sn", "-dn",
+                               "-af", CLEAN_FMT, "-c:a", "flac", str(piece)])
+                ok = True
+            except ft.FFmpegError:
+                ok = False  # ffmpeg vẫn đóng file đúng cách: phần đã giải mã trước chỗ hỏng dùng được
+            got = _seconds(piece) if piece.is_file() else 0.0
+            if got > 0:
+                parts.append(piece)
+            else:
+                piece.unlink(missing_ok=True)
+            if ok:
+                break
+            gap = out.with_name(f"{out.stem}.g{n}.flac")
+            runner.ffmpeg(["-v", "error", "-f", "lavfi", "-i", "anullsrc=r=48000:cl=stereo", "-t", f"{skip:.3f}",
+                           "-af", CLEAN_FMT, "-c:a", "flac", str(gap)])
+            parts.append(gap)
+            start += got + skip
+            skip = 0.25 if got >= 1.0 else min(skip * 2, 8.0)
+        else:
+            raise ft.FFmpegError(f"{Path(path).name} hỏng ở quá nhiều chỗ — không tạo được bản sạch.")
+        lst.write_text("\n".join("file '" + str(p).replace("\\", "/").replace("'", "'\\''") + "'" for p in parts),
+                       encoding="utf-8")
+        fit = ["-af", "apad", "-t", f"{total:.3f}"] if total else []  # đúng độ dài bài gốc
+        runner.ffmpeg(["-v", "error", "-f", "concat", "-safe", "0", "-i", str(lst), *fit, "-c:a", "flac", str(out)])
+    finally:
+        for p in parts:
+            p.unlink(missing_ok=True)
+        lst.unlink(missing_ok=True)
 
 
 def fails_in_graph(runner: ft.Runner, path: str) -> bool:
@@ -162,6 +230,8 @@ def is_decode_failure(err: BaseException) -> bool:
     """Lượt ghép hỏng vì đọc file âm thanh trong filtergraph (amovie) gặp gói dữ liệu hỏng
     — "[aac] Pulse data corrupt…", "Error requesting a frame from the filtergraph: Invalid data found…"."""
     s = (getattr(err, "stderr", "") or str(err)).lower()
+    if "error reinitializing filters" in s or "rematrix is needed" in s:  # gói rác giải ra "37 kênh" giữa bài
+        return True
     return "filtergraph" in s and any(h in s for h in ("invalid data", "corrupt", "decod"))
 
 
@@ -175,11 +245,12 @@ def track_gains(runner: ft.Runner, ms: MusicSettings, paths: dict[int, str], log
     """Độ khuếch đại (dB) cho từng bài đang dùng: chuẩn hoá về mức LUFS đích (nếu bật) + âm lượng riêng của bài."""
     gains: dict[int, float] = {}
     tracks = sorted(paths)
+    use = usable_paths(runner, paths) if ms.loudness_enabled else paths  # bài hỏng: đo trên bản sạch (dùng lại lúc ghép)
     for k, t in enumerate(tracks):
         if ms.loudness_enabled:
             if on_step:
                 on_step(k, len(tracks))
-            lufs = measure_loudness(runner, paths[t])
+            lufs = loudness_or_none(runner, paths[t], use[t], log)
             if lufs is not None:
                 gains[t] = max(-20.0, min(20.0, ms.lufs - lufs))
                 if log:
@@ -203,7 +274,7 @@ def source_gains(runner: ft.Runner, paths: dict[int, str], audible: dict[int, bo
     gains: dict[int, float] = {}
     files = list(dict.fromkeys(p for k, p in sorted(paths.items()) if audible.get(k)))
     with ThreadPoolExecutor(max_workers=4) as pool:  # đo 4 clip cùng lúc (40–50 clip: nhanh gấp ~3 lần)
-        seen = dict(zip(files, pool.map(lambda p: measure_loudness(runner, p), files)))
+        seen = dict(zip(files, pool.map(lambda p: loudness_or_none(runner, p, p, log), files)))
     for path in files:
         if log and seen[path] is not None:
             g = max(-SOURCE_GAIN_MAX, min(SOURCE_GAIN_MAX, target - seen[path]))
@@ -215,6 +286,22 @@ def source_gains(runner: ft.Runner, paths: dict[int, str], audible: dict[int, bo
         if lufs is not None:
             gains[k] = max(-SOURCE_GAIN_MAX, min(SOURCE_GAIN_MAX, target - lufs))
     return gains
+
+
+def loudness_or_none(runner: ft.Runner, path: str, use: str, log=None) -> float | None:
+    """Đo độ to `use` (bản sạch nếu `path` hỏng). Đo không được — file hỏng nặng làm ffmpeg dừng giữa chừng — thì
+    tạo bản sạch rồi đo lại; vẫn không được thì bỏ qua bước cân (giữ nguyên âm lượng), không làm dừng lượt xuất."""
+    try:
+        return measure_loudness(runner, use)
+    except ft.FFmpegError:
+        pass
+    try:
+        mark_damaged(path)
+        return measure_loudness(runner, clean_copy(runner, path))
+    except ft.FFmpegError:
+        if log:
+            log(f"  {Path(path).name}: không đo được độ to (file hỏng nặng) — giữ nguyên âm lượng.")
+        return None
 
 
 def measure_loudness(runner: ft.Runner, path: str) -> float | None:
@@ -231,7 +318,7 @@ def measure_loudness(runner: ft.Runner, path: str) -> float | None:
         value = float(json.loads(m.group(0))["input_i"])
     except (ValueError, KeyError):
         return None
-    if value < -70:  # bài gần như im lặng
+    if value < -70 or value > 0:  # bài gần như im lặng / số vô lý (đo phải đoạn dữ liệu rác)
         return None
     with _lock:
         try:  # chỉ là bộ nhớ đệm: ghi không được (ổ đầy / file khoá) thì thôi, không làm hỏng lượt xuất

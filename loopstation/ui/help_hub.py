@@ -45,8 +45,9 @@ WHATS_NEW = (
      "bình thường không bị báo “tắt đột ngột”."),
     ("undo", "Ctrl+Z ở mọi chỗ trên trang Video",
      "Bấm vào Trình phát rồi Ctrl+Z vẫn hoàn tác; dán rồi nhân bản là hai bước riêng. Xoá tất cả playlist có hỏi lại."),
-    ("check", "File nhạc hỏng: chỉ thay đúng bài hỏng",
-     "Lỗi “Pulse data corrupt”: app đọc thử từng bài như lúc ghép, chỉ bài hỏng dùng bản sạch; bản sạch cũ được tự dọn."),
+    ("check", "File nhạc hỏng nặng vẫn xuất được",
+     "Lỗi “invalid band type” / “Invalid data found” (file trên Google Drive chưa tải hết…): chỗ hỏng thành vài giây "
+     "im lặng, bài giữ đúng độ dài. Mục đã lỗi: chuột phải → Chạy lại."),
     ("video_music", "Hồ sơ kênh giữ tiếng nền có sẵn",
      "Áp hồ sơ kênh không còn bỏ mất mưa / suối… có sẵn của app. Bộ nhớ đệm đặt ở ổ khác được dọn đúng ổ."),
 )

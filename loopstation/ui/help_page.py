@@ -712,12 +712,13 @@ topic("hoi", "Khác", "help", "Câu hỏi thường gặp", hero(
         ("Video dài tối đa bao nhiêu?", "48 giờ cho mỗi video / file nhạc, mỗi clip phát tối đa 99.999 lần. YouTube nhận video tối đa 12 giờ."),
         ("Cài đặt báo CUDA ✗?", "CUDA chỉ dùng để <b>giải mã</b> trên card NVIDIA, không bắt buộc. Chỉ cần một dòng <b>NVENC / Quick Sync / AMF</b> "
                                 "xanh là xuất nhanh; không có dòng nào xanh thì app dùng CPU (chậm hơn nhưng vẫn xuất được)."),
-        ("Xuất lỗi “Pulse data corrupt” / “Invalid data found”?", "Một file nhạc / tiếng nền (thường .m4a tải về) có "
-                                                                 "<b>đoạn dữ liệu bị hỏng</b>. App tự kiểm tra từng file trước "
-                                                                 "khi ghép, file hỏng thì tự tạo bản sạch (bỏ đoạn hỏng). Từ bản "
-                                                                 "1.8.8: file nào lọt bước kiểm tra mà làm lỗi lượt ghép thì app "
-                                                                 "tự dùng bản sạch cho mọi file âm thanh rồi ghép lại — nhật ký "
-                                                                 "ghi rõ. Mục đã lỗi: chuột phải → <b>Chạy lại</b>."),
+        ("Xuất lỗi “Pulse data corrupt” / “Invalid data found” / “invalid band type”?",
+         "Một file nhạc / tiếng nền / tiếng gốc của clip (thường .m4a tải về, hoặc file trên Google Drive chưa tải hết "
+         "về máy) có <b>đoạn dữ liệu bị hỏng</b>. App tự kiểm tra từng file, file hỏng thì tự tạo bản sạch: chỗ hỏng "
+         "thành vài giây im lặng, bài giữ đúng độ dài. Từ bản 1.8.10 cả file hỏng nặng (cả một vùng dữ liệu rác) cũng "
+         "xuất được — nhật ký ghi rõ file nào. Mục đã lỗi: chuột phải → <b>Chạy lại</b>. Muốn có bản đẹp nhất: tải lại "
+         "file gốc; file trên Google Drive thì chuột phải → <i>Có sẵn khi không có mạng</i> (Available offline) rồi "
+         "xuất."),
         ("Báo lỗi khi xuất?", "Xem <b>Nhật ký</b> ở trang Xuất (đầy đủ trong <i>Thư mục nhật ký</i> ở đầu trang này). Card đồ hoạ lỗi thì app tự "
                               "chuyển sang CPU; vẫn lỗi thì trang Xuất → Tuỳ chọn nâng cao ▾ → Bộ mã hoá: CPU rồi xuất lại. Lỗi bất ngờ của app "
                               "được ghi vào <code>loi-ung-dung.log</code> (Cài đặt → <i>Mở thư mục dữ liệu</i>) — gửi file này cho người hỗ trợ."),

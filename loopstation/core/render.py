@@ -221,10 +221,21 @@ class RenderJob:
                 self.progress(W_VIDEO, "Đang đo độ to tiếng gốc…")
                 sgains = audio_build.source_gains(self.runner, paths, tl.audible, self.project.music.lufs, self.log)
             uniq = list(dict.fromkeys(segs))
-            src_blocks = dict(zip(uniq, _parallel(
-                uniq, lambda seg: video_build.source_audio_segment(
-                    self.runner, seg, paths, tl.audible, tl.fps, vs.fade_out, tl.offsets, sgains), 4,
-                lambda k: self.progress(W_VIDEO + W_SRC * k / len(uniq), "Đang tách tiếng gốc…"))))
+
+            def src_blocks_from(use: dict[int, str]) -> dict:
+                return dict(zip(uniq, _parallel(
+                    uniq, lambda seg: video_build.source_audio_segment(
+                        self.runner, seg, use, tl.audible, tl.fps, vs.fade_out, tl.offsets, sgains), 4,
+                    lambda k: self.progress(W_VIDEO + W_SRC * k / len(uniq), "Đang tách tiếng gốc…"))))
+            try:
+                src_blocks = src_blocks_from(paths)
+            except ft.FFmpegError as e:
+                if not audio_build.is_decode_failure(e):
+                    raise
+                # tiếng gốc của một clip có đoạn dữ liệu rác: tách lại từ bản sạch tiếng gốc (bỏ đoạn hỏng)
+                self.log("Tiếng gốc của một clip có đoạn hỏng làm lỗi lượt tách — tạo bản sạch tiếng gốc rồi tách lại.")
+                src_blocks = src_blocks_from({k: audio_build.clean_copy(self.runner, p) if tl.audible.get(k) else p
+                                              for k, p in paths.items()})
 
         # ----- 3. đo âm lượng nhạc -----
         used_tracks = sorted({it.track for it in tl.music_items})

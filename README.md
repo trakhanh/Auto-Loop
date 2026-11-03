@@ -6,7 +6,7 @@
 
 **Ghép và loop clip + nhạc thành video YouTube dài hàng giờ — xem trước ngay trong app, xuất nhanh bằng card đồ hoạ.**
 
-<sub>By Khánh Trà · Ứng dụng Windows · Giao diện tiếng Việt · Bản mới nhất: <b>1.8.9</b></sub>
+<sub>By Khánh Trà · Ứng dụng Windows · Giao diện tiếng Việt · Bản mới nhất: <b>1.8.10</b></sub>
 
 <br>
 
@@ -34,6 +34,8 @@
 <br>
 
 ## Có gì mới ở 1.8
+
+> **1.8.10** · File nhạc / tiếng gốc <b>hỏng nặng</b> (cả một vùng dữ liệu rác — hay gặp ở file trên Google Drive chưa tải hết về máy) không còn làm dừng lượt xuất với lỗi <i>“invalid band type”</i> / <i>“Invalid data found”</i>: bản sạch giải mã từng đoạn, chỗ hỏng thành vài giây im lặng, bài giữ đúng độ dài; bước đo âm lượng dùng bản sạch và không bao giờ làm dừng lượt xuất. Bản sạch của file hỏng nhẹ cũng giữ đúng độ dài (trước đây có thể ngắn hơn bài gốc, nhạc phía sau bị dồn sớm).
 
 > **1.8.9** · Bản sửa lỗi sau đợt rà soát toàn bộ app. Clip cắt sẵn bằng LosslessCut / <code>-c copy</code> không còn đứng hình ~1,5 giây mỗi vòng lặp. Mất điện giữa chừng: dự án luôn gắn đúng file (trước đây Ctrl+S có thể ghi đè nhầm dự án khác), hàng đợi chạy tiếp đúng nhóm video đang chạy và nhớ cả <b>Tắt máy khi xong</b>; tắt máy Windows bình thường không còn bị báo “tắt đột ngột”. Bản lưu cũ giữ lâu hơn: mỗi giờ một bản (24 giờ), mỗi ngày một bản (7 ngày). Thả thêm file lúc đang đọc không còn mất đợt trước; <kbd>Ctrl</kbd>+<kbd>Z</kbd> dùng được ở mọi chỗ trên trang Video; <b>Xoá tất cả</b> playlist có hỏi lại. File nhạc hỏng: chỉ thay đúng bài hỏng; bộ nhớ đệm đặt ở ổ khác được dọn đúng ổ; hồ sơ kênh giữ tiếng nền có sẵn; một lỗi card NVIDIA không còn làm cả hàng đợi chạy chậm.
 
