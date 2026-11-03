@@ -168,6 +168,10 @@ class SettingsPage(QWidget):
         self.beep = QCheckBox("Phát âm báo khi xuất xong")
         self.shutdown = QCheckBox("Tắt máy khi chạy xong hàng đợi (có 2 phút để huỷ)")
         self.shutdown.setToolTip("Chỉ áp dụng cho lần chạy hiện tại — mở lại app sẽ tự bỏ tick")
+        self.cloud_stage = QCheckBox("Lưu vào Google Drive / OneDrive: xuất ra máy trước rồi tự chép lên")
+        self.cloud_stage.setToolTip("Bật (nên dùng): Drive chỉ nhận file đã hoàn chỉnh — ghi thẳng lên Drive dễ lỗi ở "
+                                    "bước cuối, nhất là video dài. Cần chỗ trống trên ổ máy bằng cỡ video.\n"
+                                    "Tắt: ghi thẳng vào thư mục Drive như thư mục thường.")
         g_exp = QGroupBox("Tuỳ chọn xuất video")
         f = self._form(g_exp)
         f.addRow(self._lab("Thư mục xuất mặc định"), row)
@@ -177,6 +181,7 @@ class SettingsPage(QWidget):
         f.addRow(self.open_folder)
         f.addRow(self.beep)
         f.addRow(self.shutdown)
+        f.addRow(self.cloud_stage)
 
         # ----- ffmpeg -----
         self.ff_dir = QLineEdit(settings.value("pref/ffmpeg_dir", ""))
@@ -364,7 +369,7 @@ class SettingsPage(QWidget):
         lay.addLayout(cols, 1)
 
         for c, key, default in ((self.hwdec, "pref/hwdec", False), (self.open_folder, "pref/open_folder", True),
-                                (self.beep, "pref/beep", True)):
+                                (self.beep, "pref/beep", True), (self.cloud_stage, "pref/cloud_stage", True)):
             c.setChecked(str(settings.value(key, default)).lower() in ("true", "1"))
             c.toggled.connect(lambda v, k=key: self._save(k, v))
         self.shutdown.toggled.connect(lambda _: self.prefsChanged.emit())

@@ -662,6 +662,8 @@ topic("caidat", "Khác", "settings", "Cài đặt & card đồ hoạ", hero(
 <i>Tím xanh</i> (như bản cũ) — đổi là thấy ngay. Vài biểu tượng nhỏ đổi màu hẳn sau khi mở lại app.
 <b>Xem lại màn hình chào</b> cũng ở đây.</li>
 <li><b>Tắt máy khi chạy xong hàng đợi</b> (có 2 phút để huỷ) — chỉ có tác dụng tới khi tắt app, lần mở sau phải tick lại.</li>
+<li><b>Lưu vào Google Drive / OneDrive: xuất ra máy trước rồi tự chép lên</b> (mặc định bật) — chỉ có tác dụng khi thư mục
+lưu nằm trên Drive. Tắt thì ghi thẳng lên Drive như thư mục thường (video dài dễ lỗi ở bước cuối).</li>
 <li><b>Đường dẫn FFmpeg</b>: để <i>Tự động</i> (dùng bản kèm theo app); chỉ đổi khi được hướng dẫn.</li>
 <li><b>Xoá bộ nhớ đệm</b>, <b>Mở thư mục dữ liệu</b> (dự án tự lưu, hàng đợi, nhật ký, file lỗi).</li>
 <li><b>Nơi lưu bộ nhớ đệm</b>: mặc định ở ổ C (tới 30 GB). Ổ C hay đầy thì bấm <b>Đổi nơi lưu…</b> chọn ổ khác (D:, E:…).
@@ -719,6 +721,12 @@ topic("hoi", "Khác", "help", "Câu hỏi thường gặp", hero(
          "xuất được — nhật ký ghi rõ file nào. Mục đã lỗi: chuột phải → <b>Chạy lại</b>. Muốn có bản đẹp nhất: tải lại "
          "file gốc; file trên Google Drive thì chuột phải → <i>Có sẵn khi không có mạng</i> (Available offline) rồi "
          "xuất."),
+        ("Lưu thẳng vào Google Drive / OneDrive được không?",
+         "Được. Thư mục lưu nằm trên Drive (ổ G:, <i>My Drive</i>, <i>Shared drives</i>…) hoặc OneDrive thì trang Xuất "
+         "hiện dòng nhắc, và app <b>xuất ra máy trước rồi tự chép lên</b> khi xong — Drive chỉ tải lên file đã hoàn "
+         "chỉnh (ghi thẳng lên Drive dễ lỗi ở bước cuối). Cần chỗ trống trên ổ máy bằng cỡ video. Chép lên không được "
+         "(mất mạng…) thì video vẫn còn, nằm ở <code>Videos\\KT Loop Station - chưa chép lên Drive</code>. Tuỳ mỗi "
+         "người: tắt / bật ở <b>Cài đặt → Tuỳ chọn xuất video</b> (mặc định bật)."),
         ("Báo lỗi khi xuất?", "Xem <b>Nhật ký</b> ở trang Xuất (đầy đủ trong <i>Thư mục nhật ký</i> ở đầu trang này). Card đồ hoạ lỗi thì app tự "
                               "chuyển sang CPU; vẫn lỗi thì trang Xuất → Tuỳ chọn nâng cao ▾ → Bộ mã hoá: CPU rồi xuất lại. Lỗi bất ngờ của app "
                               "được ghi vào <code>loi-ung-dung.log</code> (Cài đặt → <i>Mở thư mục dữ liệu</i>) — gửi file này cho người hỗ trợ."),

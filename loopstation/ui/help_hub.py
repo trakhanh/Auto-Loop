@@ -34,6 +34,9 @@ FIRST_STEPS = (
 )
 # "Có gì mới" của bản đang chạy — hiện ở đầu trang Tổng quan (sửa cùng lúc với APP_VERSION khi ra bản mới)
 WHATS_NEW = (
+    ("upload", "Lưu thẳng vào Google Drive an toàn",
+     "Thư mục lưu trên Drive / OneDrive: app xuất ra máy trước rồi tự chép lên khi xong — Drive chỉ nhận file đã hoàn "
+     "chỉnh. Tắt / bật ở Cài đặt → Tuỳ chọn xuất video."),
     ("film", "Clip cắt sẵn không còn đứng hình",
      "Clip cắt bằng LosslessCut / -c copy bị đứng ~1,5 giây ở mỗi vòng lặp — đã sửa. Thả thêm file lúc app đang đọc "
      "không còn mất đợt trước."),
@@ -48,8 +51,6 @@ WHATS_NEW = (
     ("check", "File nhạc hỏng nặng vẫn xuất được",
      "Lỗi “invalid band type” / “Invalid data found” (file trên Google Drive chưa tải hết…): chỗ hỏng thành vài giây "
      "im lặng, bài giữ đúng độ dài. Mục đã lỗi: chuột phải → Chạy lại."),
-    ("video_music", "Hồ sơ kênh giữ tiếng nền có sẵn",
-     "Áp hồ sơ kênh không còn bỏ mất mưa / suối… có sẵn của app. Bộ nhớ đệm đặt ở ổ khác được dọn đúng ổ."),
 )
 SHORTCUTS = (("Space", "Phát / dừng"), ("F1", "Hướng dẫn"), ("Ctrl+S", "Lưu dự án"), ("Ctrl+Z", "Hoàn tác"),
              ("Ctrl+D", "Nhân bản dòng"), ("Ctrl+F", "Tìm"))

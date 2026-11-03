@@ -30,7 +30,7 @@ def app_dir() -> Path:
 
 # Tuỳ chọn toàn cục, đặt từ trang Cài đặt
 # hwdec: "" = giải mã bằng CPU; hoặc tên hwaccel (cuda, d3d11va…) · cache_dir: "" = trong thư mục dữ liệu (ổ C)
-OPTIONS: dict[str, str] = {"hwdec": "", "cache_dir": ""}
+OPTIONS: dict[str, str] = {"hwdec": "", "cache_dir": "", "cloud_stage": "1"}  # cloud_stage: "" = ghi thẳng lên Drive
 _custom_dir: str | None = None
 
 
@@ -118,7 +118,8 @@ def cache_dir(sub: str = "") -> Path:
     return d
 
 
-CACHE_PARTS = ("blocks", "srcaudio", "thumbs", "jobs", "estimate", "ambient", "ambientlib", "lookpreview", "cleanaudio")
+CACHE_PARTS = ("blocks", "srcaudio", "thumbs", "jobs", "estimate", "ambient", "ambientlib", "lookpreview", "cleanaudio",
+               "xuat-tam")  # xuat-tam: video xuất ra máy trước khi chép lên Google Drive / OneDrive
 
 
 def preview_dir() -> Path:

@@ -1622,6 +1622,8 @@ class MainWindow(QMainWindow):
         sp = self.settings_page
         cuda_ok = bool(self._accel and self._accel.cuda_decode)
         ffmpeg_tools.OPTIONS["hwdec"] = "cuda" if cuda_ok and sp.pref("pref/hwdec") else ""
+        ffmpeg_tools.OPTIONS["cloud_stage"] = "1" if sp.pref("pref/cloud_stage", True) else ""
+        self.export_tab._update_cloud_note()
         try:
             pt = int(self.settings.value("pref/font_pt", 10))
         except (TypeError, ValueError):

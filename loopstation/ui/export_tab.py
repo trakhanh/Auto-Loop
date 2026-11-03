@@ -15,7 +15,7 @@ from PySide6.QtWidgets import (
     QVBoxLayout, QWidget,
 )
 
-from ..core import encoders
+from ..core import cloud, encoders, ffmpeg_tools
 from ..core.project import ExportSettings, MusicSettings, format_hms, parse_hms
 from ..core.render_queue import KIND_LABELS, STATUS_LABELS, QueueItem, eta_text
 from . import effects, icons, theme
@@ -235,6 +235,9 @@ class ExportTab(QWidget):
         g_out = QGroupBox("Nơi lưu && File xuất kèm")
         f_out = form(g_out)
         f_out.addRow(lab("Thư mục lưu"), row)
+        self.cloud_note = w.muted("")
+        self.cloud_note.hide()
+        f_out.addRow(self.cloud_note)
         f_out.addRow(lab("Tên file"), self.filename)
         f_out.addRow(self.own_folder)
         f_out.addRow(self.markers)
@@ -553,6 +556,7 @@ class ExportTab(QWidget):
         self.cap_mbps.valueChanged.connect(self._update_cap_ui)
         self._update_cap_ui()
         self.out_dir.textChanged.connect(self._emit)
+        self.out_dir.textChanged.connect(self._update_cloud_note)
         self.filename.textChanged.connect(self._emit)
         for c in (self.tracklist, self.project_copy, self.own_folder, self.markers):
             c.toggled.connect(self._emit)
@@ -694,8 +698,26 @@ class ExportTab(QWidget):
         plain = html.unescape(re.sub(r"<[^>]+>", "", plain))
         self.footer_info.set_full_text(plain)
 
-    def free_bytes(self) -> int | None:
+    def _update_cloud_note(self) -> None:
+        where = cloud.provider(self.out_dir.text().strip())
+        self.cloud_note.setVisible(bool(where))
+        if where and ffmpeg_tools.OPTIONS.get("cloud_stage", "1"):
+            self.cloud_note.setText(f"Thư mục này nằm trên <b>{where}</b>: app xuất ra máy trước rồi tự chép lên khi xong "
+                                    "(ghi thẳng lên Drive dễ lỗi ở bước cuối). Cần chỗ trống trên ổ máy bằng cỡ video. "
+                                    "Đổi ở Cài đặt → Tuỳ chọn xuất video.")
+        elif where:
+            self.cloud_note.setText(f"Thư mục này nằm trên <b>{where}</b> — đang ghi thẳng lên đó. Video dài dễ lỗi ở bước "
+                                    "cuối: bật <i>xuất ra máy trước rồi tự chép lên</i> ở Cài đặt → Tuỳ chọn xuất video.")
+
+    def _space_dir(self) -> str:
+        """Thư mục để tính chỗ trống: thư mục lưu; nằm trên Drive thì là ổ máy nơi xuất tạm (ổ G: của Drive báo dung
+        lượng tài khoản, không phải chỗ trống thật)."""
         d = self.out_dir.text().strip()
+        staged = ffmpeg_tools.OPTIONS.get("cloud_stage", "1") and d and cloud.provider(d)
+        return str(ffmpeg_tools.cache_root()) if staged else d
+
+    def free_bytes(self) -> int | None:
+        d = self._space_dir()
         try:
             while d and not os.path.isdir(d):
                 d = os.path.dirname(d)
@@ -704,7 +726,7 @@ class ExportTab(QWidget):
             return None
 
     def free_space_text(self) -> str:
-        d = self.out_dir.text().strip()
+        d = self._space_dir()
         try:
             while d and not os.path.isdir(d):
                 d = os.path.dirname(d)

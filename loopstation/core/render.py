@@ -8,7 +8,7 @@ from datetime import datetime
 from pathlib import Path
 from typing import Callable
 
-from . import audio_build, encoders, look as look_mod, markers, planner, timeline, tracklist, video_build
+from . import audio_build, cloud, encoders, look as look_mod, markers, planner, timeline, tracklist, video_build
 from . import ffmpeg_tools as ft
 from .project import Project
 
@@ -170,8 +170,9 @@ class RenderJob:
 
         out_dir = self.output.parent
         out_dir.mkdir(parents=True, exist_ok=True)
+        stage = self._stage_dir(tl)
         est = tl.estimate_bytes()
-        free = shutil.disk_usage(out_dir).free
+        free = shutil.disk_usage(stage).free
         if free < est:
             self.log(f"Cảnh báo: ổ đĩa có thể không đủ chỗ (ước tính {_fmt_size(est)}, "
                      f"còn trống {_fmt_size(free)}). Sẽ kiểm tra lại chính xác sau khi chuẩn hoá clip.")
@@ -249,7 +250,7 @@ class RenderJob:
         video_build.write_concat(vlist, v_items)
 
         exact = sum(os.path.getsize(p) for p, _ in v_items) + 320_000 / 8 * total
-        free = shutil.disk_usage(out_dir).free
+        free = shutil.disk_usage(stage).free
         if free < exact * 1.05:
             shutil.rmtree(job_dir, ignore_errors=True)
             raise RenderError(f"Ổ đĩa không đủ chỗ: cần {_fmt_size(exact * 1.05)}, "
@@ -299,7 +300,7 @@ class RenderJob:
         args += ["-c:v", "copy"]
         if preset.codec == "hevc":
             args += ["-tag:v", "hvc1"]
-        partial = self.output.with_name(self.output.stem + ".dang-xuat.mp4")
+        partial = stage / (self.output.stem + ".dang-xuat.mp4")
         args += ["-t", f"{total:.6f}"]
         if total <= FASTSTART_MAX:
             # chỉ mục (moov) ở đầu file để xem được ngay trên web. Giữ sẵn chỗ cho nó thay vì +faststart:
@@ -345,8 +346,8 @@ class RenderJob:
             partial.unlink(missing_ok=True)
             shutil.rmtree(job_dir, ignore_errors=True)
             raise
-        self.output = _finalize(partial, self.output, self.log)
         shutil.rmtree(job_dir, ignore_errors=True)
+        self.output = self._deliver(partial)
 
         # ----- 6. file kèm (lỗi ở đây chỉ cảnh báo: video đã xuất xong) -----
         if ex.tracklist and tl.music_items:
@@ -435,7 +436,7 @@ class RenderJob:
         job_dir.mkdir(parents=True)
         gpath = job_dir / "graph.txt"
         gpath.write_text("\n".join(graph), encoding="utf-8")
-        partial = self.output.with_name(self.output.stem + ".dang-xuat" + self.output.suffix)
+        partial = self._stage_dir(tl) / (self.output.stem + ".dang-xuat" + self.output.suffix)
         args = ["-v", "error", "-/filter_complex", str(gpath), "-map", "[aout]",
                 *fmt.args(self.available), "-ar", "48000", "-ac", "2", "-t", f"{total:.6f}",
                 "-metadata", f"title={proj.name}", str(partial)]
@@ -468,8 +469,8 @@ class RenderJob:
             partial.unlink(missing_ok=True)
             shutil.rmtree(job_dir, ignore_errors=True)
             raise
-        self.output = _finalize(partial, self.output, self.log)
         shutil.rmtree(job_dir, ignore_errors=True)
+        self.output = self._deliver(partial)
         if ex.tracklist and tl.music_items:
             def write_tracklist() -> None:
                 text, _warns = tracklist.build(tl.music_items, t_paths, total)
@@ -479,6 +480,88 @@ class RenderJob:
             self._side_file("tracklist", write_tracklist)
         self.progress(1.0, "Xong!")
         return self.output
+
+    def _stage_dir(self, tl) -> Path:
+        """Nơi ghi file đang xuất: cạnh file đích như thường; thư mục lưu nằm trên Google Drive / OneDrive thì ghi ra
+        máy trước (bộ nhớ đệm) rồi chép sang khi xong — Drive chỉ thấy và tải lên file đã hoàn chỉnh."""
+        self._cloud = cloud.provider(str(self.output.parent))
+        sources = [inf.path for inf in tl.clip_infos.values()] if getattr(tl, "clip_infos", None) else []
+        sources += [inf.path for inf in tl.track_infos.values()] if getattr(tl, "track_infos", None) else []
+        remote = {cloud.provider(p) for p in sources} - {""}
+        if remote:
+            self.log(f"Mẹo: có file nguồn nằm trên {', '.join(sorted(remote))} — chuột phải thư mục đó → “Có sẵn khi "
+                     "không có mạng” (Available offline) để không bị lỗi file chưa tải hết về máy.")
+        if self._cloud and not ft.OPTIONS.get("cloud_stage", "1"):
+            self.log(f"Thư mục lưu nằm trên {self._cloud} — ghi thẳng lên đó (đã tắt “xuất ra máy trước” trong Cài đặt).")
+            self._cloud = ""
+        if not self._cloud:
+            return self.output.parent
+        stage = ft.cache_dir("xuat-tam")
+        self.log(f"Thư mục lưu nằm trên {self._cloud} — xuất ra máy trước ({stage.drive or stage}) rồi tự chép lên khi "
+                 "xong, để Drive chỉ tải lên file đã hoàn chỉnh.")
+        return stage
+
+    def _deliver(self, done: Path) -> Path:
+        """File đã xuất xong (`done`) → file đích. Thư mục đám mây: chép thẳng một lượt vào tên cuối (Drive chỉ tải lên
+        sau khi file đóng; không đổi tên trên Drive — Drive hay giữ file vừa ghi nên đổi tên dễ hỏng). Chép không được
+        (mạng / Drive lỗi, ổ đầy…) thì KHÔNG mất video: chuyển vào thư mục Videos và báo chỗ."""
+        if not getattr(self, "_cloud", ""):
+            return _finalize(done, self.output, self.log)
+        size = max(1, done.stat().st_size)
+        copied, last = 0, -1
+        tmp, made = self.output, False
+        try:
+            dst = None
+            for n in range(0, 100):  # file cùng tên đang mở ở chương trình khác: lưu sang tên khác
+                tmp = self.output if n == 0 else self.output.with_name(
+                    f"{self.output.stem}_moi{'' if n == 1 else n}{self.output.suffix}")
+                if n and tmp.exists():
+                    continue
+                try:
+                    dst = open(tmp, "wb")
+                    made = True
+                    break
+                except PermissionError:
+                    continue
+            if dst is None:
+                raise PermissionError(f"không ghi được {self.output}")
+            if tmp != self.output:
+                self.log(f"Cảnh báo: không ghi đè được {self.output.name} (file đang mở ở chương trình khác?) — "
+                         f"lưu thành {tmp.name}.")
+            with open(done, "rb") as src, dst:
+                while chunk := src.read(8 * 1024 * 1024):
+                    self.runner.check()
+                    dst.write(chunk)
+                    copied += len(chunk)
+                    pct = copied * 100 // size
+                    if pct != last:
+                        last = pct
+                        self.progress(0.999, f"Đang chép lên {self._cloud}… {pct}% ({_fmt_size(copied)}/"
+                                             f"{_fmt_size(size)})")
+            out = tmp
+        except ft.CancelledError:
+            if made:
+                tmp.unlink(missing_ok=True)
+            done.unlink(missing_ok=True)
+            raise
+        except OSError as e:
+            if made:  # bản chép dở trên Drive: xoá, đừng để người khác mở nhầm
+                try:
+                    tmp.unlink(missing_ok=True)
+                except OSError:
+                    pass
+            keep = Path.home() / "Videos" / "KT Loop Station - chưa chép lên Drive"
+            try:
+                keep.mkdir(parents=True, exist_ok=True)
+                out = Path(shutil.move(str(done), str(keep / self.output.name)))
+            except OSError:
+                out = done
+            self.log(f"Cảnh báo: không chép được lên {self._cloud} ({e}). Video đầy đủ đang nằm ở {out} — chép "
+                     "sang Drive bằng tay.")
+            return out
+        done.unlink(missing_ok=True)
+        self.log(f"Đã chép lên {self._cloud}: {out}")
+        return out
 
     def _side_file(self, what: str, fn) -> None:
         try:
