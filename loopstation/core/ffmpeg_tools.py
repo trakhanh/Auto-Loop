@@ -160,7 +160,7 @@ def clean_temp() -> None:
 
 
 CACHE_LIMIT = 30 * 1024 ** 3  # bộ nhớ đệm khối video/tiếng gốc vượt mức này thì tự xoá bớt khối cũ nhất
-PRUNE_PARTS = ("blocks", "srcaudio", "estimate", "thumbs")
+PRUNE_PARTS = ("blocks", "srcaudio", "estimate", "thumbs", "cleanaudio", "ambient")  # thiếu file thì lần sau tự tạo lại
 
 
 def _cache_files(parts=PRUNE_PARTS) -> list[tuple[float, int, Path]]:
@@ -186,7 +186,7 @@ def prune_cache(limit: int = CACHE_LIMIT, need_free: int = 0) -> int:
     files = sorted(_cache_files())
     total = sum(s for _, s, _ in files)
     try:
-        free = shutil.disk_usage(data_dir()).free
+        free = shutil.disk_usage(cache_root()).free  # ổ chứa bộ nhớ đệm (có thể đã chuyển sang ổ khác), không phải ổ dữ liệu
     except OSError:
         free = need_free
     freed = 0
@@ -358,22 +358,28 @@ class Runner:
         err_chunks: list[bytes] = []
         t = threading.Thread(target=lambda: err_chunks.append(proc.stderr.read()), daemon=True)
         t.start()
-        block: dict[str, str] = {}
-        for raw in proc.stdout:
-            line = raw.decode("utf-8", "replace").strip()
-            if "=" not in line:
-                continue
-            k, v = line.split("=", 1)
-            block[k] = v
-            if k == "progress":
-                if on_progress:
-                    on_progress(block)
-                block = {}
-        proc.wait()
-        t.join()
+        try:
+            block: dict[str, str] = {}
+            for raw in proc.stdout:
+                line = raw.decode("utf-8", "replace").strip()
+                if "=" not in line:
+                    continue
+                k, v = line.split("=", 1)
+                block[k] = v
+                if k == "progress":
+                    if on_progress:
+                        on_progress(block)
+                    block = {}
+            proc.wait()
+            t.join()
+        finally:
+            # on_progress ném lỗi giữa chừng → không để ffmpeg chạy mồ côi (và kẹt trong _procs)
+            if proc.poll() is None:
+                proc.kill()
+                proc.wait()
+            with self._lock:
+                self._procs.discard(proc)
         stderr = b"".join(err_chunks).decode("utf-8", "replace")
-        with self._lock:
-            self._procs.discard(proc)
         if self.cancelled:
             raise CancelledError()
         if proc.returncode != 0:

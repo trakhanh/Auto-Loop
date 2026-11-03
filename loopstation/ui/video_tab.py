@@ -9,9 +9,9 @@ import shiboken6
 from PySide6.QtCore import QEvent, QTimer, QRegularExpression, QSettings, QSize, Qt, Signal
 from PySide6.QtGui import QColor, QFontMetrics, QIcon, QKeySequence, QPixmap, QRegularExpressionValidator, QShortcut
 from PySide6.QtWidgets import (
-    QCheckBox, QComboBox, QDoubleSpinBox, QFormLayout, QFrame, QGroupBox, QHBoxLayout, QHeaderView,
-    QLabel, QLineEdit, QMessageBox, QPlainTextEdit, QPushButton, QScrollArea, QSizePolicy, QSlider, QSpinBox,
-    QSplitter, QTabWidget, QTreeWidgetItem, QVBoxLayout, QWidget,
+    QAbstractSpinBox, QApplication, QCheckBox, QComboBox, QDoubleSpinBox, QFormLayout, QFrame, QGroupBox, QHBoxLayout,
+    QHeaderView, QLabel, QLineEdit, QMessageBox, QPlainTextEdit, QPushButton, QScrollArea, QSizePolicy, QSlider,
+    QSpinBox, QSplitter, QTabWidget, QTextEdit, QTreeWidgetItem, QVBoxLayout, QWidget,
 )
 
 from ..core.probe import MediaInfo
@@ -20,7 +20,7 @@ from . import effects, icons, motion, theme
 from . import widgets as w
 from .timeline_bar import TimelineBar
 from .interleave_dialog import InterleaveDialog, has_base_candidate
-from .trim_dialog import MIN_KEEP, TrimDialog, trim_text
+from .trim_dialog import MIN_KEEP, TrimDialog, clamp_trim, trim_text
 
 COL_NAME, COL_INFO, COL_TRIM, COL_PLAYS, COL_STRETCH, COL_LOOPXF, COL_NEXTXF, COL_DUR = range(8)
 
@@ -185,12 +185,17 @@ class VideoTab(QWidget):
     queueAddRequested = Signal()  # nút "Thêm vào hàng đợi" ngay trên dải Sẵn sàng
     shuffleDetailsRequested = Signal()  # cửa sổ riêng "Thứ tự sẽ xuất" (40–50 clip vẫn đọc rõ)
     seasonDropped = Signal(list, str)  # thả file của nhiều tập (33_…, 34_…): (đường dẫn, tên mẫu bảng hợp nhất)
+    # sắp mở hộp thoại / cửa sổ tự phát hình, tiếng (Đoạn lấy, mở file bằng app khác) → cửa sổ chính dừng trình phát
+    media_dialog_opening = Signal()
 
     def __init__(self, settings: QSettings, parent=None):
         super().__init__(parent)
         self.settings = settings
         self._loading = False
-        self._prober = None
+        # đọc file theo từng lượt thả; nhiều lượt chồng nhau đều về đủ (xem widgets.ProbeQueue)
+        self._probe = w.ProbeQueue(self)
+        self._probe.progress.connect(lambda i, n: self.status.setText(f"Đang đọc {i}/{n} file…"))
+        self._probe.batchDone.connect(lambda infos, g: self._on_probed(infos, g))
         self._mode = "video_music"
 
         # ----- bảng clip -----
@@ -238,7 +243,7 @@ class VideoTab(QWidget):
         self.list.changed.connect(self._emit)
         self.list.filesDropped.connect(self.add_paths)
         self.list.emptyClicked.connect(self._add_files)
-        self.list.openRequested.connect(w.open_with_default_app)
+        self.list.openRequested.connect(self._open_file)
         self.list.itemDoubleClicked.connect(self._on_double_click)
         self.list.menu_extras = [("scissors", "Chọn đoạn lấy (cắt đầu/cuối)…", self._open_trim),
                                  ("copy", "Nhân bản dòng (Ctrl+D) — dùng lại clip này ở chỗ khác", self._duplicate),
@@ -289,15 +294,18 @@ class VideoTab(QWidget):
                                  "nhân bản, xoá dòng, đổi thứ tự…")
         self.undo_btn.setEnabled(False)
         self.undo_btn.clicked.connect(self.undo)
+        # Ctrl+Z dùng được khi đang ở trang Video dù đang bấm ở trình phát / dòng thời gian (nằm ngoài trang này);
+        # đang gõ chữ / số trong một ô thì Ctrl+Z vẫn là hoàn tác chữ của ô đó
         undo_key = QShortcut(QKeySequence.StandardKey.Undo, self)
-        undo_key.setContext(Qt.ShortcutContext.WidgetWithChildrenShortcut)
-        undo_key.activated.connect(self.undo)
+        undo_key.setContext(Qt.ShortcutContext.WindowShortcut)
+        undo_key.activated.connect(self._undo_key)
         self._history: list[list[ClipItem]] = []
+        self._pending: list[ClipItem] | None = None  # bước sửa chữ / số đang chờ ghi (gộp các lần gõ liên tiếp)
         self._restoring = False
         self._hist_timer = QTimer(self)
         self._hist_timer.setSingleShot(True)
         self._hist_timer.setInterval(250)
-        self._hist_timer.timeout.connect(self._push_history)
+        self._hist_timer.timeout.connect(self._flush_pending)
         preview_btn = QPushButton("Xem thử nối")
         preview_btn.setObjectName("accentBtn")
         icons.bind(preview_btn, "play", 13, "accent_text")
@@ -808,6 +816,7 @@ class VideoTab(QWidget):
         lay.addWidget(self.mode_banner)
         lay.addWidget(split, 1)
 
+        self.source.currentIndexChanged.connect(self._on_source_changed)  # trước _emit: collect() thấy ngay
         for wdg in (self.order, self.length_mode, self.fill, self.fit, self.source):
             wdg.currentIndexChanged.connect(self._emit)
         for wdg in (self.seed,):
@@ -945,6 +954,7 @@ class VideoTab(QWidget):
         mix_item = self.source.model().item(self.source.findData("mix"))
         if mix_item is not None:
             mix_item.setEnabled(not video_only)
+        self._switching = True  # đổi ô do đổi kiểu sản phẩm, không phải người dùng chọn
         if video_only and self.source.currentData() == "mix":
             self._saved_source = "mix"
             set_combo(self.source, "only")
@@ -952,7 +962,14 @@ class VideoTab(QWidget):
             if self.source.currentData() == "only":
                 set_combo(self.source, self._saved_source)
             self._saved_source = None
+        self._switching = False
         self._update_enabled()
+
+    def _on_source_changed(self, *_) -> None:
+        """Ở kiểu Chỉ video, người dùng tự chọn tiếng gốc (ô ở trang này hoặc Bảng trộn âm) → đó là lựa chọn mới:
+        bỏ "trộn nhạc" đã nhớ, để Bảng trộn âm không bật ngược về và quay lại kiểu có nhạc vẫn giữ lựa chọn này."""
+        if self._mode == "video_only" and not self._loading and not getattr(self, "_switching", False):
+            self._saved_source = None
 
     def set_preview(self, text: str) -> None:
         self.preview.setPlainText(text)
@@ -1179,6 +1196,11 @@ class VideoTab(QWidget):
             self.split.setSizes([sum(cur) - want, want])
             self._balancing = False
 
+    def _open_file(self, path: str) -> None:
+        """Bấm đúp tên file: mở bằng app mặc định (tự phát) → trình phát chính dừng trước."""
+        self.media_dialog_opening.emit()
+        w.open_with_default_app(path)
+
     # ---------- cắt đoạn lấy ----------
     def _on_double_click(self, it: QTreeWidgetItem, column: int) -> None:
         if column == COL_TRIM:
@@ -1200,10 +1222,14 @@ class VideoTab(QWidget):
         sel = [s for s in self.list.selectedItems() if not s.data(0, w.ROLE_INFO).is_image]
         if it not in sel:
             sel = [it]
+        self.media_dialog_opening.emit()  # hộp thoại tự phát đoạn cắt: trình phát chính dừng, không kêu chồng
         dlg = TrimDialog(c.path, info.duration, c.trim_start, c.trim_end, len(sel), self)
-        if dlg.exec() != TrimDialog.DialogCode.Accepted or not dlg.result_values:
+        ok = dlg.exec() == TrimDialog.DialogCode.Accepted
+        values = dlg.result_values
+        w.dispose(dlg)  # nhả QMediaPlayer + ảnh khung hình (trước đây mỗi lần mở lại đọng thêm một bộ)
+        if not ok or not values:
             return
-        a, b, all_sel = dlg.result_values
+        a, b, all_sel = values
         self._set_trim(sel if all_sel else [it], a, b)
 
     def _apply_cut(self, reset: bool = False) -> None:
@@ -1213,17 +1239,19 @@ class VideoTab(QWidget):
             self._set_trim(sel, a, b)
 
     def _set_trim(self, items: list[QTreeWidgetItem], a: float, b: float) -> None:
+        """Gán đoạn lấy cho nhiều clip. Số giây áp cho từng clip được kẹp theo độ dài clip đó (giống lúc xuất,
+        core.timeline): clip ngắn hơn đoạn cắt không hiện "7.8–8.3s" trong khi xuất thật lấy 7.5–8.0s."""
         self.list.blockSignals(True)
         for it in items:
             info: MediaInfo = it.data(0, w.ROLE_INFO)
             if not info.ok or info.is_image:
                 continue
             c: ClipItem = it.data(0, w.ROLE_DATA)
-            c.trim_start, c.trim_end = a, b
+            c.trim_start, c.trim_end = clamp_trim(info.duration, a, b)
             it.setData(0, w.ROLE_DATA, c)
         self._refresh_rows()
         self.list.blockSignals(False)
-        self._emit()
+        self._emit(step=True)
 
     # ---------- nhân bản dòng ----------
     def _copy_rows(self) -> None:
@@ -1256,14 +1284,21 @@ class VideoTab(QWidget):
             it.setSelected(True)
         self.list.scrollToItem(new_items[-1])
         self.status.setText(f"Đã dán {len(new_items)} dòng — Ctrl+Z để hoàn tác.")
-        self._emit()
+        self._emit(step=True)
 
     def _duplicate_selected(self) -> None:
         sel = self._selected_or_warn()
-        for it in sorted(sel, key=self.list.indexOfTopLevelItem, reverse=True):
-            self._duplicate(it)
+        if not sel:
+            return
+        news = [self._duplicate(it, emit=False) for it in sorted(sel, key=self.list.indexOfTopLevelItem, reverse=True)]
+        self.list.clearSelection()
+        for new in news:
+            new.setSelected(True)
+        if len(news) > 1:
+            self.status.setText(f"Đã nhân bản {len(news)} dòng — kéo các dòng mới tới vị trí muốn phát lại.")
+        self._emit(step=True)  # nhân bản nhiều dòng một lượt = một bước Hoàn tác
 
-    def _duplicate(self, it: QTreeWidgetItem) -> None:
+    def _duplicate(self, it: QTreeWidgetItem, emit: bool = True) -> QTreeWidgetItem:
         """Bản sao ngay dưới dòng gốc (cùng file, cùng cài đặt) — kéo đi chỗ khác nếu cần."""
         c = self._clip_from_item(it)
         info: MediaInfo = it.data(0, w.ROLE_INFO)
@@ -1278,7 +1313,9 @@ class VideoTab(QWidget):
         self.list.clearSelection()
         new.setSelected(True)
         self.status.setText(f"Đã nhân bản {Path(c.path).name} — kéo dòng mới tới vị trí muốn phát lại.")
-        self._emit()
+        if emit:
+            self._emit(step=True)
+        return new
 
     def _on_image_dur(self, *_) -> None:
         self.list.blockSignals(True)
@@ -1319,7 +1356,7 @@ class VideoTab(QWidget):
             it.setText(COL_PLAYS, w.plays_text(mode, lo, lo, hi))
         self._refresh_rows()
         self.list.blockSignals(False)
-        self._emit()
+        self._emit(step=True)
 
     def _apply_xfade(self, clear: bool = False) -> None:
         sel = self._selected_or_warn()
@@ -1336,7 +1373,7 @@ class VideoTab(QWidget):
             it.setText(COL_NEXTXF, w.xf_text(next_v))
         self._refresh_rows()
         self.list.blockSignals(False)
-        self._emit()
+        self._emit(step=True)
 
     def _set_stretch(self, on: bool) -> None:
         sel = self._selected_or_warn()
@@ -1346,7 +1383,7 @@ class VideoTab(QWidget):
         for it in sel:
             it.setCheckState(COL_STRETCH, Qt.CheckState.Checked if on else Qt.CheckState.Unchecked)
         self.list.blockSignals(False)
-        self._emit()
+        self._emit(step=True)
 
     def _preview_seam(self) -> None:
         sel = self.list.selectedItems()
@@ -1369,18 +1406,19 @@ class VideoTab(QWidget):
             self.add_paths(w.scan_folder(folder, w.VISUAL_EXTS, self.toolbar.recursive.isChecked()))
 
     def add_paths(self, paths: list[str]) -> None:
-        files = w.expand_dropped(paths, w.VISUAL_EXTS, self.toolbar.recursive.isChecked())
-        have = self.list.paths()
-        files = [os.path.normpath(p) for p in files if os.path.normcase(os.path.normpath(p)) not in have]
+        recursive = self.toolbar.recursive.isChecked()
+        found = w.expand_dropped(paths, w.VISUAL_EXTS, recursive)
+        if not found:
+            self.status.setText(w.no_media_message(paths, recursive, "video / ảnh"))
+            return
+        gen = getattr(self, "_load_gen", 0)
+        files = w.new_paths(found, self.list.paths() | self._probe.reading(gen))
         if not files:
-            self.status.setText("File đã có trong bảng. Muốn phát lại clip ở chỗ khác: chuột phải → Nhân bản dòng.")
+            self.status.setText("File đã có trong bảng (hoặc đang đọc). Muốn phát lại clip ở chỗ khác: "
+                                "chuột phải → Nhân bản dòng.")
             return
         self.status.setText(f"Đang đọc 0/{len(files)} file…")
-        self._prober = w.Prober()
-        self._prober.progress.connect(lambda i, n: self.status.setText(f"Đang đọc {i}/{n} file…"))
-        gen = getattr(self, "_load_gen", 0)
-        self._prober.finished.connect(lambda infos, g=gen: self._on_probed(infos, g))
-        self._prober.start(files)
+        self._probe.start(files, gen)
 
     def _on_probed(self, infos: list[MediaInfo], gen: int | None = None) -> None:
         if gen is not None and gen != getattr(self, "_load_gen", 0):
@@ -1398,7 +1436,7 @@ class VideoTab(QWidget):
             QMessageBox.warning(self, "Có file không đọc được",
                                 "\n".join(f"• {b.path}: {b.error or 'không có hình'}" for b in bad[:15]))
         self.status.setText(msg)
-        self._emit()
+        self._emit(step=True)
         if not self._auto_table():
             self._maybe_suggest_interleave()
 
@@ -1512,9 +1550,10 @@ class VideoTab(QWidget):
                 durations[key] = (self.image_dur.value() if info.is_image
                                   else max(MIN_KEEP, info.duration - c.trim_start - c.trim_end))
         dlg = InterleaveDialog(clips, durations, self.settings, self)
-        if not dlg.exec() or not dlg.result_clips:
-            return
-        self._apply_arranged(dlg.result_clips, infos, "Đã xen kẽ")
+        result = dlg.result_clips if dlg.exec() else None
+        w.dispose(dlg)
+        if result:
+            self._apply_arranged(result, infos, "Đã xen kẽ")
 
     def _table_media(self):
         """(clip của bảng, MediaInfo theo file, thời lượng một lần phát theo file) cho các hộp thoại xếp kịch bản."""
@@ -1539,17 +1578,19 @@ class VideoTab(QWidget):
                                     "Loop2.mp4…).")
             return
         dlg = SequenceDialog(clips, durations, self.settings, self)
-        if not dlg.exec() or not dlg.result_clips:
-            return
-        self._apply_arranged(dlg.result_clips, infos, "Đã xếp lần lượt")
+        result = dlg.result_clips if dlg.exec() else None
+        w.dispose(dlg)
+        if result:
+            self._apply_arranged(result, infos, "Đã xếp lần lượt")
 
     def _open_library(self) -> None:
         from .preset_library import PresetLibraryDialog, interleave_key, kind_of
         clips, infos, durations = self._table_media()
         dlg = PresetLibraryDialog(clips, self.settings, self)
-        if not dlg.exec() or not dlg.choice:
+        p = dlg.choice if dlg.exec() else None
+        w.dispose(dlg)
+        if not p:
             return
-        p = dlg.choice
         k = kind_of(p)
         if k == "table":
             self.settings.setValue("table/last", p["name"])
@@ -1563,32 +1604,38 @@ class VideoTab(QWidget):
             sd = SequenceDialog(clips, durations, self.settings, self)
             sd.plays.setText(str(p.get("base", "60")))
             sd.pos.setCurrentIndex(max(0, sd.pos.findData(p.get("content", "start"))))
-            if sd.exec() and sd.result_clips:
-                self._apply_arranged(sd.result_clips, infos, "Đã xếp lần lượt")
+            result = sd.result_clips if sd.exec() else None
+            w.dispose(sd)
+            if result:
+                self._apply_arranged(result, infos, "Đã xếp lần lượt")
             return
         if len({os.path.normcase(c.path) for c in clips}) < 2:
             QMessageBox.information(self, "Xen kẽ clip nền", "Cần ít nhất 2 file khác nhau trong bảng: 1 clip nền "
                                     "(loop_….mp4) và các cảnh chèn (2_….mp4, 3_….mp4…).")
             return
         idlg = InterleaveDialog(clips, durations, self.settings, self, preset_name=interleave_key(p))
-        if idlg.exec() and idlg.result_clips:
-            self._apply_arranged(idlg.result_clips, infos, "Đã xen kẽ")
+        result = idlg.result_clips if idlg.exec() else None
+        w.dispose(idlg)
+        if result:
+            self._apply_arranged(result, infos, "Đã xen kẽ")
 
     def _open_table_preset(self) -> None:
         from .table_preset_dialog import TablePresetDialog
         clips, infos, _durations = self._table_media()
         dlg = TablePresetDialog(clips, self.settings, self)
-        if not dlg.exec() or not dlg.result_clips:
+        result = dlg.result_clips if dlg.exec() else None
+        w.dispose(dlg)
+        if not result:
             return
-        new = [c.path for c in dlg.result_clips if os.path.normcase(c.path) not in infos]
+        new = [c.path for c in result if os.path.normcase(c.path) not in infos]
         for path, info in zip(new, w.probe.probe_many(new)):  # file lấy từ thư mục khác: đọc thông tin
             infos[os.path.normcase(path)] = info
-        self._apply_arranged(dlg.result_clips, infos, "Đã áp mẫu bảng")
+        self._apply_arranged(result, infos, "Đã áp mẫu bảng")
 
     def _apply_arranged(self, result: list[ClipItem], infos: dict, what: str) -> None:
         """Thay bảng clip bằng bảng đã xếp (Hoàn tác được)."""
         dlg_result = result
-        self._hist_timer.stop()
+        self._flush_pending()
         self._push_history()  # để Hoàn tác quay lại đúng bảng trước khi xen kẽ
         self.list.blockSignals(True)
         self.list.clear()
@@ -1600,7 +1647,7 @@ class VideoTab(QWidget):
         motion.slide_visible(self.suggest, False)
         self.status.setText(f"{what}: {len(dlg_result)} dòng. Bấm Hoàn tác (Ctrl+Z) để quay lại.")
         self.notify.emit(f"{what} {len(dlg_result)} dòng — Ctrl+Z để quay lại", "ok")
-        self._emit()
+        self._emit(step=True)
 
     # ---------- cập nhật hiển thị thông minh (Progressive Disclosure) ----------
     def _update_enabled(self) -> None:
@@ -1650,20 +1697,34 @@ class VideoTab(QWidget):
                            or self.fade_out.value() != 3.0)
         self.right_tabs.setTabText(1, "Khung && Tiếng ●" if has_custom_tab2 else "Khung && Tiếng")
 
-    def _emit(self, *_) -> None:
+    def _emit(self, *_, step: bool = False) -> None:
+        """`step=True` (hoặc bảng báo một thao tác trọn vẹn: xoá, đổi thứ tự…): ghi ngay một bước Hoàn tác — trước
+        đây mọi thay đổi chờ 250 ms rồi mới ghi nên dán rồi nhân bản liền tay bị gộp thành một bước. Sửa chữ / số
+        thì vẫn gộp các lần gõ liên tiếp (chờ 250 ms)."""
         if self._loading:
             return
         self._update_enabled()
         if not self._restoring:
-            self._hist_timer.start()
+            if step or self.list.discrete:
+                self._flush_pending()  # bước sửa chữ đang chờ ghi trước, rồi mới tới thao tác này
+                self._push_history()
+            else:
+                self._pending = self._snapshot()
+                self._hist_timer.start()
         self.changed.emit()
 
     # ---------- hoàn tác ----------
     def _snapshot(self) -> list[ClipItem]:
         return [ClipItem(**self._clip_from_item(it).__dict__) for it in self.list.items()]
 
-    def _push_history(self) -> None:
-        snap = self._snapshot()
+    def _flush_pending(self) -> None:
+        self._hist_timer.stop()
+        snap, self._pending = self._pending, None
+        if snap is not None:
+            self._push_history(snap)
+
+    def _push_history(self, snap: list[ClipItem] | None = None) -> None:
+        snap = self._snapshot() if snap is None else snap
         if self._history and self._history[-1] == snap:
             return
         self._history.append(snap)
@@ -1672,22 +1733,42 @@ class VideoTab(QWidget):
 
     def _reset_history(self) -> None:
         self._hist_timer.stop()
+        self._pending = None
         self._history = [self._snapshot()]
         self.undo_btn.setEnabled(False)
 
+    def _undo_key(self) -> None:
+        """Ctrl+Z cả cửa sổ: chỉ khi trang Video đang hiện, và không giành Ctrl+Z của ô đang gõ chữ / số."""
+        if not self.isVisible():
+            return
+        fw = QApplication.focusWidget()
+        if isinstance(fw, (QLineEdit, QAbstractSpinBox, QTextEdit, QPlainTextEdit)):
+            return
+        self.undo()
+
     def undo(self) -> None:
-        self._hist_timer.stop()
+        self._flush_pending()
         self._push_history()  # ghi lại thay đổi vừa làm (nếu chưa kịp ghi)
         if len(self._history) < 2:
             return
         self._history.pop()
         clips = self._history[-1]
+        # MediaInfo của các dòng đang có dùng lại luôn — chỉ đọc file chưa có (trước đây đọc lại mọi dòng ngay trên
+        # luồng giao diện, bảng dài là khựng)
+        known: dict[str, MediaInfo] = {}
+        for it in self.list.items():
+            info = it.data(0, w.ROLE_INFO)
+            if info is not None:
+                known.setdefault(os.path.normcase(it.data(0, w.ROLE_DATA).path), info)
+        missing = list(dict.fromkeys(c.path for c in clips if os.path.normcase(c.path) not in known))
+        for path, info in zip(missing, w.probe.probe_many(missing) if missing else []):
+            known[os.path.normcase(path)] = info
         self._restoring = True
         self.list.blockSignals(True)
         self.list.clear()
         self._thumb_waiting.clear()
-        for c, info in zip(clips, w.probe.probe_many([c.path for c in clips])):
-            self.list.addTopLevelItem(self._make_item(ClipItem(**c.__dict__), info))
+        for c in clips:
+            self.list.addTopLevelItem(self._make_item(ClipItem(**c.__dict__), known[os.path.normcase(c.path)]))
         self._refresh_rows()
         self.list.blockSignals(False)
         self.status.setText("Đã hoàn tác 1 bước.")

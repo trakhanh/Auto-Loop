@@ -9,7 +9,7 @@ from pathlib import Path
 
 from . import ffmpeg_tools as ft
 from .planner import MusicItem
-from .project import MusicSettings
+from .project import MusicSettings, atomic_write
 
 _lock = threading.Lock()
 
@@ -88,7 +88,7 @@ def _remember(fid: str, bad: bool) -> None:
             db = {}
         db[fid] = bad
         try:
-            _check_db_path().write_text(json.dumps(db, ensure_ascii=False), encoding="utf-8")
+            atomic_write(_check_db_path(), json.dumps(db, ensure_ascii=False))
         except OSError:
             pass
 
@@ -108,25 +108,52 @@ def clean_copy(runner: ft.Runner, path: str) -> str:
     except BaseException:
         tmp.unlink(missing_ok=True)
         raise
-    os.replace(tmp, out)
+    try:
+        os.replace(tmp, out)
+    except OSError:
+        # luồng khác vừa tạo xong cùng bản sạch (file đích đang bị đọc → không ghi đè được): dùng bản đó
+        tmp.unlink(missing_ok=True)
+        if out.is_file() and out.stat().st_size > 0:
+            return str(out)
+        raise
     return str(out)
+
+
+def fails_in_graph(runner: ft.Runner, path: str) -> bool:
+    """Đọc thử cả bài đúng như lúc ghép (bộ lọc amovie, luồng âm thanh "tốt nhất"): gói hỏng làm lượt ghép dừng
+    thì ở đây cũng dừng. Chậm hơn kiểm tra nhanh một chút — chỉ dùng khi lượt ghép đã hỏng mà chưa rõ bài nào."""
+    src = escape_filter_value(path.replace("\\", "/"))
+    try:
+        runner.ffmpeg(["-v", "error", "-filter_complex", f"amovie=filename={src}[o]", "-map", "[o]", "-f", "null", "-"])
+    except ft.FFmpegError:
+        return True
+    return False
 
 
 def usable_paths(runner: ft.Runner, paths: dict[int, str], log=None, force: bool = False) -> dict[int, str]:
     """Đường dẫn để ghép nhạc / tiếng nền: file nào có đoạn hỏng thì thay bằng bản sạch (kiểm tra 4 file cùng lúc).
-    `force`: lượt ghép trước vẫn hỏng vì một file lọt kiểm tra → dùng bản sạch cho TẤT CẢ (và nhớ lại)."""
+    `force`: lượt ghép trước vẫn hỏng vì một file lọt kiểm tra → đọc thử từng file đúng như lúc ghép, file nào hỏng
+    thì nhớ là hỏng + dùng bản sạch. Không tìm ra file nào → dùng bản sạch cho TẤT CẢ, nhưng chỉ trong lượt này
+    (không ghi "hỏng" cho bài lành)."""
     from concurrent.futures import ThreadPoolExecutor
     files = list(dict.fromkeys(paths.values()))
+    every = False
     if force:
+        with ThreadPoolExecutor(max_workers=4) as pool:
+            culprit = dict(zip(files, pool.map(lambda p: fails_in_graph(runner, p), files)))
         for p in files:
-            mark_damaged(p)
+            if culprit[p]:
+                mark_damaged(p)
+        every = not any(culprit.values())
+        if every and log and files:
+            log("  Không xác định được bài nào bị hỏng — lượt này dùng bản sạch cho mọi bài.")
     with ThreadPoolExecutor(max_workers=4) as pool:
-        damaged = dict(zip(files, pool.map(lambda p: is_damaged(runner, p), files)))
+        damaged = dict(zip(files, pool.map(lambda p: every or is_damaged(runner, p), files)))
     fixed: dict[str, str] = {}
     for p in files:
         if damaged[p]:
             fixed[p] = clean_copy(runner, p)
-            if log:
+            if log and not every:
                 log(f"  {Path(p).name} có đoạn bị hỏng — đã tự tạo bản sạch (bỏ đoạn hỏng) để ghép.")
     return {k: fixed.get(p, p) for k, p in paths.items()}
 
@@ -207,9 +234,12 @@ def measure_loudness(runner: ft.Runner, path: str) -> float | None:
     if value < -70:  # bài gần như im lặng
         return None
     with _lock:
-        db = _loudness_db()
-        db[_file_id(path)] = value
-        (ft.data_dir() / "loudness.json").write_text(json.dumps(db, ensure_ascii=False), encoding="utf-8")
+        try:  # chỉ là bộ nhớ đệm: ghi không được (ổ đầy / file khoá) thì thôi, không làm hỏng lượt xuất
+            db = _loudness_db()
+            db[_file_id(path)] = value
+            atomic_write(ft.data_dir() / "loudness.json", json.dumps(db, ensure_ascii=False))
+        except OSError:
+            pass
     return value
 
 

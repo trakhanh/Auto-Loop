@@ -34,21 +34,21 @@ FIRST_STEPS = (
 )
 # "Có gì mới" của bản đang chạy — hiện ở đầu trang Tổng quan (sửa cùng lúc với APP_VERSION khi ra bản mới)
 WHATS_NEW = (
+    ("film", "Clip cắt sẵn không còn đứng hình",
+     "Clip cắt bằng LosslessCut / -c copy bị đứng ~1,5 giây ở mỗi vòng lặp — đã sửa. Thả thêm file lúc app đang đọc "
+     "không còn mất đợt trước."),
     ("save", "Mất điện cũng không mất việc",
-     "Sửa gì app cũng tự lưu sau ~3 giây, giữ 5 bản gần nhất. App bị tắt ngang lúc đang xuất: mở lại hỏi chạy tiếp hàng "
-     "đợi, để yên 60 giây là tự chạy."),
-    ("eye", "Phóng to so sánh khung đầu / cuối",
-     "Hộp Đoạn lấy: bấm ảnh Đầu / Cuối để xem lớn — cạnh nhau, nhấp nháy như lúc loop, chỗ khác nhau, kèm điểm Giống nhau %."),
-    ("check", "File nhạc hỏng không làm dừng việc xuất",
-     "Nhạc / tiếng nền có đoạn dữ liệu hỏng (lỗi “Pulse data corrupt”): tự thay bằng bản sạch; lọt bước kiểm tra thì tự "
-     "ghép lại bằng bản sạch. Mục đã lỗi: chuột phải → Chạy lại."),
-    ("video_music", "Hồ sơ kênh",
-     "Nút Kênh trên cùng: mỗi kênh một bộ intro / outro, logo, thư mục nhạc, tiếng nền, mẫu bảng, nơi lưu, chất lượng. "
-     "Chọn kênh là áp cả bộ, bảng clip giữ nguyên."),
-    ("upload", "Gửi mẫu & hồ sơ cho máy khác",
-     "Thư viện mẫu / Hồ sơ kênh → Xuất ra file .ktls → máy khác Nhập từ file. Trùng tên thì chọn ghi đè hay giữ cả hai."),
-    ("queue", "Hàng đợi báo giờ xong, tạm dừng được",
-     "Còn 3 video · ~25 phút · xong khoảng 23:40. Tạm dừng sau video này / chạy tiếp; Windows thông báo khi xong."),
+     "Tự lưu sau ~3 giây; bản lưu cũ giữ mỗi giờ một bản (24 giờ), mỗi ngày một bản (7 ngày). Dự án luôn gắn đúng file — "
+     "Ctrl+S không ghi đè nhầm dự án khác."),
+    ("queue", "Chạy tiếp hàng đợi đúng như lúc dừng",
+     "Mất điện giữa chừng: mở lại chỉ chạy tiếp đúng nhóm video đang chạy, nhớ cả “Tắt máy khi xong”. Tắt máy Windows "
+     "bình thường không bị báo “tắt đột ngột”."),
+    ("undo", "Ctrl+Z ở mọi chỗ trên trang Video",
+     "Bấm vào Trình phát rồi Ctrl+Z vẫn hoàn tác; dán rồi nhân bản là hai bước riêng. Xoá tất cả playlist có hỏi lại."),
+    ("check", "File nhạc hỏng: chỉ thay đúng bài hỏng",
+     "Lỗi “Pulse data corrupt”: app đọc thử từng bài như lúc ghép, chỉ bài hỏng dùng bản sạch; bản sạch cũ được tự dọn."),
+    ("video_music", "Hồ sơ kênh giữ tiếng nền có sẵn",
+     "Áp hồ sơ kênh không còn bỏ mất mưa / suối… có sẵn của app. Bộ nhớ đệm đặt ở ổ khác được dọn đúng ổ."),
 )
 SHORTCUTS = (("Space", "Phát / dừng"), ("F1", "Hướng dẫn"), ("Ctrl+S", "Lưu dự án"), ("Ctrl+Z", "Hoàn tác"),
              ("Ctrl+D", "Nhân bản dòng"), ("Ctrl+F", "Tìm"))

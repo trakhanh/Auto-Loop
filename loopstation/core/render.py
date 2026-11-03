@@ -28,11 +28,38 @@ _HW_ERRORS = ("nvenc", "_qsv", "qsv", "_amf", "amf ", "amf:", "mfx", "cuda", "op
               "d3d11", "dxva", "driver", "device creation", "unsupported device", "invalid argument")
 
 
+# card từ chối mở THÊM phiên mã hoá (card phổ thông giới hạn số phiên NVENC cùng lúc): bớt khối song song là chạy.
+# Không gồm "No capable devices found" đứng riêng: NVENC báo câu đó cả khi khung hình vượt mức card làm được (vd 8K
+# với h264) — lỗi đó bớt phiên cũng không hết, chỉ cần chuyển lượt này sang CPU.
+_SESSION_LIMIT = ("openencodesession", "incompatible client key", "out of memory", "too many sessions",
+                  "too many concurrent")
+
+
+def _is_session_limit(e: ft.FFmpegError) -> bool:
+    text = (e.stderr or str(e)).lower()
+    return any(k in text for k in _SESSION_LIMIT)
+
+
 def _is_encoder_failure(e: ft.FFmpegError) -> bool:
     text = (e.stderr or str(e)).lower()
     if "no space left" in text or "disk full" in text:
         return False
     return any(k in text for k in _HW_ERRORS)
+
+
+LOG_KEEP = 200  # giữ log của 200 lượt xuất gần nhất, cũ hơn thì xoá (xuất hàng loạt không làm đầy thư mục)
+
+
+def _prune_logs(d: Path, keep: int = LOG_KEEP) -> None:
+    try:
+        logs = sorted(d.glob("render_*.log"), key=lambda f: f.name, reverse=True)  # tên theo giờ → mới nhất trước
+    except OSError:
+        return
+    for f in logs[keep:]:
+        try:
+            f.unlink()
+        except OSError:
+            pass
 
 
 def _disk_full(e: BaseException) -> bool:
@@ -100,6 +127,7 @@ class RenderJob:
         d.mkdir(exist_ok=True)
         p = d / f"render_{datetime.now():%Y%m%d_%H%M%S}.log"
         p.write_text("\n".join(self._log_lines), encoding="utf-8")
+        _prune_logs(d)
         return p
 
     # ---------- chạy ----------
@@ -172,12 +200,15 @@ class RenderJob:
                 if not encoders.is_hardware(encoder) or not _is_encoder_failure(e):
                     raise  # lỗi không do card đồ hoạ (clip hỏng, ổ đầy…): mã hoá lại bằng CPU cũng hỏng y như vậy
                 jobs = gpu_jobs(encoder)
-                if jobs > 1:
+                # NVENC: chỉ lỗi giới hạn phiên mới bớt phiên. AMF / QSV chưa rõ câu báo (chưa thử máy thật) → giữ
+                # cách cũ: lỗi card nào cũng thử bớt phiên trước khi sang CPU
+                if jobs > 1 and (_is_session_limit(e) or "nvenc" not in encoder):
                     # card / driver cũ chỉ cho 2–3 phiên mã hoá cùng lúc: bớt số khối song song, vẫn dùng card
                     # (khối đã xong nằm trong bộ nhớ đệm, không làm lại). Nhớ mức này cho các lần xuất sau.
                     _GPU_JOBS[encoder] = jobs - 1
                     self.log(f"Card đồ hoạ từ chối {jobs} phiên cùng lúc — thử lại với {jobs - 1} phiên.")
                     continue
+                # lỗi card khác (khung hình / tham số card không nhận…): chỉ lượt này dùng CPU, không bớt số phiên
                 self.log(f"Encoder {encoder} lỗi, chuyển sang CPU. Chi tiết:\n{e}")
                 encoder = encoders.ENCODERS[preset.codec]["cpu"]
                 self.maxrate = cap_for(encoder)

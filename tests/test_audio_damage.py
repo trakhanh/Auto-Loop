@@ -5,7 +5,8 @@ from loopstation.core import audio_build, ffmpeg_tools as ft
 
 
 def _make(path, corrupt: bool):
-    subprocess.run([ft.ffmpeg(), "-v", "error", "-y", "-f", "lavfi", "-i", "anoisesrc=color=pink:d=20",
+    # seed cố định: ồn ngẫu nhiên mỗi lần một khác → chỗ byte hỏng rơi vào đâu cũng khác, test chập chờn
+    subprocess.run([ft.ffmpeg(), "-v", "error", "-y", "-f", "lavfi", "-i", "anoisesrc=color=pink:d=20:seed=7",
                     "-c:a", "aac", "-b:a", "192k", str(path)], check=True)
     if corrupt:  # rải byte hỏng giữa phần âm thanh (như file tải về bị lỗi)
         d = bytearray(path.read_bytes())
@@ -59,7 +60,11 @@ def test_damage_missed_by_quick_check_retries_with_clean_copies(tmp_path, monkey
     assert out.is_file() and out.stat().st_size > 1_000_000
     assert any("ghép lại" in s or "dựng lại" in s for s in logs), logs
     r = ft.Runner()
-    assert audio_build.is_damaged(r, str(music)) and audio_build.is_damaged(r, str(amb))  # lần sau dùng bản sạch ngay
+    # file làm hỏng lượt ghép được nhớ là "hỏng" (lần sau dùng bản sạch ngay); file đọc bằng amovie vẫn lành thì
+    # KHÔNG bị ghi "hỏng" vĩnh viễn
+    marked = {p: audio_build.is_damaged(r, str(p)) for p in (music, amb)}
+    assert any(marked.values())
+    assert all(marked[p] == audio_build.fails_in_graph(r, str(p)) for p in (music, amb))
 
 
 def test_damaged_ambient_uses_clean_copy(tmp_path, monkeypatch):
@@ -82,8 +87,8 @@ def test_second_audio_stream_damaged(tmp_path, monkeypatch):
     """File 2 luồng âm thanh, luồng hỏng không phải luồng đầu (bản 1.8.7 bỏ sót → xuất lỗi “Pulse data corrupt”)."""
     monkeypatch.setenv("KTLS_DATA_DIR", str(tmp_path / "data"))
     bad, mono, two = tmp_path / "hong.m4a", tmp_path / "mono.m4a", tmp_path / "hai_luong.m4a"
-    subprocess.run([ft.ffmpeg(), "-v", "error", "-y", "-f", "lavfi", "-i", "anoisesrc=color=pink:d=20", "-ac", "2",
-                    "-c:a", "aac", "-b:a", "192k", str(bad)], check=True)
+    subprocess.run([ft.ffmpeg(), "-v", "error", "-y", "-f", "lavfi", "-i", "anoisesrc=color=pink:d=20:seed=7",
+                    "-ac", "2", "-c:a", "aac", "-b:a", "192k", str(bad)], check=True)
     d = bytearray(bad.read_bytes())
     rnd = random.Random(3)
     for _ in range(300):

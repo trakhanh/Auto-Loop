@@ -710,7 +710,9 @@ class TrimDialog(QDialog):
 
     def _compare(self) -> None:
         start, end = self._sel()
-        FrameCompareDialog(self.path, start, end, self).exec()
+        dlg = FrameCompareDialog(self.path, start, end, self)
+        dlg.exec()
+        w.dispose(dlg)  # nhả 2 ảnh khung hình cỡ lớn (mở đi mở lại không đọng lại)
 
     def _play_external(self, ffplay: Path) -> None:
         start, end = self._sel()
@@ -740,8 +742,20 @@ class TrimDialog(QDialog):
         super().closeEvent(e)
 
 
+def clamp_trim(duration: float, trim_start: float, trim_end: float) -> tuple[float, float]:
+    """Kẹp (bỏ đầu, bỏ cuối) theo độ dài clip — cùng cách core.timeline._apply_trims làm lúc xuất: cắt quá tay thì
+    giữ lại ít nhất MIN_KEEP giây, ưu tiên giữ điểm bắt đầu đã chọn. Không biết độ dài (≤ 0): giữ nguyên."""
+    a, b = max(0.0, trim_start), max(0.0, trim_end)
+    if duration > 0 and duration - a - b < MIN_KEEP:
+        a = min(a, max(0.0, duration - MIN_KEEP))
+        b = max(0.0, duration - a - MIN_KEEP)
+    return round(a, 3), round(b, 3)
+
+
 def trim_text(duration: float, trim_start: float, trim_end: float) -> str:
     if trim_start <= 0 and trim_end <= 0:
         return "Toàn bộ"
-    end = max(trim_start + MIN_KEEP, duration - trim_end)
-    return f"{trim_start:g}–{end:g}s"
+    a, b = clamp_trim(duration, trim_start, trim_end)
+    if duration <= 0:  # chưa biết độ dài clip
+        return f"{a:g}–…s" if b <= 0 else f"bỏ {a:g}s đầu · {b:g}s cuối"
+    return f"{a:g}–{round(duration - b, 3):g}s"

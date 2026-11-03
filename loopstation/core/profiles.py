@@ -7,6 +7,7 @@ import os
 from dataclasses import asdict, fields
 from pathlib import Path
 
+from . import ambient_lib
 from .project import AmbientLayer, ExportSettings, MusicTrack, Project
 
 AUDIO_EXTS = {".mp3", ".wav", ".m4a", ".aac", ".flac", ".ogg", ".opus", ".wma"}
@@ -78,7 +79,9 @@ def apply(profile: dict, proj: Project) -> tuple[Project, list[str]]:
         if len(keep) < len(profile["tracks"]):
             notes.append(f"{len(profile['tracks']) - len(keep)} bài nhạc không còn trên máy")
     if "ambient" in profile:
-        amb = [a for a in profile["ambient"] if os.path.isfile(a.get("path", ""))]
+        # tiếng nền có sẵn trong app ("builtin:...") không phải file — giữ lại, chỉ bỏ file không còn trên máy
+        amb = [a for a in profile["ambient"]
+               if ambient_lib.is_builtin(a.get("path", "")) or os.path.isfile(a.get("path", ""))]
         p.music.ambient = [AmbientLayer(a["path"], bool(a.get("enabled", True)), int(a.get("volume", 50))) for a in amb]
     names = {f.name for f in fields(ExportSettings)}
     for k, val in (profile.get("export") or {}).items():

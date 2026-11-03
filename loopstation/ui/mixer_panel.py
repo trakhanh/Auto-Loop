@@ -320,6 +320,10 @@ class MixerPanel(QGroupBox):
 
     def set_state(self, mode: str, source_audio: str, bookend_audio: bool) -> None:
         """Bật / khoá từng dòng theo kiểu sản phẩm (ghi rõ lý do khi khoá)."""
+        if mode == "video_only" and source_audio == "mix":
+            # Chỉ video không có nhạc: dự án vẫn nhớ "trộn nhạc" để quay lại kiểu có nhạc, nhưng trang Video hiện
+            # "Chỉ tiếng gốc" — Bảng trộn âm hiện đúng như vậy (trước đây tick vào nút "trộn" đang bị khoá)
+            source_audio = "only"
         self._loading = True
         if source_audio in self.mode_buttons:
             self.mode_buttons[source_audio].setChecked(True)

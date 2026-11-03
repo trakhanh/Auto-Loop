@@ -175,6 +175,9 @@ def frames_at(info: MediaInfo, fps: Fraction, image_duration: float = 8.0) -> in
     """Số frame của clip khi chuẩn hoá về `fps` (ảnh tĩnh: theo `image_duration`)."""
     if info.is_image:
         return max(2, round(image_duration * fps))
-    if info.nb_frames and info.fps == fps:
+    by_dur = max(1, round(info.duration * fps))
+    # nb_frames bỏ qua edit list của MP4 (clip cắt bằng -ss -c copy / LosslessCut: ghi 240 nhưng chỉ giải mã ra 195)
+    # → lệch quá 1 frame thì tin thời lượng (thời lượng có tính edit list), không thì tpad đóng băng mỗi vòng lặp
+    if info.nb_frames and info.fps == fps and abs(info.nb_frames - by_dur) <= 1:
         return max(1, info.nb_frames)
-    return max(1, round(info.duration * fps))
+    return by_dur

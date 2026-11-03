@@ -132,7 +132,14 @@ def _run_cached(runner: ft.Runner, sub: str, key: str, ext: str, build) -> Path:
     except BaseException:
         tmp.unlink(missing_ok=True)
         raise
-    os.replace(tmp, out)
+    try:
+        os.replace(tmp, out)
+    except OSError:
+        # lượt khác vừa tạo xong cùng khối và đang đọc nó (Windows không cho ghi đè file đang mở): dùng khối đó
+        tmp.unlink(missing_ok=True)
+        if out.is_file() and out.stat().st_size > 0:
+            return out
+        raise
     return out
 
 

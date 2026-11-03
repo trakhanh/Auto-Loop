@@ -104,7 +104,9 @@ proj = Project(name="Tự lưu", output_kind="video_only")
 proj.video.clips = clips(3)
 win.load_project(proj)
 win.recompute()
-pump(mw.AUTOSAVE_DELAY_MS / 1000 + 1.0)
+end = time.time() + mw.AUTOSAVE_DELAY_MS / 1000 + 6  # máy bận: dò card xong muộn → hẹn giờ đếm lại
+while time.time() < end and not os.path.isfile(auto):
+    pump(0.2)
 check("đổi dự án → vài giây sau đã tự lưu", os.path.isfile(auto) and len(Project.load(auto).video.clips) == 3)
 first = os.path.getmtime(auto)
 pump(mw.AUTOSAVE_DELAY_MS / 1000 + 0.5)
@@ -198,6 +200,82 @@ check("lần mở sau đóng đúng cách: không báo khôi phục", win4.resto
 check("không hỏi chạy tiếp nữa", QApplication.activeModalWidget() is None and runs4 == [])
 win4.close()
 pump(0.3)
+
+# ---------- 5) 1.8.9: dự án ↔ file luôn đúng cặp sau khi tắt ngang ----------
+pa = os.path.join(scratch, "Du-an-A" + mw.PROJECT_EXT)
+Project(name="A", output_kind="video_only").save(pa)
+win5 = new_window([])
+win5.open_project_path(pa)
+check("mở dự án: ghi ngay đường dẫn (không đợi đóng app)", win5.settings.value("project/path") == pa)
+answer("Yes")
+win5.new_project()
+pump(0.5)
+check("dự án mới: bỏ đường dẫn cũ ngay", not win5.settings.value("project/path"))
+p = win5.collect_project()
+p.video.clips = clips(2)
+win5.load_project(p)
+win5.recompute()
+pump(mw.AUTOSAVE_DELAY_MS / 1000 + 0.6)
+win5._initial_loaded = False  # tắt ngang
+win5._session_saved = True
+win5._resume_asked = True  # cửa sổ "đã chết": dò card xong muộn cũng không hỏi nữa
+win5._autosave_timer.stop()
+win5.hide()
+open(flag, "w").write("x")
+win6 = new_window([])
+check("tắt ngang rồi mở lại: dự án mới không gắn nhầm file A", win6.project_path is None
+      and len(win6.collect_project().video.clips) == 2)
+win6.close()
+pump(0.3)
+
+# ---------- 6) bản tự lưu hỏng: cất riêng, báo rõ, không ghi đè khi chưa sửa ----------
+with open(auto, "w", encoding="utf-8") as fh:
+    fh.write("{hỏng")
+open(flag, "w").write("x")
+win7 = new_window([])
+check("tự lưu hỏng: cất riêng bản hỏng", os.path.isfile(os.path.join(data, "autosave.hong" + mw.PROJECT_EXT)))
+check("tự lưu hỏng: dải báo nói rõ là hỏng", not win7.restore_banner.isHidden()
+      and "hỏng" in win7.restore_text.text())
+pump(mw.AUTOSAVE_DELAY_MS / 1000 + 0.6)
+check("tự lưu hỏng: chưa sửa gì thì chưa ghi đè", open(auto, encoding="utf-8").read() == "{hỏng")
+win7.close()
+pump(0.3)
+
+# ---------- 7) chạy tiếp đúng nhóm mục đã chạy; đóng app bình thường thì không hỏi ----------
+win8 = new_window([])
+q = []
+for i in range(4):
+    pj = Project(name=f"Bài {i}", output_kind="video_only")
+    pj.video.clips = clips(2)
+    q.append(rq.QueueItem(pj, os.path.join(scratch, "out", f"Bài {i}.mp4"), summary=f"Bài {i}"))
+win8.queue[:] = q
+win8._queue_only = {id(q[2]), id(q[3])}  # "Xuất N bản nhạc": chỉ chạy 2 mục cuối
+win8._queue_running = True
+win8._mark_queue_running(True)
+win8._save_queue()
+win8._queue_running = False
+win8._initial_loaded = False
+win8._session_saved = True
+win8._resume_asked = True  # cửa sổ "đã chết": dò card xong muộn cũng không hỏi nữa
+win8.hide()
+open(flag, "w").write("x")
+only_runs = []
+seen8 = []
+answer("Chạy tiếp ngay", "", seen8)
+_real_run = mw.MainWindow.run_queue  # thay ở lớp: hộp hỏi có thể hiện ngay trong lúc cửa sổ đang mở
+mw.MainWindow.run_queue = lambda self, only=None: only_runs.append([i.output for i in only] if only else None)
+win9 = new_window()
+win9._on_encoders({})
+pump(3)
+mw.MainWindow.run_queue = _real_run
+check("chạy tiếp: chỉ đúng nhóm mục lần trước", only_runs == [[q[2].output, q[3].output]], str(only_runs))
+check("chạy tiếp: hộp hỏi chỉ đếm nhóm đó", bool(seen8) and "2 video" in seen8[0], str(seen8)[:200])
+win9._queue_running = True
+win9._mark_queue_running(True)
+win9._queue_running = False
+win9.close()  # đóng bình thường lúc nghỉ giữa hai mục
+pump(0.3)
+check("đóng bình thường giữa hai mục: lần sau không hỏi", not win9.settings.value("queue/was_running"))
 
 check("không lỗi ngầm", not errs, "\n".join(errs)[:1500])
 print("TẤT CẢ OK" if not fails else f"{len(fails)} LỖI: {fails}")

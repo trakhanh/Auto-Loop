@@ -15,7 +15,7 @@ from PySide6.QtGui import (QFontMetrics, QColor, QFont, QIcon, QImage, QKeyEvent
                            QPixmap, QRegularExpressionValidator, QShortcut)
 from PySide6.QtWidgets import (
     QApplication, QAbstractScrollArea, QAbstractSlider, QAbstractSpinBox, QComboBox, QFrame, QGraphicsOpacityEffect,
-    QLayout, QMenu, QScrollArea, QScrollBar, QSizePolicy, QStackedWidget,
+    QLayout, QMenu, QMessageBox, QScrollArea, QScrollBar, QSizePolicy, QStackedWidget,
     QAbstractItemView, QCheckBox, QFileDialog, QHBoxLayout, QLineEdit, QPushButton,
     QDoubleSpinBox, QLabel, QSpinBox, QStyle, QStyledItemDelegate, QStyleOptionButton, QStylePainter, QTreeWidget, QTreeWidgetItem, QWidget,
 )
@@ -79,11 +79,48 @@ class Prober(QObject):
     def start(self, paths: list[str]) -> None:
         def work():
             results = []
-            for i, info in enumerate(_iter_probe(paths), 1):
-                results.append(info)
-                self.progress.emit(i, len(paths))
-            self.finished.emit(results)
+            try:
+                for i, info in enumerate(_iter_probe(paths), 1):
+                    results.append(info)
+                    self.progress.emit(i, len(paths))
+            finally:  # lỗi bất ngờ giữa chừng vẫn báo xong (không kẹt "Đang đọc…" mãi)
+                self.finished.emit(results)
         threading.Thread(target=work, daemon=True).start()
+
+
+class ProbeQueue(QObject):
+    """Đọc file theo từng lượt thả / thêm; nhiều lượt chạy chồng nhau được. Trước đây mỗi lượt thay `Prober` cũ
+    bằng cái mới → cái cũ bị dọn rác, kết quả của nó không bao giờ về (thả thêm 2 file khi đang đọc 6 file → mất 6).
+    Ở đây mọi Prober đang chạy được giữ (con của hàng này) tới khi báo xong."""
+    progress = Signal(int, int)
+    batchDone = Signal(list, int)  # (list[MediaInfo], mã lượt dự án lúc bắt đầu đọc)
+
+    def __init__(self, parent=None):
+        super().__init__(parent)
+        self._live: dict[Prober, tuple[int, set[str]]] = {}
+
+    def busy(self) -> bool:
+        return bool(self._live)
+
+    def reading(self, gen: int) -> set[str]:
+        """Các file (normcase) đang đọc dở của lượt dự án `gen` — để không thêm trùng khi thả lại."""
+        out: set[str] = set()
+        for g, keys in self._live.values():
+            if g == gen:
+                out |= keys
+        return out
+
+    def start(self, files: list[str], gen: int) -> None:
+        p = Prober(self)
+        self._live[p] = (gen, {os.path.normcase(os.path.normpath(f)) for f in files})
+        p.progress.connect(self.progress)
+        p.finished.connect(lambda infos, pr=p: self._done(pr, infos))
+        p.start(files)
+
+    def _done(self, p: Prober, infos: list) -> None:
+        gen, _keys = self._live.pop(p, (-1, set()))
+        p.deleteLater()
+        self.batchDone.emit(infos, gen)
 
 
 class ProbeWarmer(QObject):
@@ -562,12 +599,22 @@ class MediaList(QTreeWidget):
         self.placeholder = ""
         self.placeholder_action = ""  # chữ trên nút chính vẽ giữa bảng trống (rỗng = không vẽ)
         self._empty_hover = False
+        # True trong lúc báo `changed` của một thao tác trọn vẹn (xoá, đổi thứ tự, bật / tắt hàng loạt…) —
+        # bảng clip ghi ngay một bước Hoàn tác, không gộp với thao tác kế tiếp. Sửa chữ trong ô thì False.
+        self.discrete = False
         self.itemChanged.connect(lambda *_: self._on_item_changed())
         self.itemDoubleClicked.connect(self._on_double_click)
 
     def _on_item_changed(self) -> None:
         self._update_cursor()
         self.changed.emit()
+
+    def _step_done(self) -> None:
+        self.discrete = True
+        try:
+            self.changed.emit()
+        finally:
+            self.discrete = False
 
     def _update_cursor(self) -> None:
         if self.topLevelItemCount() == 0:
@@ -630,7 +677,7 @@ class MediaList(QTreeWidget):
             new = {"all": True, "none": False, "invert": not on, "selected": id(it) in sel}[mode]
             it.setCheckState(0, Qt.CheckState.Checked if new else Qt.CheckState.Unchecked)
         self.blockSignals(False)
-        self.changed.emit()
+        self._step_done()
 
     def toggle_selected_checked(self) -> None:
         sel = self.selectedItems()
@@ -641,18 +688,23 @@ class MediaList(QTreeWidget):
         for it in sel:
             it.setCheckState(0, Qt.CheckState.Checked if on else Qt.CheckState.Unchecked)
         self.blockSignals(False)
-        self.changed.emit()
+        self._step_done()
 
     def remove_selected(self) -> None:
         for it in self.selectedItems():
             self.takeTopLevelItem(self.indexOfTopLevelItem(it))
         self._update_cursor()
-        self.changed.emit()
+        self._step_done()
 
     def clear_all(self) -> None:
-        self.clear()
+        """Xoá tất cả — đang tìm kiếm thì chỉ xoá các dòng đang hiện (dòng bị ẩn vì không khớp vẫn giữ)."""
+        if self.filtering():
+            for it in self.visible_items():
+                self.takeTopLevelItem(self.indexOfTopLevelItem(it))
+        else:
+            self.clear()
         self._update_cursor()
-        self.changed.emit()
+        self._step_done()
 
     def move_selected(self, delta: int) -> None:
         rows = sorted(self.indexOfTopLevelItem(i) for i in self.selectedItems())
@@ -666,7 +718,7 @@ class MediaList(QTreeWidget):
             self.insertTopLevelItem(r + delta, it)
             it.setSelected(True)
         self.blockSignals(False)
-        self.changed.emit()
+        self._step_done()
 
     def shuffle(self, rng) -> None:
         its = [self.takeTopLevelItem(0) for _ in range(self.topLevelItemCount())]
@@ -674,7 +726,7 @@ class MediaList(QTreeWidget):
         self.blockSignals(True)
         self.addTopLevelItems(its)
         self.blockSignals(False)
-        self.changed.emit()
+        self._step_done()
 
     def sort_by_name(self) -> None:
         its = [self.takeTopLevelItem(0) for _ in range(self.topLevelItemCount())]
@@ -682,7 +734,7 @@ class MediaList(QTreeWidget):
         self.blockSignals(True)
         self.addTopLevelItems(its)
         self.blockSignals(False)
-        self.changed.emit()
+        self._step_done()
 
     # ----- sự kiện -----
     def paintEvent(self, e) -> None:  # noqa: N802
@@ -776,7 +828,7 @@ class MediaList(QTreeWidget):
             self.filesDropped.emit(paths)
             return
         super().dropEvent(e)
-        self.changed.emit()
+        self._step_done()
 
     def _on_double_click(self, item: QTreeWidgetItem, column: int) -> None:
         if column == 0:
@@ -791,6 +843,35 @@ def expand_dropped(paths: list[str], exts: set[str], recursive: bool = True) -> 
         elif Path(p).suffix.lower() in exts:
             out.append(p)
     return out
+
+
+def dispose(dlg: QObject) -> None:
+    """Dọn hộp thoại đã đóng (đọc kết quả xong mới gọi): xoá hẳn để nhả trình phát / ảnh khung hình, và bỏ các đăng
+    ký đổi bộ màu (theme.on_change) của nó + widget con — không thì lần đổi màu / cỡ chữ sau gọi vào widget đã xoá
+    (vỏ Python của hộp thoại có thể còn sống thêm một lúc vì vòng tham chiếu)."""
+    mine = {id(dlg)} | {id(c) for c in dlg.findChildren(QObject)}
+    theme._LISTENERS[:] = [(ref, fn) for ref, fn in theme._LISTENERS if id(ref()) not in mine]
+    dlg.deleteLater()
+
+
+def new_paths(files: list[str], have: set[str]) -> list[str]:
+    """Bỏ file đã có (`have`: normcase) và file trùng nhau trong cùng lượt thả; giữ thứ tự."""
+    out, seen = [], set(have)
+    for p in files:
+        p = os.path.normpath(p)
+        key = os.path.normcase(p)
+        if key not in seen:
+            seen.add(key)
+            out.append(p)
+    return out
+
+
+def no_media_message(paths: list[str], recursive: bool, what: str) -> str:
+    """Thả / chọn mà không có file nào dùng được: nói đúng lý do (không phải "đã có trong bảng")."""
+    if not recursive and any(os.path.isdir(p) for p in paths):
+        return (f"Không thấy file {what} nào ngay trong thư mục vừa thêm. File nằm trong thư mục con? "
+                "Tick “Cả thư mục con” rồi thêm lại.")
+    return f"Không có file {what} nào dùng được trong những gì vừa thêm (định dạng chưa hỗ trợ hoặc thư mục trống)."
 
 
 class ListToolbar(QWidget):
@@ -874,7 +955,7 @@ class ListToolbar(QWidget):
         sel.addAction("Đảo ngược trạng thái bật/tắt", lambda: lst.set_all_checked("invert"))
         sel.addAction("Chỉ bật các dòng đang bôi đen", lambda: lst.set_all_checked("selected"))
         menu.addSeparator()
-        menu.addAction(icons.icon("trash", 14, "danger_text"), "Xoá tất cả", lst.clear_all)
+        menu.addAction(icons.icon("trash", 14, "danger_text"), "Xoá tất cả", self._clear_all)
         # narrow: the "include subfolders" checkbox moves into this menu (same state as the checkbox)
         self._rec_sep = menu.addSeparator()
         self._rec_act = menu.addAction("Cả thư mục con khi thêm thư mục")
@@ -897,6 +978,23 @@ class ListToolbar(QWidget):
         esc = QShortcut(QKeySequence(Qt.Key.Key_Escape), self.search)
         esc.setContext(Qt.ShortcutContext.WidgetShortcut)
         esc.activated.connect(self.search.clear)
+
+    def _clear_all(self) -> None:
+        """Menu ⋯ → Xoá tất cả: hỏi lại trước (một cú bấm nhầm là mất cả danh sách). Đang tìm kiếm thì chỉ xoá các
+        dòng đang hiện — đúng như các thao tác khác khi đang tìm."""
+        lst = self.lst
+        total = lst.topLevelItemCount()
+        n = len(lst.visible_items()) if lst.filtering() else total
+        if n == 0:
+            return
+        if lst.filtering():
+            text = (f"Xoá {n} dòng đang hiện (khớp “{lst.filter_text.strip()}”) khỏi danh sách?\n"
+                    f"{total - n} dòng đang bị ẩn vì không khớp ô tìm vẫn được giữ nguyên.")
+        else:
+            text = f"Xoá cả {n} dòng khỏi danh sách?"
+        if QMessageBox.question(self, "Xoá tất cả", text) != QMessageBox.StandardButton.Yes:
+            return
+        lst.clear_all()
 
     def _on_theme(self, _wd=None) -> None:
         self._full_w.clear()  # label widths depend on the font size

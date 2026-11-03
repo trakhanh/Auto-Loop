@@ -339,12 +339,16 @@ class PresetLibraryDialog(QDialog):
 
     def _from_table(self) -> None:
         dlg = PresetEditor(self.settings, {"name": "", "rows": tp.from_clips(self.clips)}, self)
-        if dlg.exec():
+        saved = dlg.exec()
+        w.dispose(dlg)  # không đọng lại một hộp thoại sửa mẫu sau mỗi lần mở
+        if saved:
             self._fill()
 
     def _edit(self, p: dict | None) -> None:
         dlg = PresetEditor(self.settings, p, self)
-        if dlg.exec():
+        saved = dlg.exec()
+        w.dispose(dlg)
+        if saved:
             self._fill()
 
     def _edit_copy(self, p: dict) -> None:

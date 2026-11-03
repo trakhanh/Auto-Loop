@@ -185,7 +185,7 @@ bước mấy và <b>việc cần làm tiếp</b> (bấm vào số bước để
 <b>Tiếp tục dự án đang làm</b>). Muốn giữ một bản riêng thì bấm <b>Lưu</b> (Ctrl+S) thành file <code>.lsproj</code>.</p>
 <ul>
 <li><b>Lưu liên tục</b>: sửa gì thì khoảng 3 giây sau app tự lưu — mất điện, máy tự khởi động lại cũng không mất phần
-đã chỉnh. App giữ thêm <b>5 bản lưu gần nhất</b> (cách nhau ít nhất 2 phút) để lấy lại khi lỡ tay.</li>
+đã chỉnh. App giữ thêm các bản lưu cũ hơn: <b>5 bản gần nhất</b>, mỗi giờ một bản trong 24 giờ qua, mỗi ngày một bản trong 7 ngày qua, và bản lúc mở app — sửa nhầm phát hiện muộn vẫn lấy lại được.</li>
 <li><b>App bị tắt ngang</b>: mở lại sẽ thấy dải báo <i>“Lần trước app bị tắt đột ngột… đã khôi phục dự án lúc 15:42”</i>.
 Muốn lấy bản cũ hơn: bấm <b>Bản lưu trước…</b> (tên file là ngày giờ lưu).</li>
 <li><b>Hàng đợi đang chạy dở</b>: mở lại app sẽ hỏi <i>“Lần trước hàng đợi đang chạy dở — còn N video”</i>. Bấm
@@ -239,8 +239,8 @@ topic("tungu", "Bắt đầu", "help", "Từ ngữ trong app", hero(
 topic("video", "Làm video", "film", "Trang Video: clip & số lần loop", hero(
     "Trang Video", "Thêm clip / ảnh, đặt số lần phát, xếp thứ tự. Đây là nơi quyết định video dài bao lâu.",
     (("Mở trang Video", "app:video"),)) + img("video", "Trang Video với dự án mẫu “Loop 70 lần”.") + legend([
-    ("Thêm clip", "<b>Thêm file</b> / <b>Thư mục</b>, hoặc <b>kéo thả</b> video, ảnh, cả thư mục vào bảng (bật <i>Quét thư mục con</i> để lấy cả thư mục bên trong). "
-                  "<b>A–Z</b> xếp theo tên (clip2 trước clip10), <b>Xáo</b> đổi thứ tự ngẫu nhiên, <b>Chọn ▾</b> bật / tắt / đảo ngược tất cả. Ô tìm tên file (Ctrl+F) — gõ không dấu cũng được."),
+    ("Thêm clip", "<b>Thêm file</b> / <b>Thư mục</b>, hoặc <b>kéo thả</b> video, ảnh, cả thư mục vào bảng (tick <i>Cả thư mục con</i> để lấy cả thư mục bên trong). "
+                  "Nút <b>⋯</b> cạnh ô tìm: <b>Sắp xếp A–Z</b> (clip2 trước clip10), <b>Xáo ngẫu nhiên thứ tự</b>, <b>Bật / tắt nhanh</b> (bật / tắt / đảo ngược tất cả), <b>Xoá tất cả</b> (có hỏi lại). Ô tìm tên file (Ctrl+F) — gõ không dấu cũng được."),
     ("Bảng clip", "mỗi dòng một clip, kéo lên / xuống để đổi thứ tự. <b>Bấm đúp ô</b> để sửa: Số lần phát, Đoạn lấy, Nối loop, Sang clip."),
     ("Xen kẽ clip nền", "tự xếp kiểu <i>nền ×70 → cảnh 2 → nền ×70 → cảnh 3 …</i> theo tên file. Nhiều clip loop "
                         "(Loop1, Loop2…): nút <b>Xếp lần lượt…</b> bên cạnh (xem chủ đề Xen kẽ)."),
@@ -681,7 +681,7 @@ topic("dulieu", "Khác", "folder", "Cài app, cập nhật & dữ liệu", hero(
 <li><b>Gỡ app</b>: Windows Settings → Apps → KT Loop Station → Uninstall. Dữ liệu và video đã xuất <b>không</b> bị xoá.</li>
 </ul>
 <h2>App lưu gì, ở đâu?</h2>""" + examples([
-    ("autosave.lsproj", "dự án đang làm (tự lưu liên tục)"), ("ban-luu\\", "5 bản tự lưu gần nhất (Bản lưu trước…)"),
+    ("autosave.lsproj", "dự án đang làm (tự lưu liên tục)"), ("ban-luu\\", "các bản tự lưu cũ (Bản lưu trước…)"),
     ("queue.json", "hàng đợi xuất"),
     ("logs\\", "nhật ký từng lần xuất (nút <i>Thư mục nhật ký</i> ở đầu trang này)"),
     ("loi-ung-dung.log", "lỗi bất ngờ của app — gửi file này khi cần hỗ trợ"),
@@ -734,9 +734,9 @@ topic("phim", "Khác", "zap", "Phím tắt", hero("Phím tắt", "Thao tác nhan
     ("Space", "Phát / dừng trình phát (mọi chỗ, trừ khi đang gõ chữ) · trong hộp thoại Đoạn lấy: phát / dừng đoạn cắt"),
     ("Ctrl+Space", "Bật / tắt các dòng đang chọn (bảng clip, playlist)"), ("Delete", "Xoá các dòng đang chọn"),
     ("Ctrl+A", "Chọn tất cả dòng"), ("I / O", "Đặt điểm đầu / cuối (hộp thoại Đoạn lấy)"), ("Bấm đúp", "Tên file: xem / nghe · Ô số: sửa"),
-    ("← → · Home", "Trình phát (bấm vào khung hình trước): tua 5 giây · về đầu"),
+    ("← → · Home", "Tua 5 giây · về đầu — khi trình phát đang được chọn: bấm vào khung hình (bấm một lần cũng là phát / dừng). Toàn màn hình: ← → luôn dùng được"),
     ("Tab · ↑ ↓", "Sang ô giờ / phút / giây kế tiếp · tăng / giảm 1"),
-    ("Lăn chuột", "Chỉ cuộn trang; muốn đổi ô số bằng lăn chuột thì bấm vào ô trước")], ("Phím", "Tác dụng")))
+    ("Lăn chuột", "Chỉ cuộn trang, không bao giờ đổi số trong ô (tránh lỡ tay). Đổi số: gõ số, hoặc bấm mũi tên ▲▼ bên ô / phím ↑ ↓")], ("Phím", "Tác dụng")))
 
 GROUPS = ["Bắt đầu", "Làm video", "Âm thanh", "Xuất file", "Khác"]
 HUB = "__hub"  # mục "Tổng quan" đầu mục lục

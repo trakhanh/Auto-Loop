@@ -40,8 +40,13 @@ class MusicTab(QWidget):
         super().__init__(parent)
         self.settings = settings
         self._loading = False
-        self._prober = None
-        self._amb_prober = None
+        # đọc file theo từng lượt thả; nhiều lượt chồng nhau đều về đủ (xem widgets.ProbeQueue)
+        self._probe = w.ProbeQueue(self)
+        self._probe.progress.connect(lambda i, n: self.status.setText(f"Đang đọc {i}/{n} file…"))
+        self._probe.batchDone.connect(lambda infos, g: self._on_probed(infos, g))
+        self._amb_probe = w.ProbeQueue(self)
+        self._amb_probe.batchDone.connect(
+            lambda infos, g: self._on_ambient_probed(infos) if g == getattr(self, "_load_gen", 0) else None)
 
         self.banner = QLabel("")
         self.banner.setObjectName("info")
@@ -761,17 +766,19 @@ class MusicTab(QWidget):
             self.add_paths(w.scan_folder(folder, w.AUDIO_EXTS, self.toolbar.recursive.isChecked()))
 
     def add_paths(self, paths: list[str]) -> None:
-        files = w.expand_dropped(paths, w.AUDIO_EXTS, self.toolbar.recursive.isChecked())
-        have = self.list.paths()
-        files = [os.path.normpath(p) for p in files if os.path.normcase(os.path.normpath(p)) not in have]
-        if not files:
-            self.status.setText("Không có bài nhạc mới.")
+        recursive = self.toolbar.recursive.isChecked()
+        found = w.expand_dropped(paths, w.AUDIO_EXTS, recursive)
+        if not found:
+            self.status.setText(w.no_media_message(paths, recursive, "nhạc"))
             return
-        self._prober = w.Prober()
-        self._prober.progress.connect(lambda i, n: self.status.setText(f"Đang đọc {i}/{n} file…"))
         gen = getattr(self, "_load_gen", 0)
-        self._prober.finished.connect(lambda infos, g=gen: self._on_probed(infos, g))
-        self._prober.start(files)
+        files = w.new_paths(found, self.list.paths() | self._probe.reading(gen))
+        if not files:
+            self.status.setText("Các bài này đã có trong playlist (hoặc đang đọc). Muốn phát lại một bài ở chỗ khác: "
+                                "chuột phải → Nhân bản bài.")
+            return
+        self.status.setText(f"Đang đọc 0/{len(files)} file…")
+        self._probe.start(files, gen)
 
     def _on_probed(self, infos: list[MediaInfo], gen: int | None = None) -> None:
         if gen is not None and gen != getattr(self, "_load_gen", 0):
@@ -800,26 +807,25 @@ class MusicTab(QWidget):
     def _open_ambient_library(self) -> None:
         from .ambient_library import AmbientLibraryDialog
         dlg = AmbientLibraryDialog(self.ambient.paths(), self)
-        if not dlg.exec() or not dlg.result_keys:
+        keys = dlg.result_keys if dlg.exec() else None
+        volume = dlg.volume.value()
+        w.dispose(dlg)  # nhả trình phát nghe thử của thư viện
+        if not keys:
             return
         self.ambient.blockSignals(True)
-        for key in dlg.result_keys:
+        for key in keys:
             self.ambient.addTopLevelItem(self._make_ambient(
-                AmbientLayer(path=ambient_lib.PREFIX + key, volume=dlg.volume.value())))
+                AmbientLayer(path=ambient_lib.PREFIX + key, volume=volume)))
         self.ambient.blockSignals(False)
         self._emit()
 
     def add_ambient(self, paths: list[str]) -> None:
         files = w.expand_dropped(paths, AMBIENT_EXTS, False)
-        have = self.ambient.paths()
-        files = [os.path.normpath(p) for p in files if os.path.normcase(os.path.normpath(p)) not in have]
+        gen = getattr(self, "_load_gen", 0)
+        files = w.new_paths(files, self.ambient.paths() | self._amb_probe.reading(gen))
         if not files:
             return
-        self._amb_prober = w.Prober()
-        gen = getattr(self, "_load_gen", 0)
-        self._amb_prober.finished.connect(
-            lambda infos, g=gen: self._on_ambient_probed(infos) if g == getattr(self, "_load_gen", 0) else None)
-        self._amb_prober.start(files)
+        self._amb_probe.start(files, gen)
 
     def _on_ambient_probed(self, infos: list[MediaInfo]) -> None:
         bad = [i for i in infos if not (i.ok and i.has_audio)]

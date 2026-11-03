@@ -56,8 +56,13 @@ def export_file(parent: QWidget, settings: QSettings, what: tuple[str, ...] = ("
         return ""
     if not path.lower().endswith(EXT):
         path += EXT
-    with open(path, "w", encoding="utf-8") as f:
-        json.dump(data, f, ensure_ascii=False, indent=1)
+    try:
+        with open(path, "w", encoding="utf-8") as f:
+            json.dump(data, f, ensure_ascii=False, indent=1)
+    except OSError as e:
+        QMessageBox.warning(parent, "Không lưu được file", f"{path}\n\n{e}\n\n"
+                            "Thư mục chỉ đọc, ổ đầy hoặc USB đã rút? Chọn chỗ khác rồi xuất lại.")
+        return ""
     parts = ", ".join(f"{n} {KINDS[k]}" for k, n in counts.items() if n)
     QMessageBox.information(parent, "Đã xuất", f"Đã lưu {parts} vào:\n{path}\n\nGửi file này cho máy khác → "
                             "Thư viện mẫu (hoặc Hồ sơ kênh) → Nhập từ file.")
@@ -82,6 +87,7 @@ def import_file(parent: QWidget, settings: QSettings, path: str = "") -> dict[st
     current = {"table": [{"name": p["name"], "rows": p["rows"]} for p in table_presets(settings)],
                "interleave": _interleave(settings), "profiles": read_profiles(settings)}
     incoming = {k: [p for p in (data.get(k) or []) if isinstance(p, dict) and p.get("name")] for k in KINDS}
+    incoming["table"] = [p for p in incoming["table"] if isinstance(p.get("rows"), list)]  # file sửa tay / hỏng: bỏ mục thiếu
     clashes = [p["name"] for k in KINDS for p in incoming[k] if any(c["name"] == p["name"] for c in current[k])]
     overwrite = False
     if clashes:

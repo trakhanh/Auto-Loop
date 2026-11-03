@@ -9,6 +9,8 @@ from __future__ import annotations
 import os
 import weakref
 
+import shiboken6
+
 from PySide6.QtCore import QRectF, Qt
 from PySide6.QtGui import QColor, QFont, QPainter, QPalette, QPen
 from PySide6.QtWidgets import QApplication, QProxyStyle, QStyle
@@ -17,7 +19,7 @@ from ..core import ffmpeg_tools as ft
 
 APP_NAME = "KT Loop Station"
 AUTHOR = "By Khánh Trà"
-APP_VERSION = "1.8.8"
+APP_VERSION = "1.8.9"
 # nơi lưu cài đặt (registry); KTLS_SETTINGS_ORG dùng cho test để không đụng cài đặt thật
 SETTINGS_ORG = os.environ.get("KTLS_SETTINGS_ORG", "KTLoopStation")
 
@@ -130,7 +132,7 @@ def notify_change() -> None:
     alive = []
     for ref, fn in _LISTENERS:
         wd = ref()
-        if wd is not None:
+        if wd is not None and shiboken6.isValid(wd):  # hộp thoại đã đóng + xoá: bỏ qua
             alive.append((ref, fn))
             fn(wd)
     _LISTENERS[:] = alive

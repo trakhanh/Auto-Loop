@@ -1,5 +1,13 @@
 """KT Loop Station — ghép, loop video và nhạc thành video YouTube dài. By Khánh Trà."""
+import os
 import sys
+
+if "--selftest" in sys.argv and not os.environ.get("KTLS_DATA_DIR"):
+    # kiểm tra bản đóng gói: dùng thư mục dữ liệu + cài đặt riêng (đặt trước khi nạp loopstation) — không đụng hàng
+    # đợi / dự án tự lưu / cờ phiên của app thật đang mở trên cùng máy
+    import tempfile
+    os.environ["KTLS_DATA_DIR"] = tempfile.mkdtemp(prefix="ktls-selftest-")
+    os.environ.setdefault("KTLS_SETTINGS_ORG", "KTLoopStation-SelfTest")
 
 from PySide6.QtCore import QSettings, Qt
 from PySide6.QtGui import QGuiApplication

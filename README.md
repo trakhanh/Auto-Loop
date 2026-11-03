@@ -6,7 +6,7 @@
 
 **Ghép và loop clip + nhạc thành video YouTube dài hàng giờ — xem trước ngay trong app, xuất nhanh bằng card đồ hoạ.**
 
-<sub>By Khánh Trà · Ứng dụng Windows · Giao diện tiếng Việt · Bản mới nhất: <b>1.8.8</b></sub>
+<sub>By Khánh Trà · Ứng dụng Windows · Giao diện tiếng Việt · Bản mới nhất: <b>1.8.9</b></sub>
 
 <br>
 
@@ -34,6 +34,8 @@
 <br>
 
 ## Có gì mới ở 1.8
+
+> **1.8.9** · Bản sửa lỗi sau đợt rà soát toàn bộ app. Clip cắt sẵn bằng LosslessCut / <code>-c copy</code> không còn đứng hình ~1,5 giây mỗi vòng lặp. Mất điện giữa chừng: dự án luôn gắn đúng file (trước đây Ctrl+S có thể ghi đè nhầm dự án khác), hàng đợi chạy tiếp đúng nhóm video đang chạy và nhớ cả <b>Tắt máy khi xong</b>; tắt máy Windows bình thường không còn bị báo “tắt đột ngột”. Bản lưu cũ giữ lâu hơn: mỗi giờ một bản (24 giờ), mỗi ngày một bản (7 ngày). Thả thêm file lúc đang đọc không còn mất đợt trước; <kbd>Ctrl</kbd>+<kbd>Z</kbd> dùng được ở mọi chỗ trên trang Video; <b>Xoá tất cả</b> playlist có hỏi lại. File nhạc hỏng: chỉ thay đúng bài hỏng; bộ nhớ đệm đặt ở ổ khác được dọn đúng ổ; hồ sơ kênh giữ tiếng nền có sẵn; một lỗi card NVIDIA không còn làm cả hàng đợi chạy chậm.
 
 > **1.8.8** · <b>Mất điện cũng không mất việc</b>: sửa gì app cũng tự lưu sau ~3 giây và giữ 5 bản lưu gần nhất (<b>Bản lưu trước…</b>). App bị tắt ngang thì mở lại báo đã khôi phục dự án; hàng đợi đang chạy dở thì hỏi <b>Chạy tiếp</b>, để yên 60 giây là tự chạy. Sửa tận gốc lỗi <i>“Pulse data corrupt”</i> vẫn còn ở 1.8.7: file nhạc có 2 luồng âm thanh (luồng hỏng không phải luồng đầu) giờ được phát hiện; tiếng nền hỏng cũng được thay bản sạch; file nào lọt bước kiểm tra mà làm lỗi lượt ghép thì app tự dùng bản sạch rồi ghép lại.
 
@@ -214,7 +216,7 @@ Chọn **kiểu xuất** ở thanh trên cùng: **Video có nhạc** (`.mp4`) ·
 | Phím | Tác dụng |
 |---|---|
 | <kbd>Space</kbd> | Phát / dừng Trình phát — ở mọi chỗ trong cửa sổ, trừ lúc đang gõ chữ vào ô |
-| <kbd>←</kbd> <kbd>→</kbd> · <kbd>Home</kbd> | Tua 5 giây · về đầu (bấm vào khung hình trước) |
+| <kbd>←</kbd> <kbd>→</kbd> · <kbd>Home</kbd> | Tua 5 giây · về đầu — khi trình phát đang được chọn (bấm vào khung hình; bấm một lần cũng là phát / dừng) |
 | Nhấp đúp vào hình · <kbd>Esc</kbd> | Xem toàn màn hình · thoát |
 | <kbd>Ctrl</kbd>+<kbd>C</kbd> / <kbd>Ctrl</kbd>+<kbd>V</kbd> / <kbd>Ctrl</kbd>+<kbd>D</kbd> | Chép / dán / nhân bản dòng (bảng clip và playlist) |
 | <kbd>Ctrl</kbd>+<kbd>Space</kbd> · <kbd>Delete</kbd> | Bật / tắt dòng · xoá dòng |
