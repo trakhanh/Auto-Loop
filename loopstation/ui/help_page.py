@@ -306,8 +306,8 @@ lặp 60 lần? Bấm <b>Xếp lần lượt…</b> (cạnh nút Xen kẽ clip n
 <h2>Thư viện mẫu: xem mọi mẫu, tự tạo mẫu mới</h2>
 <p>Bấm <b>Thư viện mẫu…</b> (trên bảng clip, cạnh Xếp lần lượt). Mỗi mẫu có <b>dải màu ví dụ kết quả</b> — app áp thật
 mẫu lên bộ tên file ví dụ, mỗi clip 10 giây — kèm tổng thời lượng. Bấm <b>Dùng mẫu này</b> để áp vào bảng.</p>""" + examples([
-    ("Loop A ×57 kẹp Loop B (bảng clip)", "(LOOP AB nếu có) → STT_loopB → STT_loopA ×57 → STT_loopB → STT_loopA; 1_… đến "
-                                          "10_… nối thành 1 video"),
+    ("Loop A ×57 kẹp Loop B (bảng clip)", "(STT_Content nếu có) → (LOOP AB nếu có) → STT_loopB → STT_loopA ×57 → STT_loopB "
+                                          "→ STT_loopA; 1_… đến 10_… nối thành 1 video"),
     ("Nền ×70 xen từng cảnh", "Nền ×70 → Cảnh 2 → Nền ×70 → Cảnh 3 → … → Nền ×70"),
     ("Nền 10 phút xen từng cảnh", "như trên, mỗi lần nền loop đủ 10 phút"),
     ("Nền ×70 xen cảnh — lặp cả mẫu 4 lượt", "chuỗi nền / cảnh trên lặp 4 lượt"),

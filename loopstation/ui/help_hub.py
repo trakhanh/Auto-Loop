@@ -34,6 +34,8 @@ FIRST_STEPS = (
 )
 # "Có gì mới" của bản đang chạy — hiện ở đầu trang Tổng quan (sửa cùng lúc với APP_VERSION khi ra bản mới)
 WHATS_NEW = (
+    ("video", "Mẫu bảng mở đầu bằng STT_Content",
+     "Loop A ×57 kẹp Loop B: mỗi tình huống mở đầu bằng 33_n_Content ×1 (chỉ khi có file), rồi LOOP AB và các loop."),
     ("upload", "Lưu thẳng vào Google Drive an toàn",
      "Thư mục lưu trên Drive / OneDrive: app xuất ra máy trước rồi tự chép lên khi xong — Drive chỉ nhận file đã hoàn "
      "chỉnh. Tắt / bật ở Cài đặt → Tuỳ chọn xuất video."),
@@ -46,8 +48,6 @@ WHATS_NEW = (
     ("queue", "Chạy tiếp hàng đợi đúng như lúc dừng",
      "Mất điện giữa chừng: mở lại chỉ chạy tiếp đúng nhóm video đang chạy, nhớ cả “Tắt máy khi xong”. Tắt máy Windows "
      "bình thường không bị báo “tắt đột ngột”."),
-    ("undo", "Ctrl+Z ở mọi chỗ trên trang Video",
-     "Bấm vào Trình phát rồi Ctrl+Z vẫn hoàn tác; dán rồi nhân bản là hai bước riêng. Xoá tất cả playlist có hỏi lại."),
     ("check", "File nhạc hỏng nặng vẫn xuất được",
      "Lỗi “invalid band type” / “Invalid data found” (file trên Google Drive chưa tải hết…): chỗ hỏng thành vài giây "
      "im lặng, bài giữ đúng độ dài. Mục đã lỗi: chuột phải → Chạy lại."),

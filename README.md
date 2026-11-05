@@ -6,7 +6,7 @@
 
 **Ghép và loop clip + nhạc thành video YouTube dài hàng giờ — xem trước ngay trong app, xuất nhanh bằng card đồ hoạ.**
 
-<sub>By Khánh Trà · Ứng dụng Windows · Giao diện tiếng Việt · Bản mới nhất: <b>1.9.0</b></sub>
+<sub>By Khánh Trà · Ứng dụng Windows · Giao diện tiếng Việt · Bản mới nhất: <b>1.9.1</b></sub>
 
 <br>
 
@@ -34,6 +34,8 @@
 <br>
 
 ## Có gì mới ở 1.9
+
+> **1.9.1** · Mẫu bảng <b>Loop A ×57 kẹp Loop B</b> mở đầu mỗi tình huống bằng <b>STT_Content ×1</b> (<code>33_1_Content.mp4</code>…, chỉ khi có file), rồi mới tới LOOP AB và các loop. Tình huống không có file Content thì giữ nguyên như trước.
 
 > **1.9.0** · <b>Lưu thẳng vào Google Drive / OneDrive an toàn</b>: thư mục lưu nằm trên Drive (ổ G:, <i>My Drive</i>, <i>Shared drives</i>…) thì trang Xuất hiện dòng nhắc, app xuất ra máy trước rồi tự chép lên khi xong — Drive chỉ tải lên file đã hoàn chỉnh, không còn lỗi ở bước cuối. Chép lên không được (mất mạng…) thì video vẫn còn trong thư mục <code>Videos</code>. Chỗ trống được tính theo ổ máy (ổ G: báo dung lượng tài khoản Drive, không phải chỗ trống thật). Tuỳ mỗi người: tắt / bật ở <b>Cài đặt → Tuỳ chọn xuất video</b> (mặc định bật). File nguồn nằm trên Drive: nhật ký nhắc bật <i>Có sẵn khi không có mạng</i>.
 

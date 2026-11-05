@@ -59,8 +59,10 @@ def _table_builtin(name: str, plays: list[tuple[str, int]], optional: tuple[str,
 
 # mẫu bảng clip dựng sẵn: đóng gói trong app → máy nào cài cũng có (mẫu tự lưu chỉ nằm trên máy đã lưu)
 TABLE_BUILTIN = [
-    _table_builtin("Loop A ×57 kẹp Loop B", [("loopAB", 1), ("loopB", 1), ("loopA", 57), ("loopB", 1), ("loopA", 1)],
-                   optional=("loopab",)),  # LOOP AB (33_2_LOOP AB…) lên đầu tình huống — chỉ khi có file
+    _table_builtin("Loop A ×57 kẹp Loop B",
+                   [("Content", 1), ("loopAB", 1), ("loopB", 1), ("loopA", 57), ("loopB", 1), ("loopA", 1)],
+                   # Content (33_1_Content…) mở đầu tình huống, rồi LOOP AB (33_2_LOOP AB…) — đều chỉ khi có file
+                   optional=("content", "loopab")),
 ]
 
 
