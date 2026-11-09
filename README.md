@@ -6,7 +6,7 @@
 
 **Ghép và loop clip + nhạc thành video YouTube dài hàng giờ — xem trước ngay trong app, xuất nhanh bằng card đồ hoạ.**
 
-<sub>By Khánh Trà · Ứng dụng Windows · Giao diện tiếng Việt · Bản mới nhất: <b>1.9.1</b></sub>
+<sub>By Khánh Trà · Ứng dụng Windows · Giao diện tiếng Việt · Bản mới nhất: <b>1.9.2</b></sub>
 
 <br>
 
@@ -34,6 +34,8 @@
 <br>
 
 ## Có gì mới ở 1.9
+
+> **1.9.2** · <b>Lọc tạp âm như Premiere</b> (Essential Sound → Reduce Noise): bỏ <b>gió, ù nền, tiếng xì</b> trong tiếng gốc clip, giữ tiếng bước chân, nước, lửa. Ba mức Nhẹ · <b>Vừa — giống mẫu Premiere</b> · Mạnh. Bật ở trang Video (thẻ <b>Lọc tạp âm tiếng gốc</b>) hoặc Bảng trộn âm, nghe thử ngay, lưu được vào hồ sơ kênh. Lọc riêng file: trang Bắt đầu / thanh bên → <b>Lọc tạp âm…</b> — nhiều video một lần, mỗi file ra bản <code>_DeNoise</code> cạnh file gốc, hình giữ nguyên.
 
 > **1.9.1** · Mẫu bảng <b>Loop A ×57 kẹp Loop B</b> mở đầu mỗi tình huống bằng <b>STT_Content ×1</b> (<code>33_1_Content.mp4</code>…, chỉ khi có file), rồi mới tới LOOP AB và các loop. Tình huống không có file Content thì giữ nguyên như trước.
 

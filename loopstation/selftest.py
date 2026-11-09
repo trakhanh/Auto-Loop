@@ -61,7 +61,12 @@ def run(win, report_path: str) -> None:
         out["render"] = str(res)
         out["render_size"] = Path(res).stat().st_size
         out["marker_files"] = sorted(x.name for x in Path(res).parent.iterdir())
-        out["ok"] = bool(out["make_clip"] and out["player_frames"] > 0 and out["render_size"] > 0)
+        # lọc tạp âm (cần numpy trong bản đóng gói): tiếng của clip thử → bản đã lọc, đúng độ dài
+        from .core import denoise
+        cleaned = denoise.denoised_copy(ft.Runner(), str(clip), "medium")
+        out["denoise"] = Path(cleaned).stat().st_size if Path(cleaned).is_file() else 0
+        out["ok"] = bool(out["make_clip"] and out["player_frames"] > 0 and out["render_size"] > 0
+                         and out["denoise"] > 0)
         shutil.rmtree(tmp, ignore_errors=True)
     except Exception:  # noqa: BLE001
         out["error"] = traceback.format_exc()

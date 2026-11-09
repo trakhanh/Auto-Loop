@@ -48,9 +48,6 @@ WHATS_NEW = (
     ("save", "Mất điện cũng không mất việc",
      "Tự lưu sau ~3 giây; bản lưu cũ giữ mỗi giờ một bản (24 giờ), mỗi ngày một bản (7 ngày). Dự án luôn gắn đúng file — "
      "Ctrl+S không ghi đè nhầm dự án khác."),
-    ("queue", "Chạy tiếp hàng đợi đúng như lúc dừng",
-     "Mất điện giữa chừng: mở lại chỉ chạy tiếp đúng nhóm video đang chạy, nhớ cả “Tắt máy khi xong”. Tắt máy Windows "
-     "bình thường không bị báo “tắt đột ngột”."),
     ("check", "File nhạc hỏng nặng vẫn xuất được",
      "Lỗi “invalid band type” / “Invalid data found” (file trên Google Drive chưa tải hết…): chỗ hỏng thành vài giây "
      "im lặng, bài giữ đúng độ dài. Mục đã lỗi: chuột phải → Chạy lại."),
