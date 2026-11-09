@@ -22,7 +22,7 @@ from PySide6.QtWidgets import (
 )
 
 from ..core import encoders, ffmpeg_tools, planner, power, probe, render, render_queue as rq, size_estimate, sysinfo, timeline
-from ..core import updater
+from ..core import denoise, updater
 from ..core.ffmpeg_tools import CancelledError
 from ..core.project import PROJECT_EXT, ClipItem, Project, is_sample_file
 from ..core.render import RenderJob, clean_filename, default_output_name, output_path, strip_ext
@@ -164,6 +164,7 @@ class MainWindow(QMainWindow):
         self.video_tab.seasonDropped.connect(self._season_dropped)
         self.video_tab.shuffleDetailsRequested.connect(self._show_shuffle_order)
         self.music_tab.mixer.sourceModeChanged.connect(self._set_source_mode)
+        self.music_tab.mixer.denoiseChanged.connect(lambda lv: self._set_combo_data(self.video_tab.denoise, lv))
         self.settings_page = SettingsPage(self.settings)
         self.settings_page.shutdown.toggled.connect(lambda _on: self._queue_running and self._mark_queue_running(True))
         self.settings_page.prefsChanged.connect(self._apply_prefs)
@@ -187,6 +188,7 @@ class MainWindow(QMainWindow):
         self.home = HomePage()
         self.home.chosen.connect(self._home_choice)
         self.home.openSample.connect(self.open_project_path)
+        self.home.cards["denoise"].new_tag.setVisible(str(self.settings.value("new/denoise_tool_seen", "")) != "1")
         self.home.resumeRequested.connect(lambda: self.go_to(1 if self.mode == "music_only" else 0))
         hm = QScrollArea()
         hm.setWidget(self.home)
@@ -489,7 +491,8 @@ class MainWindow(QMainWindow):
         self.project_label = lab
         sv.addWidget(lab)
         # Mới / Mở / Lưu đã có trên thanh trên cùng — thanh bên chỉ giữ công cụ riêng
-        for ic_name, text, fn in (("folder", "Xuất hàng loạt…", self.batch_from_folders),):
+        for ic_name, text, fn in (("folder", "Xuất hàng loạt…", self.batch_from_folders),
+                                  ("waves", "Lọc tạp âm…", self.open_denoise)):
             b = QPushButton(f"  {text}")
             b.setObjectName("nav")
             b.setIcon(icons.icon(ic_name, 15))
@@ -498,6 +501,15 @@ class MainWindow(QMainWindow):
             b.clicked.connect(fn)
             self._side_buttons.append((b, ic_name, text))
             sv.addWidget(b)
+            if fn == self.open_denoise and str(self.settings.value("new/denoise_tool_seen", "")) != "1":
+                inner = QHBoxLayout(b)  # nhãn MỚI nằm trong nút (tới khi mở công cụ lần đầu)
+                inner.setContentsMargins(0, 0, 8, 0)
+                inner.addStretch(1)
+                self.denoise_tool_new = QLabel("MỚI")
+                self.denoise_tool_new.setObjectName("newTag")
+                self.denoise_tool_new.setFixedHeight(18)
+                self.denoise_tool_new.setMinimumWidth(self.denoise_tool_new.sizeHint().width())  # không bị ép hẹp
+                inner.addWidget(self.denoise_tool_new, 0, Qt.AlignmentFlag.AlignVCenter)
 
         self._update_text = ""
         self.update_btn = QPushButton()  # chỉ hiện khi có bản mới
@@ -896,6 +908,9 @@ class MainWindow(QMainWindow):
         self.update_btn.setText("" if compact else self._update_text)
         for b, _ic, text in self._side_buttons:
             b.setText("" if compact else f"  {text}")
+        tag = getattr(self, "denoise_tool_new", None)
+        if tag is not None:  # thanh bên chỉ còn biểu tượng: nhãn MỚI che mất biểu tượng → ẩn
+            tag.setVisible(not compact and str(self.settings.value("new/denoise_tool_seen", "")) != "1")
 
     def _update_nav_badges(self, proj: Project) -> None:
         n_clips = sum(1 for c in proj.video.clips if c.enabled and (c.count > 0 if c.plays_mode == "fixed" else c.max > 0))
@@ -961,6 +976,8 @@ class MainWindow(QMainWindow):
                         "không cần thêm bài nhạc", "info", 6000)
         elif key == "batch":
             self.batch_from_folders()
+        elif key == "denoise":
+            self.open_denoise()
         elif key == "open":
             self.open_project()
 
@@ -1275,6 +1292,7 @@ class MainWindow(QMainWindow):
         self._suggest_filename(proj)
         v = proj.video
         self.music_tab.mixer.set_state(self.mode, v.source_audio, bool(v.intro or v.outro) and v.bookend_audio)
+        self.music_tab.mixer.set_denoise(v.denoise, v.source_audio != "off")
         self._update_nav_badges(proj)
         self._update_audio_info(proj)
         self.music_tab.set_versions_view(max(1, proj.music.versions), self.mode == "music_only")
@@ -1359,6 +1377,8 @@ class MainWindow(QMainWindow):
 
         parts = (["nhạc"] if tl.use_music else []) + (["tiếng gốc"] if tl.use_source else []) \
             + (["tiếng nền"] if tl.ambient_infos else [])
+        if tl.use_source and vs.denoise != "off":
+            parts[parts.index("tiếng gốc")] = f"tiếng gốc (lọc tạp âm {denoise.LABELS[vs.denoise].split(' —')[0]})"
         lines = [f"<b>Video {tl.width}×{tl.height} · {float(tl.fps):g} fps</b> · Tổng thời lượng: <b>{fmt_dur(tl.total)}</b> · "
                  f"Âm thanh: <b>{' + '.join(parts) or 'không có'}</b>",
                  f"Ổ lưu: {self.export_tab.free_space_text() or 'chưa chọn thư mục'} · {self.export_tab.gpu_text()}"]
@@ -1969,6 +1989,18 @@ class MainWindow(QMainWindow):
                 self.settings_page.shutdown.setChecked(True)
             self.run_queue(only=pending if only else None)
 
+    def open_denoise(self, files: list[str] | None = None) -> None:
+        """Công cụ Lọc tạp âm video: file chưa lọc → bản _DeNoise (như Premiere Reduce Noise)."""
+        from .denoise_dialog import DenoiseDialog
+        self._pause_media()
+        if getattr(self, "denoise_tool_new", None) is not None:
+            self.denoise_tool_new.hide()
+        self.home.cards["denoise"].new_tag.hide()
+        self.settings.setValue("new/denoise_tool_seen", "1")
+        dlg = DenoiseDialog(self.settings, files, self)
+        dlg.exec()
+        w.dispose(dlg)
+
     def _pause_media(self) -> None:
         """Mở hộp thoại / ứng dụng có tiếng riêng: dừng Trình phát và bản nghe thử để không phát chồng."""
         self.viewer.player.pause()
@@ -2428,6 +2460,12 @@ class MainWindow(QMainWindow):
         if notes:
             QMessageBox.warning(self, "Hồ sơ kênh", "Đã áp hồ sơ, nhưng có vài thứ không còn trên máy này:\n\n• "
                                 + "\n• ".join(notes))
+
+    @staticmethod
+    def _set_combo_data(cb, value: str) -> None:
+        i = cb.findData(value)
+        if i >= 0 and cb.isEnabled():
+            cb.setCurrentIndex(i)
 
     def _set_source_mode(self, mode: str) -> None:
         """Bảng trộn âm đổi kiểu tiếng gốc → đồng bộ ô Tiếng gốc clip ở trang Video (một nguồn sự thật)."""

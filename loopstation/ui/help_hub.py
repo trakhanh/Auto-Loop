@@ -34,6 +34,9 @@ FIRST_STEPS = (
 )
 # "Có gì mới" của bản đang chạy — hiện ở đầu trang Tổng quan (sửa cùng lúc với APP_VERSION khi ra bản mới)
 WHATS_NEW = (
+    ("waves", "Lọc tạp âm như Premiere",
+     "Bỏ gió, ù nền trong tiếng gốc clip, giữ tiếng bước chân, nước, lửa. Trang Video → Lọc tạp âm (hoặc Bảng trộn âm); "
+     "lọc riêng file: thanh bên → Lọc tạp âm…"),
     ("video", "Mẫu bảng mở đầu bằng STT_Content",
      "Loop A ×57 kẹp Loop B: mỗi tình huống mở đầu bằng 33_n_Content ×1 (chỉ khi có file), rồi LOOP AB và các loop."),
     ("upload", "Lưu thẳng vào Google Drive an toàn",

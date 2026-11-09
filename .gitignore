@@ -25,3 +25,6 @@ desktop.ini
 .idea/
 *.lsproj.tmp
 VideoTest2/
+
+# video mẫu khử tạp âm (mỗi file ~540 MB) — không đưa lên GitHub
+DenoiseTest/

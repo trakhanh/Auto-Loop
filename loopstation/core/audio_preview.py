@@ -9,7 +9,7 @@ import time
 from dataclasses import dataclass
 from pathlib import Path
 
-from . import audio_build, planner, timeline, video_build
+from . import audio_build, denoise, planner, timeline, video_build
 from . import ffmpeg_tools as ft
 from .planner import MusicItem
 from .probe import probe
@@ -118,6 +118,8 @@ def _render(project, start: float, runner: ft.Runner | None, version: int, secon
     if not music_only and tl.use_source and tl.video is not None:
         segs = planner.segments(tl.video, tl.frames)
         paths = {k: inf.path for k, inf in tl.clip_infos.items()}
+        if vs.denoise != "off":  # nghe đúng như lúc xuất: tiếng gốc đã lọc tạp âm (lần đầu mất vài giây mỗi clip)
+            paths = denoise.denoise_paths(runner, paths, tl.audible, vs.denoise)
         pos, chosen, p0 = 0.0, [], None
         for seg in segs:
             d = video_build.seconds(seg.frames, tl.fps)

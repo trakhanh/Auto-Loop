@@ -8,7 +8,7 @@ from datetime import datetime
 from pathlib import Path
 from typing import Callable
 
-from . import audio_build, cloud, encoders, look as look_mod, markers, planner, timeline, tracklist, video_build
+from . import audio_build, cloud, denoise, encoders, look as look_mod, markers, planner, timeline, tracklist, video_build
 from . import ffmpeg_tools as ft
 from .project import Project
 
@@ -217,6 +217,11 @@ class RenderJob:
         # ----- 2. tiếng gốc -----
         src_blocks = {}
         if tl.use_source:
+            if vs.denoise != "off":  # tiếng gốc đã lọc tạp âm (gió, ù nền) thay cho tiếng trong clip
+                self.log(f"Lọc tạp âm tiếng gốc — mức {denoise.LABELS.get(vs.denoise, vs.denoise)}:")
+                paths = denoise.denoise_paths(
+                    self.runner, paths, tl.audible, vs.denoise, self.log,
+                    lambda f: self.progress(W_VIDEO, f"Đang lọc tạp âm tiếng gốc… {int(f * 100)}%"))
             sgains = {}
             if vs.source_level:
                 self.progress(W_VIDEO, "Đang đo độ to tiếng gốc…")

@@ -34,6 +34,8 @@ FIT = [("letterbox", "Viền đen (giữ nguyên tỉ lệ)"), ("blur", "Nền m
        ("crop", "Cắt cho đầy khung hình"), ("stretch", "Kéo giãn đầy khung")]
 SOURCE = [("mix", "Giữ tiếng gốc clip, trộn với nhạc (mặc định)"), ("only", "Chỉ tiếng gốc clip — không dùng nhạc"),
           ("off", "Tắt tiếng gốc clip")]
+DENOISE = [("off", "Tắt"), ("light", "Nhẹ — bớt ù, gió"), ("medium", "Vừa — giống mẫu Premiere"),
+           ("strong", "Mạnh — sạch hẳn")]
 
 
 def combo(options: list[tuple[str, str]]) -> QComboBox:
@@ -718,6 +720,12 @@ class VideoTab(QWidget):
         f_aud = QFormLayout(g_audio)
         f_aud.setVerticalSpacing(8)
         f_aud.addRow("Tiếng gốc clip", self.source)
+        self.denoise = combo(DENOISE)
+        self.denoise.setToolTip("Lọc tạp âm trong tiếng gốc clip: gió, ù nền, tiếng xì — giữ tiếng bước chân, nước, "
+                                "lửa… (như Premiere: Essential Sound → Reduce Noise).\n"
+                                "Lần xuất đầu mỗi clip mất vài giây (≈ 3 giây cho 1 phút tiếng), lần sau dùng lại.\n"
+                                "Nghe thử ở Bảng trộn âm.")
+        f_aud.addRow(self._denoise_card())
         f_aud.addRow(w.muted("Âm lượng nhạc, tiếng gốc và tiếng nền chỉnh chung ở <b>Bảng trộn âm</b> (trang 2) — "
                              "có nút nghe thử 20 giây."))
         f_aud.addRow(mix_btn)
@@ -817,7 +825,7 @@ class VideoTab(QWidget):
         lay.addWidget(split, 1)
 
         self.source.currentIndexChanged.connect(self._on_source_changed)  # trước _emit: collect() thấy ngay
-        for wdg in (self.order, self.length_mode, self.fill, self.fit, self.source):
+        for wdg in (self.order, self.length_mode, self.fill, self.fit, self.source, self.denoise):
             wdg.currentIndexChanged.connect(self._emit)
         for wdg in (self.seed,):
             wdg.valueChanged.connect(self._emit)
@@ -889,6 +897,7 @@ class VideoTab(QWidget):
         self.image_dur.setValue(vs.image_duration)
         set_combo(self.fit, vs.fit)
         set_combo(self.source, vs.source_audio)
+        set_combo(self.denoise, vs.denoise)
         self._source_volume, self._music_volume = vs.source_volume, vs.music_volume
         self.intro.set_path(vs.intro)
         self.intro.xf.setValue(vs.intro_xfade)
@@ -918,6 +927,7 @@ class VideoTab(QWidget):
         vs.fit = self.fit.currentData()
         vs.image_duration = self.image_dur.value()
         vs.source_audio = self.source.currentData()
+        vs.denoise = self.denoise.currentData() or "off"
         # kiểu Chỉ video tạm đổi ô hiển thị; khi lưu vẫn giữ lựa chọn của người dùng (Chỉ video không dùng nhạc nên
         # "trộn nhạc" = giữ tiếng gốc, "theo nhạc" = theo số lần phát) — quay lại kiểu có nhạc không bị mất
         if getattr(self, "_saved_source", None) and vs.source_audio == "only":
@@ -965,11 +975,51 @@ class VideoTab(QWidget):
         self._switching = False
         self._update_enabled()
 
+    def _denoise_card(self) -> QFrame:
+        """Thẻ Lọc tạp âm: viền nhấn + nhãn MỚI (tới khi dùng lần đầu) để dễ thấy; bật thì thẻ sáng hẳn."""
+        card = QFrame()
+        card.setObjectName("featureCard")
+        self.denoise_card = card
+        lay = QVBoxLayout(card)
+        lay.setContentsMargins(12, 10, 12, 10)
+        lay.setSpacing(6)
+        head = QHBoxLayout()
+        head.setSpacing(8)
+        ic = QLabel()
+        icons.bind(ic, "waves", 18, "accent_text")
+        ic.setFixedSize(18, 18)
+        title = QLabel("Lọc tạp âm tiếng gốc")
+        title.setObjectName("featureTitle")
+        self.denoise_new = QLabel("MỚI")
+        self.denoise_new.setObjectName("newTag")
+        self.denoise_new.setVisible(str(self.settings.value("new/denoise_seen", "")) != "1")
+        head.addWidget(ic)
+        head.addWidget(title)
+        head.addWidget(self.denoise_new)
+        head.addStretch(1)
+        lay.addLayout(head)
+        lay.addWidget(self.denoise)
+        note = w.muted("Bỏ <b>gió, ù nền, tiếng xì</b> — giữ tiếng bước chân, nước, lửa… Như Premiere "
+                       "<i>Reduce Noise</i>. Nghe thử ở Bảng trộn âm.")
+        note.setWordWrap(True)
+        lay.addWidget(note)
+        self.denoise.currentIndexChanged.connect(self._on_denoise_changed)
+        return card
+
+    def _on_denoise_changed(self, *_) -> None:
+        on = self.denoise.isEnabled() and self.denoise.currentData() not in (None, "off")
+        theme.tag(self.denoise_card, state="on" if on else "")
+        if on and not self._loading and self.denoise_new.isVisible():
+            self.denoise_new.hide()  # đã thấy và dùng rồi: thôi nhắc MỚI
+            self.settings.setValue("new/denoise_seen", "1")
+
     def _on_source_changed(self, *_) -> None:
         """Ở kiểu Chỉ video, người dùng tự chọn tiếng gốc (ô ở trang này hoặc Bảng trộn âm) → đó là lựa chọn mới:
         bỏ "trộn nhạc" đã nhớ, để Bảng trộn âm không bật ngược về và quay lại kiểu có nhạc vẫn giữ lựa chọn này."""
         if self._mode == "video_only" and not self._loading and not getattr(self, "_switching", False):
             self._saved_source = None
+        self.denoise.setEnabled(self.source.currentData() != "off")  # tắt tiếng gốc thì không có gì để lọc
+        self._on_denoise_changed()
 
     def set_preview(self, text: str) -> None:
         self.preview.setPlainText(text)

@@ -20,6 +20,7 @@ MIX_PRESETS = (("music", "Nhạc là chính", "Nhạc rõ, tiếng gốc làm n�
                ("even", "Cân bằng", "Nhạc và tiếng gốc nghe ngang nhau", 100, 100),
                ("source", "Tiếng gốc là chính", "Tiếng gốc (mưa, sóng, tiếng người…) rõ, nhạc nhỏ phía sau", 30, 100))
 SOURCE_MODES = (("mix", "Giữ tiếng gốc + nhạc"), ("only", "Chỉ tiếng gốc"), ("off", "Tắt tiếng gốc"))
+DENOISE_MODES = (("off", "Tắt"), ("light", "Nhẹ"), ("medium", "Vừa (như mẫu)"), ("strong", "Mạnh"))
 
 
 class _Channel:
@@ -83,6 +84,7 @@ class MixerPanel(QGroupBox):
     ambientVolumeChanged = Signal(int, int)  # (dòng trong bảng tiếng nền, %)
     previewRequested = Signal(float)  # nghe thử từ giây thứ …
     sourceModeChanged = Signal(str)  # mix | only | off — đồng bộ với ô Tiếng gốc clip ở trang Video
+    denoiseChanged = Signal(str)  # off | light | medium | strong — đồng bộ với ô Lọc tạp âm ở trang Video
     playbackStopped = Signal()  # nghe xong / bấm dừng
 
     def __init__(self, parent=None, hints: bool = True):
@@ -112,6 +114,27 @@ class MixerPanel(QGroupBox):
             mrow.addWidget(b)
             self.mode_buttons[key] = b
         self.mode_buttons["mix"].setChecked(True)
+        # lọc tạp âm ngay cạnh chỗ nghe thử: bấm là nghe khác liền
+        self.denoise_box = QWidget()
+        drow = w.FlowLayout(self.denoise_box, spacing=5)
+        dlab = QLabel()
+        icons.bind(dlab, "waves", 14, "accent_text")
+        dlab.setFixedSize(14, 14)
+        drow.addWidget(dlab)
+        drow.addWidget(QLabel("Lọc tạp âm:"))
+        self.denoise_group = QButtonGroup(self)
+        self.denoise_buttons: dict[str, QPushButton] = {}
+        for key, text in DENOISE_MODES:
+            b = QPushButton(text)
+            b.setObjectName("pill")
+            b.setCheckable(True)
+            b.setToolTip("Bỏ gió, ù nền, tiếng xì trong tiếng gốc clip — giữ tiếng bước chân, nước, lửa… "
+                         "(như Premiere Reduce Noise). Bấm Nghe thử để nghe.")
+            self.denoise_group.addButton(b)
+            b.clicked.connect(lambda _=False, k=key: None if self._loading else self.denoiseChanged.emit(k))
+            drow.addWidget(b)
+            self.denoise_buttons[key] = b
+        self.denoise_buttons["off"].setChecked(True)
         self.sources_note = w.muted("")  # clip nào có tiếng
         self.sources_note.setWordWrap(True)
         # chữ ngắn + ElidedCheckBox: cột phải hẹp cũng không bị đẩy rộng (trước đây làm cả Bảng trộn âm tràn mép)
@@ -120,7 +143,7 @@ class MixerPanel(QGroupBox):
         self.level.setToolTip("Bật: app đo độ to từng clip rồi đưa về cùng mức LUFS với nhạc, nên 100% + 100% nghe "
                               "ngang nhau.\nTắt: giữ nguyên độ to gốc của clip (thường nhỏ hơn nhạc nhiều).")
         self.level.toggled.connect(lambda *_: None if self._loading else self._value_changed())
-        for wd in (self.mode_box, self.sources_note, self.level):
+        for wd in (self.mode_box, self.denoise_box, self.sources_note, self.level):
             lay.addWidget(wd)
             wd.setVisible(hints)
         # ----- 2. chọn nhanh độ to -----
@@ -318,6 +341,14 @@ class MixerPanel(QGroupBox):
         self.ambientVolumeChanged.emit(row, vol)
         self.changed.emit()
 
+    def set_denoise(self, level: str, usable: bool = True) -> None:
+        self._loading = True
+        if level in self.denoise_buttons:
+            self.denoise_buttons[level].setChecked(True)
+        for b in self.denoise_buttons.values():
+            b.setEnabled(usable)
+        self._loading = False
+
     def set_state(self, mode: str, source_audio: str, bookend_audio: bool) -> None:
         """Bật / khoá từng dòng theo kiểu sản phẩm (ghi rõ lý do khi khoá)."""
         if mode == "video_only" and source_audio == "mix":
@@ -330,6 +361,7 @@ class MixerPanel(QGroupBox):
         self.mode_buttons["mix"].setEnabled(mode != "video_only")
         self.mode_buttons["mix"].setToolTip("Kiểu Chỉ video không có nhạc" if mode == "video_only" else "")
         self.mode_box.setVisible(self._hints and mode != "music_only")
+        self.denoise_box.setVisible(self._hints and mode != "music_only")
         self.level.setVisible(self._hints and mode != "music_only")
         self.sources_note.setVisible(self._hints and mode != "music_only")
         self._loading = False

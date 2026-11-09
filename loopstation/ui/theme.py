@@ -507,6 +507,16 @@ QFrame#helpNews {{ background: {rgba(t['accent'], 0.07)}; border: 1px solid {rgb
 QFrame#helpNews QLabel, QFrame#helpNews QWidget {{ background: transparent; }}
 QFrame#helpNews QLabel#helpNewTag {{ background: {t['accent']}; color: {t['text_on_accent']}; border-radius: {R['sm']}px;
                     padding: 1px 7px; font-size: {f['caption']}; font-weight: 700; }}
+/* thẻ tính năng (Lọc tạp âm): viền nhấn để dễ thấy; bật thì sáng hẳn */
+QFrame#featureCard {{ background: {rgba(t['accent'], 0.06)}; border: 1px solid {rgba(t['accent'], 0.30)};
+                     border-radius: {R['lg']}px; }}
+QFrame#featureCard[state="on"] {{ background: {rgba(t['accent'], 0.14)}; border: 1px solid {t['accent']}; }}
+QFrame#featureCard QLabel {{ background: transparent; }}
+QLabel#featureTitle {{ color: {t['text']}; font-weight: 700; }}
+QLabel#newTag, QFrame#featureCard QLabel#newTag, QWidget#sidebar QLabel#newTag,
+QPushButton#homeCard QLabel#newTag {{ background: {t['accent']};
+                color: {t['text_on_accent']}; border-radius: {R['sm']}px; padding: 0px 6px; font-size: {f['caption']};
+                font-weight: 700; }}
 QFrame#helpKeyChip {{ background: {t['panel']}; border: 1px solid {t['line_subtle']}; border-radius: {R['lg']}px; }}
 QFrame#helpKeyChip QLabel {{ background: transparent; }}
 QLabel#helpKbd {{ background: {t['raised']}; border: 1px solid {t['line_strong']}; border-bottom-width: 2px;

@@ -270,7 +270,9 @@ Nhân bản dòng, Xen kẽ clip nền…, Bật / Tắt, Đưa lên / xuống, 
     ("Clip khác tỉ lệ", "<b>Viền đen</b> (giữ nguyên tỉ lệ) · <b>Nền mờ</b> (đẹp cho clip dọc) · <b>Cắt</b> cho đầy khung · <b>Kéo giãn</b>"),
     ("Ảnh tĩnh", "mỗi ảnh hiện bao nhiêu giây một lần phát (mặc định 8 giây)"),
     ("Mờ dần cuối video", "hình và tiếng nhỏ dần ở cuối (mặc định 3 giây)"),
-    ("Tiếng gốc clip", "<b>Giữ, trộn với nhạc</b> (mặc định) · <b>Chỉ tiếng gốc, không dùng nhạc</b> · <b>Tắt</b>")], ("Mục", "Chọn được")) + box(
+    ("Tiếng gốc clip", "<b>Giữ, trộn với nhạc</b> (mặc định) · <b>Chỉ tiếng gốc, không dùng nhạc</b> · <b>Tắt</b>"),
+    ("Lọc tạp âm", "<b>Tắt</b> · <b>Nhẹ</b> (bớt ù, gió) · <b>Vừa — giống mẫu Premiere</b> · <b>Mạnh</b> (giữa các tiếng "
+                   "bước chân câm hẳn) — lọc gió, ù nền trong tiếng gốc clip khi xuất")], ("Mục", "Chọn được")) + box(
     "tip", "Độ to của nhạc / tiếng gốc chỉnh ở <a href='topic:tron'>Bảng trộn âm</a> (nút <i>Chỉnh âm lượng ở Bảng trộn âm…</i>)."))
 
 topic("xenke", "Làm video", "repeat", "Xen kẽ clip nền", hero(
@@ -721,6 +723,8 @@ topic("hoi", "Khác", "help", "Câu hỏi thường gặp", hero(
          "xuất được — nhật ký ghi rõ file nào. Mục đã lỗi: chuột phải → <b>Chạy lại</b>. Muốn có bản đẹp nhất: tải lại "
          "file gốc; file trên Google Drive thì chuột phải → <i>Có sẵn khi không có mạng</i> (Available offline) rồi "
          "xuất."),
+        ("Lọc tạp âm (gió, ù nền) như Premiere?",
+         "Lọc bỏ <b>gió, ù nền, tiếng xì</b> trong tiếng gốc clip, giữ tiếng bước chân, nước, lửa… — giống Premiere (<i>Essential Sound → Repair → Reduce Noise</i>). Hai cách: <b>(1)</b> trong dự án — trang Video → <b>Lọc tạp âm</b>: Nhẹ · <b>Vừa — giống mẫu Premiere</b> · Mạnh; áp khi xuất, nghe thử ở Bảng trộn âm, lưu được vào hồ sơ kênh. <b>(2)</b> lọc riêng file — thanh bên → <b>Lọc tạp âm…</b>: chọn nhiều video, mỗi file ra bản <i>tên_DeNoise</i> cạnh file gốc (hình giữ nguyên). Lần đầu mỗi clip mất vài giây (≈ 3 giây cho 1 phút tiếng), lần sau dùng lại."),
         ("Lưu thẳng vào Google Drive / OneDrive được không?",
          "Được. Thư mục lưu nằm trên Drive (ổ G:, <i>My Drive</i>, <i>Shared drives</i>…) hoặc OneDrive thì trang Xuất "
          "hiện dòng nhắc, và app <b>xuất ra máy trước rồi tự chép lên</b> khi xong — Drive chỉ tải lên file đã hoàn "

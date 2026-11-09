@@ -59,6 +59,7 @@ class VideoSettings:
     source_volume: int = 100
     music_volume: int = 100
     source_level: bool = True  # tự cân độ to tiếng gốc từng clip về cùng mức với nhạc → 100% + 100% = nghe ngang nhau
+    denoise: str = "off"  # lọc tạp âm tiếng gốc (gió, ù nền): off | light | medium | strong — core/denoise.py
     intro: str = ""
     intro_xfade: float = 0.0  # crossfade từ intro sang clip đầu
     outro: str = ""
@@ -173,6 +174,7 @@ class Project:
                 "source_volume": v.source_volume,
                 "music_volume": v.music_volume,
                 "source_level": v.source_level,
+                "denoise": v.denoise,
                 "intro": {"path": p(v.intro) if v.intro else "", "crossfade": v.intro_xfade},
                 "outro": {"path": p(v.outro) if v.outro else "", "crossfade": v.outro_xfade},
                 "bookend_audio": v.bookend_audio,
@@ -272,6 +274,7 @@ class Project:
         v.source_volume = int(vd.get("source_volume", v.source_volume))
         v.music_volume = int(vd.get("music_volume", v.music_volume))
         v.source_level = bool(vd.get("source_level", v.source_level))
+        v.denoise = vd.get("denoise", v.denoise) if vd.get("denoise") in ("off", "light", "medium", "strong") else "off"
         for key in ("intro", "outro"):
             bd = vd.get(key) or {}
             setattr(v, key, p(bd["path"]) if bd.get("path") else "")

@@ -28,6 +28,9 @@ CARDS = [
     ("batch", "folder", "warn", "Xuất hàng loạt",
      "Nhiều video cùng kiểu một lần: mỗi thư mục con = một video.",
      "Dùng dự án đang mở làm khuôn"),
+    ("denoise", "waves", "success", "Lọc tạp âm",
+     "Bỏ gió, ù nền trong video — giữ tiếng bước chân, nước, lửa. Như Premiere Reduce Noise.",
+     "Nhiều video một lần → bản _DeNoise cạnh file gốc"),
     ("open", "save", "neutral", "Mở dự án đã lưu",
      "Tiếp tục một dự án .lsproj đã làm trước đó.",
      "Hoặc mở dự án mẫu bên dưới để tập dùng"),
@@ -61,6 +64,11 @@ class HomeCard(QPushButton):
         t.setObjectName("homeTitle")
         top.addWidget(badge)
         top.addWidget(t, 1)
+        self.new_tag = QLabel("MỚI")  # tính năng mới: cửa sổ chính ẩn đi sau lần dùng đầu
+        self.new_tag.setObjectName("newTag")
+        self.new_tag.setAttribute(Qt.WidgetAttribute.WA_TransparentForMouseEvents, True)
+        self.new_tag.hide()
+        top.addWidget(self.new_tag, 0, Qt.AlignmentFlag.AlignVCenter)
         d = QLabel(desc)
         d.setObjectName("homeDesc")
         d.setWordWrap(True)

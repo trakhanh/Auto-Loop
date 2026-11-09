@@ -12,7 +12,7 @@ from .project import AmbientLayer, ExportSettings, MusicTrack, Project
 
 AUDIO_EXTS = {".mp3", ".wav", ".m4a", ".aac", ".flac", ".ogg", ".opus", ".wma"}
 VIDEO_KEYS = ("intro", "intro_xfade", "outro", "outro_xfade", "bookend_audio", "fit", "source_audio", "source_volume",
-              "music_volume", "source_level", "color_preset", "color_strength", "logo", "logo_opacity", "logo_pos",
+              "music_volume", "source_level", "denoise", "color_preset", "color_strength", "logo", "logo_opacity", "logo_pos",
               "logo_size", "look_bookends", "fade_out")
 MUSIC_KEYS = ("order", "crossfade", "gap", "fade_in", "fade_out", "loudness_enabled", "lufs")
 EXPORT_SKIP = ("filename",)  # tên file đổi theo từng video, không thuộc hồ sơ
