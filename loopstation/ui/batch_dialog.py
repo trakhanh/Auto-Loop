@@ -886,8 +886,12 @@ class BatchDialog(QDialog):
         dlg.setWindowTitle(f"Chỉnh thứ tự cảnh — {job.name}")
         if ov:  # mở lại: điền đúng như lần bấm OK trước (số lần xuất hiện, số lượt, cảnh bỏ tick…)
             self._restore_state(dlg, ov[1])
-        if dlg.exec() and dlg.result_clips:
-            self._overrides[job.folder] = (dlg.result_clips, self._dialog_state(dlg))
+        ok = bool(dlg.exec()) and bool(dlg.result_clips)
+        res_clips = dlg.result_clips if ok else None
+        state = self._dialog_state(dlg) if ok else None
+        w.dispose(dlg)
+        if ok:
+            self._overrides[job.folder] = (res_clips, state)
             self._rebuild()
 
     def _edit_sequence(self, row: int, clips, durations: dict, preset: dict, ov) -> None:
@@ -900,10 +904,13 @@ class BatchDialog(QDialog):
         dlg.plays.setText(st["plays"])
         dlg.pos.setCurrentIndex(max(0, dlg.pos.findData(st["pos"])))
         dlg.repeat.setValue(int(st.get("repeat", 1)))
-        if dlg.exec() and dlg.result_clips:
-            self._overrides[job.folder] = (dlg.result_clips, {"kind": "sequence", "plays": dlg.plays.text().strip(),
-                                                              "pos": dlg.pos.currentData(),
-                                                              "repeat": dlg.repeat.value()})
+        ok = bool(dlg.exec()) and bool(dlg.result_clips)
+        res_clips = dlg.result_clips if ok else None
+        seq_state = {"kind": "sequence", "plays": dlg.plays.text().strip(),
+                     "pos": dlg.pos.currentData(), "repeat": dlg.repeat.value()} if ok else None
+        w.dispose(dlg)
+        if ok:
+            self._overrides[job.folder] = (res_clips, seq_state)
             self._rebuild()
 
     @staticmethod
@@ -1054,12 +1061,16 @@ class BatchDialog(QDialog):
             return
         self._stop_listen()
         dlg = VolumeDialog(proj, self._vol_for(row), self._row_info[row], self.jobs[row].name, self)
-        if dlg.exec():
+        ok = bool(dlg.exec())
+        reset = dlg.reset
+        vals = dlg.values() if ok and not reset else None
+        w.dispose(dlg)
+        if ok:
             folder = self.jobs[row].folder
-            if dlg.reset:
+            if reset:
                 self._vol_overrides.pop(folder, None)
             else:
-                self._vol_overrides[folder] = dlg.values()
+                self._vol_overrides[folder] = vals
             self._rebuild()
 
     def _reset_volume(self, row: int) -> None:
@@ -1072,6 +1083,8 @@ class BatchDialog(QDialog):
             self.player_panel.player.pause()
 
     def done(self, r) -> None:  # đóng hộp thoại: dừng hẳn trình phát
+        if hasattr(self, "_space"):
+            self._space.detach()
         if hasattr(self, "player_panel"):
             self._preview_timer.stop()
             self.player_panel.shutdown()

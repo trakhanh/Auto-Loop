@@ -15,6 +15,7 @@ a = Analysis(
     runtime_hooks=[],
     excludes=[
         "tkinter", "pytest", "unittest", "pydoc", "setuptools", "pip",
+        "yaml", "psutil", "charset_normalizer",
         "PySide6.QtWebEngineCore", "PySide6.QtWebEngineWidgets", "PySide6.QtWebEngineQuick",
         "PySide6.QtWebChannel", "PySide6.QtWebSockets", "PySide6.QtPdf", "PySide6.QtPdfWidgets",
         "PySide6.QtQml", "PySide6.QtQuick", "PySide6.QtQuickWidgets", "PySide6.Qt3DCore", "PySide6.QtCharts",
@@ -24,10 +25,10 @@ a = Analysis(
     ],
     noarchive=False,
 )
-# bỏ các thư viện Qt bị plugin kéo theo nhưng app không dùng (PDF, QML/Quick, bàn phím ảo)
+# bỏ các thư viện Qt / OpenGL phần mềm / OpenSSL không dùng (Qt6Network dùng Schannel có sẵn của Windows)
 # (Qt6Network giữ lại: Qt6Multimedia — trình phát trong hộp thoại cắt đoạn — cần nó)
 DROP = ("qt6pdf", "qpdf", "qt6qml", "qt6quick", "qt6virtualkeyboard", "qtvirtualkeyboard",
-        "qopensslbackend", "qcertonlybackend")
+        "qopensslbackend", "qcertonlybackend", "opengl32sw", "libcrypto-3-x64", "libssl-3-x64")
 a.binaries = [b for b in a.binaries if not any(k in Path(b[0]).name.lower() for k in DROP)]
 a.datas = [d for d in a.datas if "translations" not in d[0].replace("\\", "/") or
            any(k in Path(d[0]).name for k in ("_vi", "_en"))]

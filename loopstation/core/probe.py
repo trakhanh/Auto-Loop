@@ -65,17 +65,16 @@ def _key(path: str) -> tuple:
 
 def cold_keys(paths) -> dict[tuple, str]:
     """Các file chưa có trong bộ nhớ đệm probe (key → path). File không tồn tại không tính: probe() trả lỗi ngay."""
-    out: dict[tuple, str] = {}
+    keyed: list[tuple[tuple, str]] = []
     for p in paths:
         try:
-            k = _key(p)
+            keyed.append((_key(p), p))
         except OSError:
             continue
-        with _lock:
-            hit = k in _cache
-        if not hit:
-            out[k] = p
-    return out
+    if not keyed:
+        return {}
+    with _lock:
+        return {k: p for k, p in keyed if k not in _cache}
 
 
 def _parse_rate(text: str | None) -> Fraction:
@@ -167,8 +166,13 @@ def _probe_uncached(path: str) -> MediaInfo:
 
 
 def probe_many(paths: list[str]) -> list[MediaInfo]:
-    with ThreadPoolExecutor(max_workers=8) as ex:
-        return list(ex.map(probe, paths))
+    if not paths:
+        return []
+    cold = list(cold_keys(paths).values())
+    if len(cold) >= 2:
+        with ThreadPoolExecutor(max_workers=min(8, len(cold))) as ex:
+            list(ex.map(probe, cold))
+    return [probe(p) for p in paths]
 
 
 def frames_at(info: MediaInfo, fps: Fraction, image_duration: float = 8.0) -> int:

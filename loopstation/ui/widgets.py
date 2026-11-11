@@ -11,8 +11,8 @@ import hashlib
 from concurrent.futures import ThreadPoolExecutor
 
 from PySide6.QtCore import QEasingCurve, QEvent, QObject, QPoint, QPropertyAnimation, QRect, QRectF, QSize, Qt, QTimer, Signal
-from PySide6.QtGui import (QFontMetrics, QColor, QFont, QIcon, QImage, QKeyEvent, QKeySequence, QPainter, QPainterPath, QPen,
-                           QPixmap, QRegularExpressionValidator, QShortcut)
+from PySide6.QtGui import (QFontMetrics, QColor, QFont, QIcon, QImage, QImageReader, QKeyEvent, QKeySequence, QPainter,
+                           QPainterPath, QPen, QPixmap, QRegularExpressionValidator, QShortcut)
 from PySide6.QtWidgets import (
     QApplication, QAbstractScrollArea, QAbstractSlider, QAbstractSpinBox, QComboBox, QFrame, QGraphicsOpacityEffect,
     QLayout, QMenu, QMessageBox, QScrollArea, QScrollBar, QSizePolicy, QStackedWidget,
@@ -167,8 +167,12 @@ class ProbeWarmer(QObject):
 
 
 def _iter_probe(paths):
+    if len(paths) <= 1:
+        for p in paths:
+            yield probe.probe(p)
+        return
     from concurrent.futures import ThreadPoolExecutor
-    with ThreadPoolExecutor(max_workers=8) as ex:
+    with ThreadPoolExecutor(max_workers=min(8, len(paths))) as ex:
         yield from ex.map(probe.probe, paths)
 
 
@@ -849,7 +853,13 @@ def dispose(dlg: QObject) -> None:
     """Dọn hộp thoại đã đóng (đọc kết quả xong mới gọi): xoá hẳn để nhả trình phát / ảnh khung hình, và bỏ các đăng
     ký đổi bộ màu (theme.on_change) của nó + widget con — không thì lần đổi màu / cỡ chữ sau gọi vào widget đã xoá
     (vỏ Python của hộp thoại có thể còn sống thêm một lúc vì vòng tham chiếu)."""
-    mine = {id(dlg)} | {id(c) for c in dlg.findChildren(QObject)}
+    children = dlg.findChildren(QObject)
+    for c in (dlg, *children):
+        if hasattr(c, "detach"):
+            c.detach()
+        if isinstance(c, (ThumbLoader, ThumbIcons)):
+            c.shutdown()
+    mine = {id(dlg)} | {id(c) for c in children}
     theme._LISTENERS[:] = [(ref, fn) for ref, fn in theme._LISTENERS if id(ref()) not in mine]
     dlg.deleteLater()
 
@@ -1286,11 +1296,25 @@ class ThumbLoader(QObject):
     """Tạo ảnh nhỏ (frame giây thứ 1) cho clip ở luồng nền, có cache trên đĩa."""
     image = Signal(str, QImage)  # (đường dẫn clip, ảnh đã giải mã ở luồng nền — rỗng nếu lỗi; QPixmap chỉ tạo ở luồng giao diện)
     W, H = 72, 40
+    _MEM_MAX = 512
 
     def __init__(self, parent=None):
         super().__init__(parent)
         self._closed = False
-        self._pool = ThreadPoolExecutor(max_workers=2)
+        self._mem: dict[str, QImage] = {}
+        self._mem_lock = threading.Lock()
+        workers = min(6, max(2, (os.cpu_count() or 4) // 2))
+        self._pool = ThreadPoolExecutor(max_workers=workers)
+
+    def _store_mem(self, key: str, img: QImage) -> None:
+        if self._closed:
+            return
+        with self._mem_lock:
+            if key in self._mem:
+                self._mem.pop(key, None)
+            elif len(self._mem) >= self._MEM_MAX:
+                self._mem.pop(next(iter(self._mem)), None)
+            self._mem[key] = img
 
     def shutdown(self) -> None:
         self._closed = True
@@ -1298,6 +1322,8 @@ class ThumbLoader(QObject):
             self._pool.shutdown(wait=False, cancel_futures=True)
         except Exception:  # noqa: BLE001
             pass
+        with self._mem_lock:
+            self._mem.clear()
 
     def request(self, paths: list[str]) -> None:
         if self._closed:
@@ -1318,31 +1344,83 @@ class ThumbLoader(QObject):
             except RuntimeError:
                 pass
 
+    def _render_image(self, path: str, out: Path) -> QImage | None:
+        tw, th = self.W * 2, self.H * 2
+        reader = QImageReader(path)
+        reader.setAutoTransform(True)
+        sz = reader.size()
+        if sz.isValid() and sz.width() > 0 and sz.height() > 0:
+            reader.setScaledSize(sz.scaled(tw, th, Qt.AspectRatioMode.KeepAspectRatio))
+        src = reader.read()
+        if src.isNull():
+            return None
+        if src.width() != tw and src.height() != th:
+            src = src.scaled(tw, th, Qt.AspectRatioMode.KeepAspectRatio, Qt.TransformationMode.SmoothTransformation)
+        canvas = QImage(tw, th, QImage.Format.Format_RGB32)
+        canvas.fill(QColor(0x11, 0x14, 0x1b))
+        p = QPainter(canvas)
+        p.drawImage((tw - src.width()) // 2, (th - src.height()) // 2, src)
+        p.end()
+        tmp = out.with_name(f"{out.stem}.{os.getpid()}.{threading.get_ident()}.tmp.jpg")
+        try:
+            if canvas.save(str(tmp), "JPG", 85):
+                os.replace(tmp, out)
+            else:
+                tmp.unlink(missing_ok=True)
+        except OSError:
+            tmp.unlink(missing_ok=True)
+        return canvas
+
     def _render(self, path: str):
         try:
             st = os.stat(path)
         except OSError:
-            return
+            return None
         from ..core.video_build import color_fix, color_key, tone_chain
         key = hashlib.sha1(f"{path}|{st.st_size}|{st.st_mtime_ns}|{color_key(path)}".encode("utf-8")).hexdigest()[:20]
         out = ft.cache_dir("thumbs") / f"{key}.jpg"
-        if not out.is_file():
-            is_img = Path(path).suffix.lower() in IMAGE_EXTS
-            seek = [] if is_img else ["-ss", "1"]
-            # cùng cách hiểu màu như lúc xuất (clip HDR → SDR), nếu không ảnh nhỏ của clip HDR xỉn hẳn
-            vf = (f"{color_fix(path)}scale={self.W * 2}:{self.H * 2}:force_original_aspect_ratio=decrease,"
-                  f"{tone_chain(path)}pad={self.W * 2}:{self.H * 2}:(ow-iw)/2:(oh-ih)/2:color=0x11141b")
+        if out.is_file():
+            with self._mem_lock:
+                cached = self._mem.get(key)
+            if cached is not None:
+                return cached
+            img = QImage(str(out))
+            if not img.isNull():
+                self._store_mem(key, img)
+                return img
+        is_img = Path(path).suffix.lower() in IMAGE_EXTS
+        if is_img:
+            img = self._render_image(path, out)
+            if img is not None:
+                self._store_mem(key, img)
+                return img
+        seek = [] if is_img else ["-ss", "1"]
+        # cùng cách hiểu màu như lúc xuất (clip HDR → SDR), nếu không ảnh nhỏ của clip HDR xỉn hẳn
+        vf = (f"{color_fix(path)}scale={self.W * 2}:{self.H * 2}:force_original_aspect_ratio=decrease,"
+              f"{tone_chain(path)}pad={self.W * 2}:{self.H * 2}:(ow-iw)/2:(oh-ih)/2:color=0x11141b")
+        tmp = out.with_name(f"{out.stem}.{os.getpid()}.{threading.get_ident()}.tmp.jpg")
+        common = ["-v", "error", "-y", "-threads", "1"]
+        tail = ["-an", "-sn", "-dn", "-frames:v", "1", "-vf", vf, "-q:v", "4", str(tmp)]
+        try:
+            ft.run([ft.ffmpeg(), *common, *seek, "-i", path, *tail], timeout=30)
+            if not tmp.is_file() and seek and not self._closed:  # clip ngắn hơn 1 giây
+                ft.run([ft.ffmpeg(), *common, "-i", path, *tail], timeout=30)
+            if tmp.is_file():
+                try:
+                    os.replace(tmp, out)
+                except OSError:
+                    tmp.unlink(missing_ok=True)
+        except Exception:  # noqa: BLE001
             try:
-                ft.run([ft.ffmpeg(), "-v", "error", "-y", *seek, "-i", path, "-frames:v", "1", "-vf", vf,
-                        "-q:v", "4", str(out)], timeout=30)
-                if not out.is_file() and not self._closed:  # clip ngắn hơn 1 giây
-                    ft.run([ft.ffmpeg(), "-v", "error", "-y", "-i", path, "-frames:v", "1", "-vf", vf,
-                            str(out)], timeout=30)
-            except Exception:  # noqa: BLE001
-                return
+                tmp.unlink(missing_ok=True)
+            except OSError:
+                pass
+            return None
         if out.is_file():
             img = QImage(str(out))
-            return None if img.isNull() else img
+            if not img.isNull():
+                self._store_mem(key, img)
+                return img
         return None
 
 

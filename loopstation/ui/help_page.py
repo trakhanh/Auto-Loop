@@ -1043,15 +1043,22 @@ class HelpPage(QWidget):
         dlg.resize(min(pix.width() + 24, scr.width() - 80 if scr else 1400),
                    min(pix.height() + 24, scr.height() - 80 if scr else 900))
         dlg.exec()
+        from . import widgets as w
+        w.dispose(dlg)
 
     def _filter(self, text: str) -> None:
         from .widgets import fold
         words = fold(text).split()
+        index = getattr(self, "_search_index", None)
+        if index is None:
+            index = self._search_index = {
+                tid: fold(title + " " + META.get(tid, {}).get("when", "") + " " + _plain(html))
+                for tid, _grp, _ic, title, html in TOPICS
+            }
         shown_groups: set[str] = set()
         first = None
-        for tid, grp, _ic, title, html in TOPICS:
-            meta = META.get(tid, {})
-            hay = fold(title + " " + meta.get("when", "") + " " + _plain(html))
+        for tid, grp, _ic, _title, _html in TOPICS:
+            hay = index[tid]
             ok = all(wd in hay for wd in words)
             self._items[tid].setHidden(not ok)
             if ok:

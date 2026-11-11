@@ -54,9 +54,28 @@ def _files(folder: Path, exts: set[str]) -> list[str]:
     for root, dirs, files in os.walk(folder):
         dirs[:] = sorted(d for d in dirs if not _skip_dir(d))
         for f in files:
-            if not f.startswith((".", "~")) and Path(f).suffix.lower() in exts and ".dang-xuat." not in f:
+            if not f.startswith((".", "~")) and os.path.splitext(f)[1].lower() in exts and ".dang-xuat." not in f:
                 out.append(os.path.join(root, f))
     return sorted(out, key=il.natural_key)
+
+
+def _scan_dir(folder: Path, music_only: bool = False) -> tuple[list[str], list[str]]:
+    """Quét một lần cây thư mục để lấy cả video/ảnh lẫn nhạc."""
+    clips: list[str] = []
+    music: list[str] = []
+    for root, dirs, files in os.walk(folder):
+        dirs[:] = sorted(d for d in dirs if not _skip_dir(d))
+        for f in files:
+            if f.startswith((".", "~")) or ".dang-xuat." in f:
+                continue
+            ext = os.path.splitext(f)[1].lower()
+            if not music_only and ext in VISUAL_EXTS:
+                clips.append(os.path.join(root, f))
+            elif ext in AUDIO_EXTS:
+                music.append(os.path.join(root, f))
+    clips.sort(key=il.natural_key)
+    music.sort(key=il.natural_key)
+    return clips, music
 
 
 def scan(parent: str, music_only: bool = False) -> list[FolderJob]:
@@ -65,14 +84,15 @@ def scan(parent: str, music_only: bool = False) -> list[FolderJob]:
     jobs: list[FolderJob] = []
     if not parent or not root.is_dir() or is_drive_root(parent):  # cả ổ đĩa (D:\): không quét, tránh treo app
         return jobs
-    subs = sorted((d for d in root.iterdir() if d.is_dir() and not _skip_dir(d.name)),
+    entries = list(root.iterdir())
+    subs = sorted((d for d in entries if d.is_dir() and not _skip_dir(d.name)),
                   key=lambda d: il.natural_key(d.name))
     if not subs and any(f.is_file() and f.suffix.lower() in (AUDIO_EXTS if music_only else VISUAL_EXTS)
-                        for f in root.iterdir()):
+                        for f in entries):
         subs = [root]  # chọn thẳng thư mục chứa file (ví dụ cả mùa 33_… 34_… nằm chung): chính nó là một việc
     for d in subs:
-        job = FolderJob(folder=str(d), name=d.name, clips=[] if music_only else _files(d, VISUAL_EXTS),
-                        music=_files(d, AUDIO_EXTS))
+        clips, music = _scan_dir(d, music_only)
+        job = FolderJob(folder=str(d), name=d.name, clips=clips, music=music)
         if music_only:
             if not job.music:
                 job.error = "Không có file nhạc"

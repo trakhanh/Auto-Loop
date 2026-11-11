@@ -12,17 +12,49 @@ from . import ffmpeg_tools as ft
 from .planner import MusicItem
 from .project import MusicSettings, atomic_write
 
-_lock = threading.Lock()
+_lock = threading.RLock()
+_db_mem: dict[str, tuple[tuple[int, int, int], dict]] = {}
+
+
+def _peek_json_cached(p: Path) -> dict:
+    """Đọc JSON có bộ nhớ đệm RAM theo (mtime_ns, ctime_ns, size) — tự đọc lại khi file trên đĩa đổi hoặc xoá."""
+    key = os.path.normcase(str(p))
+    try:
+        st = p.stat()
+    except OSError:
+        with _lock:
+            _db_mem.pop(key, None)
+        return {}
+    sig = (st.st_mtime_ns, st.st_ctime_ns, st.st_size)
+    with _lock:
+        hit = _db_mem.get(key)
+        if hit is not None and hit[0] == sig:
+            return hit[1]
+    try:
+        data = json.loads(p.read_text(encoding="utf-8"))
+        if not isinstance(data, dict):
+            data = {}
+    except (OSError, ValueError):
+        data = {}
+    with _lock:
+        _db_mem[key] = (sig, data)
+        return data
+
+
+def _write_json_cached(p: Path, db: dict) -> None:
+    """Ghi JSON nguyên tử và cập nhật ngay bộ nhớ đệm RAM (gọi khi đang giữ `_lock`)."""
+    snap = dict(db)
+    atomic_write(p, json.dumps(snap, ensure_ascii=False))
+    key = os.path.normcase(str(p))
+    try:
+        st = p.stat()
+        _db_mem[key] = ((st.st_mtime_ns, st.st_ctime_ns, st.st_size), snap)
+    except OSError:
+        _db_mem.pop(key, None)
 
 
 def _loudness_db() -> dict:
-    p = ft.data_dir() / "loudness.json"
-    if p.is_file():
-        try:
-            return json.loads(p.read_text(encoding="utf-8"))
-        except (OSError, ValueError):
-            return {}
-    return {}
+    return dict(_peek_json_cached(ft.data_dir() / "loudness.json"))
 
 
 def _file_id(path: str) -> str:
@@ -31,10 +63,31 @@ def _file_id(path: str) -> str:
 
 
 def cached_loudness(path: str) -> float | None:
+    db = _peek_json_cached(ft.data_dir() / "loudness.json")
+    if not db:
+        return None
     try:
-        return _loudness_db().get(_file_id(path))
+        return db.get(_file_id(path))
     except OSError:
         return None
+
+
+def cached_loudnesses(paths) -> dict[str, float | None]:
+    """Đọc LUFS đã lưu cho nhiều file cùng lúc (chỉ kiểm tra `loudness.json` đúng 1 lần)."""
+    if not paths:
+        return {}
+    db = _peek_json_cached(ft.data_dir() / "loudness.json")
+    if not db:
+        return {p: None for p in paths}
+    out: dict[str, float | None] = {}
+    for p in paths:
+        if p in out:
+            continue
+        try:
+            out[p] = db.get(_file_id(p))
+        except OSError:
+            out[p] = None
+    return out
 
 
 # ----- file nhạc có đoạn hỏng -----
@@ -55,11 +108,7 @@ def is_damaged(runner: ft.Runner, path: str) -> bool:
         fid = _file_id(path)
     except OSError:
         return False
-    with _lock:
-        try:
-            db = json.loads(_check_db_path().read_text(encoding="utf-8")) if _check_db_path().is_file() else {}
-        except (OSError, ValueError):
-            db = {}
+    db = _peek_json_cached(_check_db_path())
     if fid in db:
         return bool(db[fid])
     try:
@@ -82,14 +131,12 @@ def mark_damaged(path: str) -> None:
 
 
 def _remember(fid: str, bad: bool) -> None:
+    p = _check_db_path()
     with _lock:
-        try:
-            db = json.loads(_check_db_path().read_text(encoding="utf-8")) if _check_db_path().is_file() else {}
-        except (OSError, ValueError):
-            db = {}
+        db = dict(_peek_json_cached(p))
         db[fid] = bad
         try:
-            atomic_write(_check_db_path(), json.dumps(db, ensure_ascii=False))
+            _write_json_cached(p, db)
         except OSError:
             pass
 
@@ -243,14 +290,44 @@ def volume_db(pct: int) -> float:
 
 def track_gains(runner: ft.Runner, ms: MusicSettings, paths: dict[int, str], log=None, on_step=None) -> dict[int, float]:
     """Độ khuếch đại (dB) cho từng bài đang dùng: chuẩn hoá về mức LUFS đích (nếu bật) + âm lượng riêng của bài."""
+    from concurrent.futures import ThreadPoolExecutor
     gains: dict[int, float] = {}
     tracks = sorted(paths)
-    use = usable_paths(runner, paths) if ms.loudness_enabled else paths  # bài hỏng: đo trên bản sạch (dùng lại lúc ghép)
-    for k, t in enumerate(tracks):
-        if ms.loudness_enabled:
+    measured: dict[tuple[str, str], tuple[float | None, list[str]]] = {}
+    use_map: dict[int, tuple[str, str]] = {}
+    if ms.loudness_enabled and tracks:
+        use = usable_paths(runner, paths)  # bài hỏng: đo trên bản sạch (dùng lại lúc ghép)
+        use_map = {t: (paths[t], use[t]) for t in tracks}
+        uniq = list(dict.fromkeys(use_map.values()))
+        done_n = 0
+        step_lock = threading.Lock()
+
+        def measure_one(pair: tuple[str, str]):
+            nonlocal done_n
+            orig, u = pair
+            notes: list[str] = []
+            with step_lock:
+                idx = done_n
+                done_n += 1
             if on_step:
-                on_step(k, len(tracks))
-            lufs = loudness_or_none(runner, paths[t], use[t], log)
+                on_step(idx, len(uniq))
+            val = loudness_or_none(runner, orig, u, notes.append if log else None)
+            return pair, (val, notes)
+
+        if len(uniq) >= 2:
+            with ThreadPoolExecutor(max_workers=min(4, len(uniq))) as pool:
+                measured = dict(pool.map(measure_one, uniq))
+        else:
+            measured = dict(measure_one(p) for p in uniq)
+    logged_notes: set[tuple[str, str]] = set()
+    for t in tracks:
+        if ms.loudness_enabled:
+            pair = use_map[t]
+            lufs, notes = measured[pair]
+            if log and pair not in logged_notes:
+                logged_notes.add(pair)
+                for msg in notes:
+                    log(msg)
             if lufs is not None:
                 gains[t] = max(-20.0, min(20.0, ms.lufs - lufs))
                 if log:
@@ -322,9 +399,10 @@ def measure_loudness(runner: ft.Runner, path: str) -> float | None:
         return None
     with _lock:
         try:  # chỉ là bộ nhớ đệm: ghi không được (ổ đầy / file khoá) thì thôi, không làm hỏng lượt xuất
-            db = _loudness_db()
+            p = ft.data_dir() / "loudness.json"
+            db = dict(_peek_json_cached(p))
             db[_file_id(path)] = value
-            atomic_write(ft.data_dir() / "loudness.json", json.dumps(db, ensure_ascii=False))
+            _write_json_cached(p, db)
         except OSError:
             pass
     return value
@@ -334,6 +412,161 @@ def escape_filter_value(value: str) -> str:
     """Escape một giá trị option nằm trong filtergraph (2 cấp: option rồi graph)."""
     level1 = re.sub(r"([\\':])", r"\\\1", value)
     return re.sub(r"([\\'\[\],;])", r"\\\1", level1)
+
+
+MUSIC_DIRECT_MAX = 32  # lịch phát dài hơn mức này thì dựng sẵn khối FLAC rồi nối tuần tự, tránh mở hàng trăm amovie cùng lúc
+MUSIC_BLK_VERSION = "mb1"
+
+
+def _music_block(runner: ft.Runner, path: str, gain_db: float, duration: float,
+                 fade_in: float, fade_out: float, pad_gap: float) -> Path:
+    """Một lượt phát bài nhạc đã áp sẵn âm lượng, fade đầu/cuối, đệm lặng (FLAC 48 kHz stereo s16 trong bộ nhớ đệm)."""
+    import hashlib
+    fid = _file_id(path)
+    key = hashlib.sha1(
+        f"{MUSIC_BLK_VERSION}|{fid}|{gain_db:.2f}|{duration:.6f}|{fade_in:.3f}|{fade_out:.3f}|{pad_gap:.3f}"
+        .encode("utf-8")
+    ).hexdigest()[:24]
+    out = ft.cache_dir("musicblk") / f"{key}.flac"
+    if out.is_file() and out.stat().st_size > 0:
+        try:
+            os.utime(out)
+        except OSError:
+            pass
+        return out
+    src = escape_filter_value(path.replace("\\", "/"))
+    chain = (f"amovie=filename={src},asetpts=PTS-STARTPTS,aresample=48000,"
+             f"aformat=sample_fmts=fltp:channel_layouts=stereo,"
+             f"volume={gain_db:.2f}dB,"
+             f"apad=whole_dur={duration:.6f},atrim=end={duration:.6f}")
+    if fade_in > 0:
+        chain += f",afade=t=in:d={fade_in:.3f}:curve=tri"
+    if fade_out > 0:
+        chain += f",afade=t=out:st={max(0.0, duration - fade_out):.6f}:d={fade_out:.3f}:curve=tri"
+    if pad_gap > 0:
+        chain += f",apad=pad_dur={pad_gap:.3f}"
+    chain += ",aformat=sample_fmts=s16:sample_rates=48000:channel_layouts=stereo[o]"
+    tmp = out.with_name(f"{key}.{os.getpid()}-{threading.get_ident()}.tmp.flac")
+    try:
+        runner.ffmpeg(["-v", "error", "-filter_complex", chain, "-map", "[o]",
+                       "-c:a", "flac", "-compression_level", "1", str(tmp)])
+        try:
+            os.replace(tmp, out)
+        except OSError:
+            tmp.unlink(missing_ok=True)
+            if out.is_file() and out.stat().st_size > 0:
+                return out
+            raise
+    except BaseException:
+        tmp.unlink(missing_ok=True)
+        raise
+    return out
+
+
+def _silence_block(runner: ft.Runner, duration: float) -> Path:
+    """Khối im lặng dài `duration` giây (FLAC 48 kHz stereo s16, vài KB) để chèn khoảng chờ trên làn crossfade."""
+    import hashlib
+    key = hashlib.sha1(f"{MUSIC_BLK_VERSION}|sil|{duration:.6f}".encode("utf-8")).hexdigest()[:24]
+    out = ft.cache_dir("musicblk") / f"{key}.flac"
+    if out.is_file() and out.stat().st_size > 0:
+        return out
+    tmp = out.with_name(f"{key}.{os.getpid()}-{threading.get_ident()}.tmp.flac")
+    try:
+        runner.ffmpeg(["-v", "error", "-f", "lavfi", "-i", "anullsrc=r=48000:cl=stereo", "-t", f"{duration:.6f}",
+                       "-af", CLEAN_FMT, "-c:a", "flac", "-compression_level", "1", str(tmp)])
+        try:
+            os.replace(tmp, out)
+        except OSError:
+            tmp.unlink(missing_ok=True)
+            if out.is_file() and out.stat().st_size > 0:
+                return out
+            raise
+    except BaseException:
+        tmp.unlink(missing_ok=True)
+        raise
+    return out
+
+
+def music_concat_graph(
+    runner: ft.Runner,
+    items: list[MusicItem],
+    paths: dict[int, str],
+    gains_db: dict[int, float],
+    ms: MusicSettings,
+    total: float,
+    job_dir: Path,
+    input_idx: int,
+    out_label: str = "music",
+) -> tuple[list[str], list[str]]:
+    """Dành cho lịch phát dài (> `MUSIC_DIRECT_MAX` lượt): mã hoá từng khối bài duy nhất 1 lần ra FLAC rồi nối bằng
+    1–2 luồng `-f concat` tuần tự thay vì mở đồng thời hàng trăm bộ giải mã `amovie=` trong một lệnh ffmpeg."""
+    from concurrent.futures import ThreadPoolExecutor
+    from . import video_build
+
+    xf = ms.crossfade if ms.crossfade > 0 else 0.0
+    n = len(items)
+    specs = []
+    for k, it in enumerate(items):
+        fi = xf if (xf > 0 and k > 0) else 0.0
+        fo = xf if (xf > 0 and k < n - 1) else 0.0
+        pad = ms.gap if (xf == 0 and ms.gap > 0 and k < n - 1) else 0.0
+        gdb = round(gains_db.get(it.track, 0.0), 2)
+        specs.append((paths[it.track], gdb, round(it.duration, 6), round(fi, 3), round(fo, 3), round(pad, 3)))
+    uniq_specs = list(dict.fromkeys(specs))
+    if len(uniq_specs) >= 2:
+        with ThreadPoolExecutor(max_workers=min(4, len(uniq_specs))) as pool:
+            blk_map = dict(zip(uniq_specs, pool.map(lambda s: _music_block(runner, *s), uniq_specs)))
+    else:
+        blk_map = {s: _music_block(runner, *s) for s in uniq_specs}
+
+    inputs: list[str] = []
+    lines: list[str] = []
+    if xf > 0 and n > 1:
+        gap_durs: list[float] = []
+        lane_rows: list[list[tuple[str, float | int]]] = [[], []]
+        for lane in (0, 1):
+            pos = 0.0
+            for k in range(lane, n, 2):
+                it = items[k]
+                gap = round(it.start - pos, 6)
+                if gap > 1e-4:
+                    gap_durs.append(gap)
+                    lane_rows[lane].append(("gap", gap))
+                lane_rows[lane].append(("blk", k))
+                pos = it.start + it.duration
+        uniq_gaps = list(dict.fromkeys(gap_durs))
+        if len(uniq_gaps) >= 2:
+            with ThreadPoolExecutor(max_workers=min(4, len(uniq_gaps))) as pool:
+                sil_map = dict(zip(uniq_gaps, pool.map(lambda d: _silence_block(runner, d), uniq_gaps)))
+        else:
+            sil_map = {d: _silence_block(runner, d) for d in uniq_gaps}
+        for lane in (0, 1):
+            cpath = job_dir / f"music_lane{lane}.ffconcat"
+            citems = [(sil_map[float(val)], float(val)) if kind == "gap"
+                      else (blk_map[specs[int(val)]], items[int(val)].duration)
+                      for kind, val in lane_rows[lane]]
+            video_build.write_concat(cpath, citems)
+            inputs += ["-f", "concat", "-safe", "0", "-i", str(cpath)]
+            lines.append(f"[{input_idx + lane}:a]aresample=48000:async=1,"
+                         f"aformat=sample_fmts=fltp:channel_layouts=stereo[lane{lane}];")
+        lines.append("[lane0][lane1]amix=inputs=2:normalize=0:duration=longest[xc];")
+        last = "xc"
+    else:
+        cpath = job_dir / "music_lane0.ffconcat"
+        citems = [(blk_map[specs[k]], items[k].duration + specs[k][5]) for k in range(n)]
+        video_build.write_concat(cpath, citems)
+        inputs += ["-f", "concat", "-safe", "0", "-i", str(cpath)]
+        lines.append(f"[{input_idx}:a]aresample=48000:async=1,"
+                     f"aformat=sample_fmts=fltp:channel_layouts=stereo[xc];")
+        last = "xc"
+    tail = f"[{last}]apad,atrim=end={total:.6f}"
+    if ms.fade_in > 0:
+        tail += f",afade=t=in:d={min(ms.fade_in, total):.3f}"
+    if ms.fade_out > 0:
+        fo = min(ms.fade_out, total)
+        tail += f",afade=t=out:st={total - fo:.6f}:d={fo:.3f}"
+    lines.append(f"{tail}[{out_label}];")
+    return inputs, lines
 
 
 def music_graph(

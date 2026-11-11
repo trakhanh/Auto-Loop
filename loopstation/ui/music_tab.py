@@ -517,8 +517,10 @@ class MusicTab(QWidget):
         self._load_gen = getattr(self, "_load_gen", 0) + 1
         self.list.blockSignals(True)
         self.list.clear()
-        for t, info in zip(ms.tracks, w.probe.probe_many([t.path for t in ms.tracks])):
-            self.list.addTopLevelItem(self._make_item(t, info))
+        infos = w.probe.probe_many([t.path for t in ms.tracks])
+        lufs_map = audio_build.cached_loudnesses([t.path for t, inf in zip(ms.tracks, infos) if inf.ok])
+        for t, info in zip(ms.tracks, infos):
+            self.list.addTopLevelItem(self._make_item(t, info, lufs_map))
         self.list.blockSignals(False)
         self._refresh_track_styles()
         self.ambient.blockSignals(True)
@@ -636,16 +638,23 @@ class MusicTab(QWidget):
 
     def set_schedule(self, items: list[MusicItem], paths: list[str], total: float, banner: str) -> None:
         self.banner.setText(banner)
+        self.schedule_badge.setText(f"{len(items)} lượt phát")
+        shown = items[:3000]
+        sig = (theme.PALETTE, total >= 3600, len(items), tuple(paths),
+               tuple((it.track, int(round(it.start))) for it in shown))
+        if sig == getattr(self, "_sched_sig", None):
+            return
+        self._sched_sig = sig
         self.schedule.clear()
         long = total >= 3600
+        col = theme.qcolor("info_text")
         rows = []
-        for it in items[:3000]:
+        for it in shown:
             start = w.fmt_dur(it.start) if long else f"{int(it.start) // 60:02d}:{int(it.start) % 60:02d}"
             row = QTreeWidgetItem([start, Path(paths[it.track]).stem])
-            row.setForeground(0, theme.qcolor("info_text"))
+            row.setForeground(0, col)
             rows.append(row)
         self.schedule.addTopLevelItems(rows)
-        self.schedule_badge.setText(f"{len(items)} lượt phát")
 
     def _fit_cols(self) -> None:
         """Narrow list: hide Độ to gốc, then Âm lượng, until ~16 characters of the track name fit."""
@@ -724,8 +733,13 @@ class MusicTab(QWidget):
         pos = max(self.list.indexOfTopLevelItem(it) for it in sel) + 1 if sel else self.list.topLevelItemCount()
         self._insert_rows(self._clipboard, pos, "Đã dán")
 
-    def _make_item(self, t: MusicTrack, info: MediaInfo) -> QTreeWidgetItem:
-        lufs = audio_build.cached_loudness(t.path) if info.ok else None
+    def _make_item(self, t: MusicTrack, info: MediaInfo, lufs_map: dict | None = None) -> QTreeWidgetItem:
+        if not info.ok:
+            lufs = None
+        elif lufs_map is not None:
+            lufs = lufs_map.get(t.path)
+        else:
+            lufs = audio_build.cached_loudness(t.path)
         it = self.list.new_item([Path(t.path).name,
                                  w.fmt_dur(info.duration) if info.ok else f"LỖI: {info.error}",
                                  str(t.plays), str(t.volume), f"{lufs:.1f} LUFS" if lufs is not None else "—"],
@@ -784,10 +798,11 @@ class MusicTab(QWidget):
         if gen is not None and gen != getattr(self, "_load_gen", 0):
             return  # đã mở / tạo dự án khác trong lúc đang đọc file
         bad = [i for i in infos if not (i.ok and i.has_audio)]
+        lufs_map = audio_build.cached_loudnesses([i.path for i in infos if i.ok and i.has_audio])
         self.list.blockSignals(True)
         for info in infos:
             if info.ok and info.has_audio:
-                self.list.addTopLevelItem(self._make_item(MusicTrack(path=info.path), info))
+                self.list.addTopLevelItem(self._make_item(MusicTrack(path=info.path), info, lufs_map))
         self.list.blockSignals(False)
         self._refresh_track_styles()
         msg = f"Đã thêm {len(infos) - len(bad)} bài."
@@ -840,9 +855,11 @@ class MusicTab(QWidget):
         self._emit()
 
     def refresh_loudness(self) -> None:
+        items = self.list.items()
+        lufs_map = audio_build.cached_loudnesses([it.data(0, w.ROLE_DATA).path for it in items])
         self.list.blockSignals(True)
-        for it in self.list.items():
-            lufs = audio_build.cached_loudness(it.data(0, w.ROLE_DATA).path)
+        for it in items:
+            lufs = lufs_map.get(it.data(0, w.ROLE_DATA).path)
             if lufs is not None:
                 it.setText(COL_LUFS, f"{lufs:.1f} LUFS")
         self.list.blockSignals(False)

@@ -860,7 +860,6 @@ class ExportTab(QWidget):
     # ---------- hàng đợi ----------
     def set_queue(self, items: list[QueueItem]) -> None:
         self.items = items
-        self.queue.clear()
         status_colors = {
             "done": "success_text",
             "running": "info_text",

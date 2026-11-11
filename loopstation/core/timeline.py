@@ -58,13 +58,15 @@ class Timeline:
         if not self.video or self.video.error:
             return 0.0
         total = 0.0
+        rates: dict[int, float] = {}
         for clip, n, _ in self.video.all_plays():  # bỏ qua phần chồng crossfade (ước tính)
-            info = self.clip_infos[clip]
-            try:
-                rate = 1.0e6 if info.is_image else os.path.getsize(info.path) / max(info.duration, 0.1)
-            except OSError:
-                rate = 1.0e6
-            total += n * self.frames[clip] / float(self.fps) * rate * 1.3
+            if clip not in rates:
+                info = self.clip_infos[clip]
+                try:
+                    rates[clip] = 1.0e6 if info.is_image else os.path.getsize(info.path) / max(info.duration, 0.1)
+                except OSError:
+                    rates[clip] = 1.0e6
+            total += n * self.frames[clip] / float(self.fps) * rates[clip] * 1.3
         return total + 192_000 / 8 * self.total
 
 

@@ -119,7 +119,7 @@ def cache_dir(sub: str = "") -> Path:
 
 
 CACHE_PARTS = ("blocks", "srcaudio", "thumbs", "jobs", "estimate", "ambient", "ambientlib", "lookpreview", "cleanaudio",
-               "xuat-tam", "denoise")  # xuat-tam: video xuất ra máy trước khi chép lên Google Drive / OneDrive
+               "xuat-tam", "denoise", "musicblk")  # xuat-tam: video xuất ra máy trước khi chép lên Google Drive / OneDrive
 
 
 def preview_dir() -> Path:
@@ -161,7 +161,7 @@ def clean_temp() -> None:
 
 
 CACHE_LIMIT = 30 * 1024 ** 3  # bộ nhớ đệm khối video/tiếng gốc vượt mức này thì tự xoá bớt khối cũ nhất
-PRUNE_PARTS = ("blocks", "srcaudio", "estimate", "thumbs", "cleanaudio", "ambient", "denoise")  # thiếu file thì lần sau tự tạo lại
+PRUNE_PARTS = ("blocks", "srcaudio", "estimate", "thumbs", "cleanaudio", "ambient", "denoise", "musicblk")  # thiếu file thì lần sau tự tạo lại
 
 
 def _cache_files(parts=PRUNE_PARTS) -> list[tuple[float, int, Path]]:

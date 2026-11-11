@@ -373,7 +373,7 @@ class PreviewPlayer(QObject):
         self._seek_timer.timeout.connect(self._apply_seek)
 
     # ---------- dự án ----------
-    def set_project(self, project, gains: dict[str, float] | None = None, version: int = 0) -> None:
+    def set_project(self, project, gains: dict[str, float] | None = None, version: int = 0, tl=None) -> None:
         """Nạp (hoặc nạp lại khi dự án đổi) — giữ nguyên chỗ đang xem; đang phát thì phát tiếp từ chỗ đó."""
         self._gen += 1
         gen = self._gen
@@ -387,18 +387,19 @@ class PreviewPlayer(QObject):
         self._set_state("loading")
         self.message.emit("Đang tính lịch phát…")
         max_h = self._max_h()
+        ready_tl = tl if (tl is not None and getattr(tl, "ok", False)) else None
 
         def work():
             try:
                 music_only = project.output_kind == "music_only"
-                tl = timeline.build_audio(project, version) if music_only else timeline.build(project)
-                if not tl.ok:
-                    raise RuntimeError("\n".join(tl.errors))
-                sch = None if music_only else preview_engine.make_schedule(project, tl, max_h)
+                built = ready_tl or (timeline.build_audio(project, version) if music_only else timeline.build(project))
+                if not built.ok:
+                    raise RuntimeError("\n".join(built.errors))
+                sch = None if music_only else preview_engine.make_schedule(project, built, max_h)
                 if not music_only and sch is None:
                     raise RuntimeError("Chưa có hình để xem.")
                 try:
-                    self._built.emit(gen, tl, sch, "")
+                    self._built.emit(gen, built, sch, "")
                 except RuntimeError:
                     pass
             except Exception as e:  # noqa: BLE001
@@ -1187,9 +1188,19 @@ class SpaceToggle(QObject):
     def __init__(self, window: QWidget, panel_fn):
         super().__init__(window)
         self.window, self.panel_fn = window, panel_fn
-        QApplication.instance().installEventFilter(self)
+        app = QApplication.instance()
+        if app is not None:
+            app.installEventFilter(self)
+        window.destroyed.connect(self.detach)
+
+    def detach(self, *_) -> None:
+        app = QApplication.instance()
+        if app is not None:
+            app.removeEventFilter(self)
 
     def _target(self, obj):
+        if not self.window.isVisible():
+            return None
         panel = self.panel_fn()
         if panel is None or not panel.isVisible() or not isinstance(obj, QWidget):
             return None
@@ -1381,11 +1392,11 @@ class PreviewPanel(QFrame):
         return b
 
     # ---------- dữ liệu ----------
-    def open_project(self, project, gains: dict[str, float] | None = None, version: int = 0) -> None:
+    def open_project(self, project, gains: dict[str, float] | None = None, version: int = 0, tl=None) -> None:
         self.view.audio_only = project.output_kind == "music_only"
         if self.view.audio_only:
             self.view.image = None
-        self.player.set_project(project, gains, version)
+        self.player.set_project(project, gains, version, tl=tl)
 
     def clear(self, text: str) -> None:
         self.player.stop()

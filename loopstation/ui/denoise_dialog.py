@@ -36,14 +36,8 @@ def output_path(src: str, folder: str = "") -> Path:
 
 
 def has_video(runner: ffmpeg_tools.Runner, path: str) -> bool:
-    import subprocess
-    try:
-        out = subprocess.run([ffmpeg_tools.ffprobe(), "-v", "error", "-select_streams", "v", "-show_entries",
-                              "stream=codec_type", "-of", "csv=p=0", path], capture_output=True, text=True,
-                             timeout=60, creationflags=ffmpeg_tools.CREATE_NO_WINDOW).stdout
-    except (OSError, subprocess.SubprocessError):
-        return False
-    return "video" in out
+    from ..core import probe
+    return probe.probe(path).has_video
 
 
 def denoise_file(runner: ffmpeg_tools.Runner, src: str, level: str, out: Path, on_step=None) -> Path:

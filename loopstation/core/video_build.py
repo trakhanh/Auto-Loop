@@ -56,9 +56,9 @@ def seconds(frames: int, fps: Fraction) -> float:
 
 
 def _input(path: str, fps: Fraction) -> list[str]:
-    """Tham số đầu vào: ảnh tĩnh được lặp thành luồng hình ở đúng fps."""
+    """Tham số đầu vào: ảnh tĩnh chỉ giải mã 1 frame rồi nhân bản ở sau bước co giãn khung hình."""
     if os.path.splitext(path)[1].lower() in IMAGE_EXTS:
-        return ["-loop", "1", "-framerate", f"{fps.numerator}/{fps.denominator}", "-i", path]
+        return ["-framerate", f"{fps.numerator}/{fps.denominator}", "-i", path]
     hw = ft.OPTIONS.get("hwdec")
     return (["-hwaccel", hw] if hw else []) + ["-i", path]
 
@@ -113,8 +113,10 @@ def color_key(*paths: str) -> list[str]:
 
 def _norm(fit: str, w: int, h: int, fps: Fraction, p: str = "", path: str = "") -> str:
     """Chuỗi chuẩn hoá chung: hệ màu, khung hình, HDR → SDR, fps cố định, đệm frame cuối để luôn đủ frame."""
+    is_img = bool(path and os.path.splitext(path)[1].lower() in IMAGE_EXTS)
+    tail = "loop=loop=-1:size=1:start=0,setpts=N" if is_img else "tpad=stop_mode=clone:stop_duration=5"
     return (f"{color_fix(path)}setpts=PTS-STARTPTS,{fit_chain(fit, w, h, p)},{tone_chain(path)}"
-            f"fps={fps.numerator}/{fps.denominator},tpad=stop_mode=clone:stop_duration=5")
+            f"fps={fps.numerator}/{fps.denominator},{tail}")
 
 
 def _run_cached(runner: ft.Runner, sub: str, key: str, ext: str, build) -> Path:
@@ -290,7 +292,7 @@ def source_audio_segment(
         f = f",afade=t=out:st={dur - fade:.6f}:d={fade:.6f}" if fade > 0 else ""
         chains.append(f"[{last}]anull{f}[out]")
         return ["-v", "error", *inputs, "-filter_complex", ";".join(chains), "-map", "[out]",
-                "-c:a", "pcm_s16le", "-f", "wav", out]
+                "-vn", "-sn", "-dn", "-c:a", "pcm_s16le", "-f", "wav", out]
 
     return _run_cached(runner, "srcaudio", key, ".wav", build)
 

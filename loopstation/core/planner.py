@@ -332,6 +332,8 @@ def music_round(ms: MusicSettings, rng: random.Random, prev_last: int | None) ->
         return seq
     rng.shuffle(seq)
     if ms.order == "shuffle_no_repeat" and len(set(seq)) > 1:
+        if not _can_no_repeat(seq, prev_last):
+            return _spread(seq, prev_last)
         for _ in range(200):
             if _no_repeat_ok(seq, prev_last):
                 break
@@ -339,6 +341,17 @@ def music_round(ms: MusicSettings, rng: random.Random, prev_last: int | None) ->
         else:
             seq = _spread(seq, prev_last)
     return seq
+
+
+def _can_no_repeat(seq: list[int], prev_last: int | None) -> bool:
+    """Nguyên lý chuồng bồ câu: kiểm tra có tồn tại cách xếp không lặp liền (và khác `prev_last` ở đầu) không."""
+    n = len(seq)
+    counts: dict[int, int] = {}
+    for x in seq:
+        counts[x] = counts.get(x, 0) + 1
+    if max(counts.values()) > (n + 1) // 2:
+        return False
+    return prev_last is None or counts.get(prev_last, 0) <= n // 2
 
 
 def _no_repeat_ok(seq: list[int], prev_last: int | None) -> bool:
@@ -350,12 +363,15 @@ def _no_repeat_ok(seq: list[int], prev_last: int | None) -> bool:
 def _spread(seq: list[int], prev_last: int | None) -> list[int]:
     """Xếp tham lam: luôn chọn bài còn nhiều lượt nhất, khác bài vừa phát."""
     counts: dict[int, int] = {}
-    for x in seq:
+    first_pos: dict[int, int] = {}
+    for idx, x in enumerate(seq):
         counts[x] = counts.get(x, 0) + 1
+        first_pos.setdefault(x, idx)
     out, last = [], prev_last
     while counts:
-        cands = sorted(counts, key=lambda k: (-counts[k], seq.index(k)))
-        pick = next((c for c in cands if c != last), cands[0])
+        others = [k for k in counts if k != last]
+        pool = others if others else counts
+        pick = min(pool, key=lambda k: (-counts[k], first_pos[k]))
         out.append(pick)
         counts[pick] -= 1
         if not counts[pick]:
@@ -460,6 +476,9 @@ def _fix_repeats(seq: list[int], fixed: set[int], ms: MusicSettings) -> list[int
         return s
     # 2) xếp lại các ô không ghim: luôn lấy bài còn nhiều lượt nhất, khác bài bên trái (và bài ghim bên phải)
     counts: dict[int, int] = {}
+    first_pos: dict[int, int] = {}
+    for idx, x in enumerate(seq):
+        first_pos.setdefault(x, idx)
     for k in range(len(s)):
         if k not in fixed:
             counts[s[k]] = counts.get(s[k], 0) + 1
@@ -469,7 +488,7 @@ def _fix_repeats(seq: list[int], fixed: set[int], ms: MusicSettings) -> list[int
             continue
         left = g[k - 1] if k > 0 else None
         right = g[k + 1] if k + 1 < len(g) and k + 1 in fixed else None
-        cands = sorted(counts, key=lambda t: (-counts[t], seq.index(t)))
+        cands = sorted(counts, key=lambda t: (-counts[t], first_pos[t]))
         pick = next((t for t in cands if t != left and t != right), next((t for t in cands if t != left), cands[0]))
         g[k] = pick
         counts[pick] -= 1

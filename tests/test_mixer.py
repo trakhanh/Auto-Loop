@@ -107,3 +107,40 @@ def test_mixer_gain_and_limiter():
     first = m.mix(4800)
     m.gains["a"] = 0.0  # đổi giữa chừng có tác dụng ngay ở đoạn sau
     assert audioop.max(first, 2) > 16000 and audioop.max(m.mix(4800), 2) == 0
+
+
+def test_music_concat_graph_over_32_items(tmp_path, monkeypatch):
+    import math
+    import struct
+    import wave
+    from loopstation.core import timeline
+    from loopstation.core.render import RenderJob
+    monkeypatch.setenv("KTLS_DATA_DIR", str(tmp_path / "data"))
+    tracks = []
+    for k, freq in enumerate((440.0, 660.0)):
+        wav = tmp_path / f"t{k}.wav"
+        n = int(48000 * 0.25)
+        samples = [int(12000 * math.sin(2 * math.pi * freq * i / 48000)) for i in range(n)]
+        with wave.open(str(wav), "wb") as f:
+            f.setnchannels(2), f.setsampwidth(2), f.setframerate(48000)
+            f.writeframes(struct.pack(f"<{n * 2}h", *[s for x in samples for s in (x, x)]))
+        tracks.append(MusicTrack(str(wav)))
+
+    for xfade, gap, suffix in ((0.05, 0.0, "xfade"), (0.0, 0.02, "gap")):
+        p = Project(output_kind="music_only")
+        p.music.tracks = [MusicTrack(t.path) for t in tracks]
+        p.music.loudness_enabled = False
+        p.music.export_mode = "rounds"
+        p.music.export_rounds = 20  # 40 lượt > MUSIC_DIRECT_MAX (32)
+        p.music.export_format = "wav"
+        p.music.crossfade = xfade
+        p.music.gap = gap
+        p.music.fade_in = 0.02
+        p.music.fade_out = 0.05
+        tl = timeline.build_audio(p)
+        assert tl.ok and len(tl.music_items) == 40
+        out = tmp_path / f"out_{suffix}.wav"
+        RenderJob(p, {"h264": ["cpu"], "hevc": ["cpu"], "audio": ["cpu"]}, str(out), audio_only=True).run()
+        assert out.is_file()
+        assert abs(_dur(out) - tl.total) < 0.08
+        assert _mean_db(out) > -35.0

@@ -884,7 +884,6 @@ class VideoTab(QWidget):
         infos = w.probe.probe_many([c.path for c in vs.clips])
         for c, info in zip(vs.clips, infos):
             self.list.addTopLevelItem(self._make_item(c, info))
-        self._refresh_rows()
         self.list.blockSignals(False)
         set_combo(self.order, vs.order)
         self.seed.setValue(vs.seed)
@@ -1038,8 +1037,10 @@ class VideoTab(QWidget):
         it.setToolTip(COL_NAME, c.path)
         waiting = self._thumb_waiting.setdefault(c.path, [])
         waiting[:] = [i for i in waiting if shiboken6.isValid(i)]  # dòng đã xoá khỏi bảng: bỏ
+        first = not waiting
         waiting.append(it)
-        self.thumbs.request([c.path])
+        if first:
+            self.thumbs.request([c.path])
         it.setTextAlignment(COL_TRIM, Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignVCenter)
         for col in (COL_PLAYS, COL_LOOPXF, COL_NEXTXF, COL_DUR):  # số: căn phải, chữ số đều nhau (tabular)
             it.setTextAlignment(col, Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter)

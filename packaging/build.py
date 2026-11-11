@@ -103,6 +103,12 @@ def copy_ffmpeg() -> None:
     dst.mkdir(parents=True, exist_ok=True)
     for exe in ("ffmpeg.exe", "ffprobe.exe"):  # ffplay không cần: trình xem đã có sẵn trong app
         shutil.copy2(src / exe, dst / exe)
+    # Hỗ trợ cả bản FFmpeg full-shared (dùng chung avcodec/avformat/avfilter/*.dll → bộ cài nhẹ hơn ~130–160 MB)
+    dlls = sorted(src.glob("*.dll"))
+    for dll in dlls:
+        shutil.copy2(dll, dst / dll.name)
+    if dlls:
+        log(f"Đã chép kèm {len(dlls)} thư viện .dll của FFmpeg (bản shared).")
     for lic in (src.parent / "LICENSE", src.parent / "LICENSE.txt"):
         if lic.is_file():
             shutil.copy2(lic, dst / "FFmpeg-LICENSE.txt")

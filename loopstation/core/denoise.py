@@ -48,26 +48,41 @@ def _window():
 def _frames(x, starts):
     """Các khung N mẫu bắt đầu ở `starts` (ngoài biên → 0). x: (L, 2) → (len(starts), N, 2)."""
     import numpy as np
-    out = np.zeros((len(starts), N, x.shape[1]), dtype=np.float32)
+    n_fr = len(starts)
     total = len(x)
+    if n_fr > 0:
+        s0, s_end = int(starts[0]), int(starts[-1])
+        if s0 >= 0 and s_end + N <= total:
+            if n_fr == 1:
+                return np.array(x[s0:s0 + N][None], dtype=np.float32, copy=True)
+            step = int(starts[1]) - s0
+            if step > 0 and (n_fr == 2 or np.all(np.diff(starts) == step)):
+                win = np.lib.stride_tricks.sliding_window_view(x[s0:s_end + N], N, axis=0)
+                return np.array(win[::step].swapaxes(1, 2), dtype=np.float32, copy=True)
+    out = np.zeros((n_fr, N, x.shape[1]), dtype=np.float32)
     for j, s in enumerate(starts):
-        a, b = max(0, s), min(total, s + N)
+        s_i = int(s)
+        a, b = max(0, s_i), min(total, s_i + N)
         if b > a:
-            out[j, a - s:b - s] = x[a:b]
+            out[j, a - s_i:b - s_i] = x[a:b]
     return out
 
 
 def _box(a, r: int, axis: int):
     """Trung bình trượt 2r+1 ô theo `axis` (biên: lặp ô cuối)."""
     import numpy as np
-    pad = [(0, 0)] * a.ndim
-    pad[axis] = (r, r)
-    c = np.cumsum(np.pad(a, pad, mode="edge"), axis=axis, dtype=np.float64)
-    zero = np.zeros_like(np.take(c, [0], axis=axis))
-    c = np.concatenate([zero, c], axis=axis)
     n = a.shape[axis]
     k = 2 * r + 1
-    return ((np.take(c, range(k, k + n), axis=axis) - np.take(c, range(0, n), axis=axis)) / k).astype(np.float32)
+    pad = [(0, 0)] * a.ndim
+    pad[axis] = (r + 1, r)
+    p = np.pad(a, pad, mode="edge")
+    sl0 = [slice(None)] * a.ndim
+    sl0[axis] = slice(0, 1)
+    p[tuple(sl0)] = 0
+    c = np.cumsum(p, axis=axis, dtype=np.float64)
+    hi, lo = [slice(None)] * a.ndim, [slice(None)] * a.ndim
+    hi[axis], lo[axis] = slice(k, k + n), slice(0, n)
+    return ((c[tuple(hi)] - c[tuple(lo)]) * (1.0 / k)).astype(np.float32)
 
 
 def process(raw_in: Path, raw_out: Path, level: str, check=None, on_step=None) -> None:
@@ -83,6 +98,7 @@ def process(raw_in: Path, raw_out: Path, level: str, check=None, on_step=None) -
         return
     w = _window()
     w3 = w[None, :, None]
+    w_syn = (w / np.float32(1.5))[None, :, None]  # chia sẵn tổng w² = 1.5 ngay lúc tổng hợp, khỏi quét lại cả file trên đĩa
     first = -(N - HOP)  # khung đầu bắt đầu trước mẫu 0 → mẫu nào cũng nằm trong đúng N/HOP khung
     count = (total - first) // HOP + 1
 
@@ -114,7 +130,7 @@ def process(raw_in: Path, raw_out: Path, level: str, check=None, on_step=None) -
             gain = _box(gain, SMOOTH_F, 1)
         gain = np.maximum(gain, g_floor)
         keep = slice(a - lo, a - lo + (b - a))
-        y = np.fft.irfft(spec[keep] * gain[keep], n=N, axis=1).astype(np.float32) * w3
+        y = np.fft.irfft(spec[keep] * gain[keep], n=N, axis=1).astype(np.float32) * w_syn
         # cộng chồng: khung cách nhau 4 bước nằm sát nhau không chồng → mỗi nhóm cộng một lần (nhanh hơn từng khung)
         for r in range(min(N // HOP, b - a)):
             grp = y[r::N // HOP]
@@ -122,7 +138,6 @@ def process(raw_in: Path, raw_out: Path, level: str, check=None, on_step=None) -
             out[s:s + len(grp) * N] += grp.reshape(-1, 2)
         if on_step:
             on_step(b / count)
-    out[:] /= np.float32(1.5)  # tổng w² của Hann chồng 4 lớp = 1.5
     out.flush()
     del out
 
@@ -181,10 +196,34 @@ def denoise_paths(runner: ft.Runner, paths: dict[int, str], audible: dict[int, b
             log("Cảnh báo: thiếu thư viện numpy — bỏ qua bước lọc tạp âm tiếng gốc.")
         return paths
     files = list(dict.fromkeys(p for k, p in sorted(paths.items()) if audible.get(k)))
+    if not files:
+        return paths
     done: dict[str, str] = {}
-    for n, p in enumerate(files):
-        step = (lambda f, n=n: on_step((n + f) / len(files))) if on_step else None
-        done[p] = denoised_copy(runner, p, level, step)
+    if len(files) >= 2:
+        from concurrent.futures import ThreadPoolExecutor
+        prog = [0.0] * len(files)
+        plock = threading.Lock()
+
+        def run_one(item: tuple[int, str]) -> tuple[str, str]:
+            idx, p = item
+
+            def step(f: float) -> None:
+                if on_step:
+                    with plock:
+                        prog[idx] = f
+                        val = sum(prog) / len(files)
+                    on_step(val)
+
+            return p, denoised_copy(runner, p, level, step if on_step else None)
+
+        with ThreadPoolExecutor(max_workers=min(2, len(files))) as pool:
+            for p, res in pool.map(run_one, enumerate(files)):
+                done[p] = res
+                if log:
+                    log(f"  Lọc tạp âm ({LABELS[level]}): {Path(p).name}")
+    else:
+        p = files[0]
+        done[p] = denoised_copy(runner, p, level, on_step)
         if log:
             log(f"  Lọc tạp âm ({LABELS[level]}): {Path(p).name}")
     return {k: done.get(p, p) for k, p in paths.items()}

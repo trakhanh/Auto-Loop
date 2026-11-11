@@ -6,7 +6,7 @@
 
 **Ghép và loop clip + nhạc thành video YouTube dài hàng giờ — xem trước ngay trong app, xuất nhanh bằng card đồ hoạ.**
 
-<sub>By Khánh Trà · Ứng dụng Windows · Giao diện tiếng Việt · Bản mới nhất: <b>1.9.2</b></sub>
+<sub>By Khánh Trà · Ứng dụng Windows · Giao diện tiếng Việt · Bản mới nhất: <b>1.9.3</b></sub>
 
 <br>
 
@@ -34,6 +34,8 @@
 <br>
 
 ## Có gì mới ở 1.9
+
+> **1.9.3** · <b>Tối ưu hiệu năng & bộ nhớ toàn diện</b>: tạo ảnh thu nhỏ nhanh hơn ~1,7 lần và giảm hơn 60% độ khựng giao diện khi thêm nhiều clip; mã hoá video từ ảnh tĩnh nhanh hơn ~14 lần; đo độ to (LUFS) và lọc tạp âm nhiều file chạy song song; playlist dài hàng giờ (> 32 lượt bài) tự tiền mã hoá và nối bằng <code>.ffconcat</code> không còn mở hàng trăm đầu vào FFmpeg cùng lúc; mở app nhanh hơn (dựng trang Hướng dẫn khi cần), dọn triệt để bộ nhớ hộp thoại con và thu gọn dung lượng bộ cài.
 
 > **1.9.2** · <b>Lọc tạp âm như Premiere</b> (Essential Sound → Reduce Noise): bỏ <b>gió, ù nền, tiếng xì</b> trong tiếng gốc clip, giữ tiếng bước chân, nước, lửa. Ba mức Nhẹ · <b>Vừa — giống mẫu Premiere</b> · Mạnh. Bật ở trang Video (thẻ <b>Lọc tạp âm tiếng gốc</b>) hoặc Bảng trộn âm, nghe thử ngay, lưu được vào hồ sơ kênh. Lọc riêng file: trang Bắt đầu / thanh bên → <b>Lọc tạp âm…</b> — nhiều video một lần, mỗi file ra bản <code>_DeNoise</code> cạnh file gốc, hình giữ nguyên.
 

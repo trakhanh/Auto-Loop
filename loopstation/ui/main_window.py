@@ -147,6 +147,8 @@ class MainWindow(QMainWindow):
         self._mixer_idle.timeout.connect(self._mixer_settled)
         self._mixer_dirty = False
         self.music_tab.mixer.changed.connect(self._mixer_idle.start)
+        self._recompute_proj: Project | None = None
+        self._cached_tl: tuple[str, object] | None = None
         self._preview_sig = ""
         self._preview_timer = QTimer(self)  # chỉnh dự án → bản xem trước tự cập nhật (gom các lần sửa liền nhau)
         self._preview_timer.setSingleShot(True)
@@ -175,14 +177,12 @@ class MainWindow(QMainWindow):
         sp.setFrameShape(QFrame.Shape.NoFrame)
         self.stack.addWidget(sp)
         self.pages = (self.video_tab, self.music_tab, self.export_tab, self.settings_page)
-        self.help_page = HelpPage()
-        self.help_page.openProjectRequested.connect(self.open_project_path)
-        self.help_page.actionRequested.connect(self._help_action)
-        hp = QScrollArea()
-        hp.setWidget(self.help_page)
-        hp.setWidgetResizable(True)
-        hp.setFrameShape(QFrame.Shape.NoFrame)
-        self.stack.addWidget(hp)
+        self._help_page: HelpPage | None = None
+        self._help_scroll = QScrollArea()
+        self._help_scroll.setWidget(QWidget())
+        self._help_scroll.setWidgetResizable(True)
+        self._help_scroll.setFrameShape(QFrame.Shape.NoFrame)
+        self.stack.addWidget(self._help_scroll)
         from .home_page import HomePage
         from .step_guide import StepGuide
         self.home = HomePage()
@@ -299,6 +299,16 @@ class MainWindow(QMainWindow):
         QTimer.singleShot(250, self._detect_encoders)
         QTimer.singleShot(5000, self.updates.maybe_auto)  # sau khi app đã mở xong, không tranh lúc khởi động
 
+    @property
+    def help_page(self) -> HelpPage:
+        if self._help_page is None:
+            hp = HelpPage()
+            hp.openProjectRequested.connect(self.open_project_path)
+            hp.actionRequested.connect(self._help_action)
+            self._help_scroll.setWidget(hp)
+            self._help_page = hp
+        return self._help_page
+
     def show_welcome(self) -> None:
         """Màn hình chào: cách làm 3 bước + chọn Đơn giản / Đầy đủ (tự mở lần đầu; mở lại ở Cài đặt)."""
         if self._welcome is not None:
@@ -340,10 +350,12 @@ class MainWindow(QMainWindow):
             return
         dlg = UpdateDialog(rel, self.settings, self)
         dlg.exec()
-        if dlg.skipped:
+        skipped, install_path = dlg.skipped, dlg.install_path
+        w.dispose(dlg)
+        if skipped:
             self.update_btn.hide()
-        if dlg.install_path:
-            self._install_update(dlg.install_path)
+        if install_path:
+            self._install_update(install_path)
 
     def _install_update(self, path: str) -> None:
         """Đóng app như bình thường (lưu dự án, hỏi nếu đang xuất) rồi chạy bộ cài; cài xong bộ cài tự mở lại app."""
@@ -951,6 +963,8 @@ class MainWindow(QMainWindow):
         btn = self.nav.button(index)
         if btn is not None and not btn.isEnabled():
             return
+        if index == 4:
+            _ = self.help_page
         self.stack.setCurrentIndex(index)
         if btn is not None:
             btn.setChecked(True)
@@ -1000,7 +1014,7 @@ class MainWindow(QMainWindow):
         if not hasattr(self, "guide"):
             return
         idx = self.stack.currentIndex()
-        proj = self.collect_project()
+        proj = self._recompute_proj or self.collect_project()
         n_clips = sum(1 for c in proj.video.clips if c.enabled)
         n_tracks = sum(1 for t in proj.music.tracks if t.enabled)
         n_amb = sum(1 for a in proj.music.ambient if a.enabled)
@@ -1197,7 +1211,7 @@ class MainWindow(QMainWindow):
     def _cold_media(self) -> dict:
         """File của dự án chưa được probe (chưa trong bộ nhớ đệm, chưa thử): đọc ở luồng nền thay vì chặn giao diện.
         Đường dẫn đã biết là nóng thì khỏi os.stat lại mỗi lần tính."""
-        proj = self.collect_project()
+        proj = self._recompute_proj or self.collect_project()
         v, ms = proj.video, proj.music
         paths = [c.path for c in v.clips if c.enabled] + [p for p in (v.intro, v.outro) if p]             + [t.path for t in ms.tracks if t.enabled]
         paths = [p for p in dict.fromkeys(paths) if p not in self._probe_warm]
@@ -1220,18 +1234,22 @@ class MainWindow(QMainWindow):
     def recompute(self) -> None:
         if self._initial_loaded and not self._closing:
             self._autosave_timer.start()  # mọi thay đổi đều qua đây → vài giây sau tự lưu
-        cold = self._cold_media()
-        if cold:
-            self._probe_inflight |= set(cold)
-            self._probe_watchdog.start()
-            self._prober.warm(cold)
-        if self._probe_inflight:
-            # chờ đọc xong rồi tính lại; trong lúc đó không cho xuất theo số liệu cũ
-            self.export_tab.set_can_export(False)
-            self.export_tab.set_summary("Đang đọc file…")
-            return
-        self._recompute_core()
-        self._update_guide()
+        self._recompute_proj = self.collect_project()
+        try:
+            cold = self._cold_media()
+            if cold:
+                self._probe_inflight |= set(cold)
+                self._probe_watchdog.start()
+                self._prober.warm(cold)
+            if self._probe_inflight:
+                # chờ đọc xong rồi tính lại; trong lúc đó không cho xuất theo số liệu cũ
+                self.export_tab.set_can_export(False)
+                self.export_tab.set_summary("Đang đọc file…")
+                return
+            self._recompute_core()
+            self._update_guide()
+        finally:
+            self._recompute_proj = None
         if hasattr(self, "viewer") and self.viewer.isVisible():
             self._preview_timer.start()
 
@@ -1260,7 +1278,9 @@ class MainWindow(QMainWindow):
         if proj.output_kind != "music_only" and not proj.video.clips:
             self.viewer.clear("Kéo thả clip vào trang Video để xem trước")
             return
-        self.viewer.open_project(proj, self.music_tab.mixer.gains(), version)
+        cached = self._cached_tl
+        tl = cached[1] if cached is not None and cached[0] == sig else None
+        self.viewer.open_project(proj, self.music_tab.mixer.gains(), version, tl=tl)
 
     def _preview_gains(self) -> None:
         if hasattr(self, "viewer"):
@@ -1288,13 +1308,12 @@ class MainWindow(QMainWindow):
         self._auto_name = want
 
     def _recompute_core(self) -> None:
-        proj = self.collect_project()
+        proj = self._recompute_proj or self.collect_project()
         self._suggest_filename(proj)
         v = proj.video
         self.music_tab.mixer.set_state(self.mode, v.source_audio, bool(v.intro or v.outro) and v.bookend_audio)
         self.music_tab.mixer.set_denoise(v.denoise, v.source_audio != "off")
         self._update_nav_badges(proj)
-        self._update_audio_info(proj)
         self.music_tab.set_versions_view(max(1, proj.music.versions), self.mode == "music_only")
         if self.mode == "music_only":
             self.video_tab.set_ready("")
@@ -1309,6 +1328,7 @@ class MainWindow(QMainWindow):
             self.export_tab.set_can_export(False)
             self._set_chips(error=f"Lỗi: {e}")
             return
+        self._cached_tl = (self._preview_signature(proj) + "|v0", tl)
         self.music_tab.mixer.set_timeline(tl.total if tl.ok else 0.0, [it.start for it in tl.music_items[1:]])
         clip_names = [Path(c.path).stem for c in proj.video.clips]
         track_paths = [t.path for t in proj.music.tracks]
@@ -1474,13 +1494,14 @@ class MainWindow(QMainWindow):
         self._size_wanted = bool(text)
         self._fit_chips()
 
-    def _update_audio_info(self, proj: Project) -> None:
-        try:
-            tl = timeline.build_audio(proj)
-        except Exception as e:  # noqa: BLE001
-            self.export_tab.set_audio_info(f"Lỗi: {e}")
-            self.music_tab.set_audio_info(f"Lỗi: {e}")
-            return
+    def _update_audio_info(self, proj: Project, tl=None) -> None:
+        if tl is None:
+            try:
+                tl = timeline.build_audio(proj)
+            except Exception as e:  # noqa: BLE001
+                self.export_tab.set_audio_info(f"Lỗi: {e}")
+                self.music_tab.set_audio_info(f"Lỗi: {e}")
+                return
         if not tl.ok:
             self.export_tab.set_audio_info(" ".join(tl.errors))
             self.music_tab.set_audio_info(" ".join(tl.errors))
@@ -1495,7 +1516,16 @@ class MainWindow(QMainWindow):
     def _recompute_music_only(self, proj: Project) -> None:
         n_ver = max(1, proj.music.versions)
         self.music_tab.set_versions_view(n_ver, True)
-        tl = timeline.build_audio(proj, self.music_tab.preview_version())
+        ver = self.music_tab.preview_version()
+        try:
+            tl = timeline.build_audio(proj, ver)
+        except Exception as e:  # noqa: BLE001
+            self._update_audio_info(proj)
+            self.export_tab.set_can_export(False)
+            self._set_chips(error=f"Lỗi: {e}")
+            return
+        self._update_audio_info(proj, tl=tl if ver == 0 else None)
+        self._cached_tl = (self._preview_signature(proj) + f"|v{ver}", tl)
         self.music_tab.mixer.set_timeline(tl.total if tl.ok else 0.0, [it.start for it in tl.music_items[1:]])
         track_paths = [t.path for t in proj.music.tracks]
         fmt = encoders.AUDIO_FORMATS[proj.music.export_format]
@@ -1659,7 +1689,8 @@ class MainWindow(QMainWindow):
             self.notify(f"Đã đổi màu chủ đạo: {theme.PALETTES[pal][0]}", "ok", 2500)
         if theme.FONT_PT != pt:  # áp ngay: dựng lại QSS với cỡ chữ mới (chỉ setFont thì QSS lấn át, không đổi gì)
             theme.apply(app, pt)
-            self.help_page.refresh_font()
+            if self._help_page is not None:
+                self._help_page.refresh_font()
             self._compact = None  # dựng lại thanh bên theo cỡ chữ mới
             self._update_header_chips_visibility()
             QTimer.singleShot(0, lambda: self.resizeEvent(None))
@@ -1876,9 +1907,11 @@ class MainWindow(QMainWindow):
         pending = sum(1 for i in self.queue if i.status == "pending")
         dlg = QueueAddedDialog(out, summary, pending, not (self.job or self._queue_running), self)
         dlg.exec()
-        if dlg.choice == "next":
+        choice = dlg.choice
+        w.dispose(dlg)
+        if choice == "next":
             self.next_video()
-        elif dlg.choice == "run":
+        elif choice == "run":
             self.go_to(2)
             self.run_queue()
         else:
@@ -1983,7 +2016,9 @@ class MainWindow(QMainWindow):
         from .queue_dialogs import ResumeQueueDialog
         dlg = ResumeQueueDialog([Path(i.output).stem for i in pending], 60, self)
         dlg.exec()
-        if dlg.run:
+        run = dlg.run
+        w.dispose(dlg)
+        if run:
             self.go_to(2)
             if shutdown:
                 self.settings_page.shutdown.setChecked(True)
@@ -2081,11 +2116,15 @@ class MainWindow(QMainWindow):
         self.viewer.player.pause()  # hộp thoại hàng loạt có trình phát riêng: không phát chồng phía sau
         dlg = BatchDialog(template, self.settings, self)  # đổi kiểu (Video có nhạc / Chỉ video / Chỉ nhạc) ngay trong hộp thoại
         dlg.exec()
-        if dlg.result() != QDialog.DialogCode.Accepted or not dlg.result_projects:
+        accepted = dlg.result() == QDialog.DialogCode.Accepted
+        projects = list(dlg.result_projects) if accepted else []
+        run_now = dlg.run_now.isChecked() if accepted else False
+        w.dispose(dlg)
+        if not accepted or not projects:
             return
         taken = {i.output.lower() for i in self.queue if not i.finished}
         added = []
-        for p in dlg.result_projects:
+        for p in projects:
             if p.output_kind == "music_only":
                 p.export.filename = p.export.filename or p.name
                 if self._multi_version(p):
@@ -2113,7 +2152,7 @@ class MainWindow(QMainWindow):
         self._save_queue()
         self.go_to(2)
         self.notify(f"Đã thêm {len(added)} mục từ thư mục vào hàng đợi.", "ok", 4000)
-        if dlg.run_now.isChecked():
+        if run_now:
             self.run_queue()
 
     def run_queue(self, only: list | None = None) -> None:
@@ -2395,6 +2434,7 @@ class MainWindow(QMainWindow):
         dlg = ShuffleOrderDialog(self._shuffle_data, lambda: vt.seed.setValue(random.randint(0, 999_999)),
                                  vt._freeze_order, self)
         dlg.exec()
+        w.dispose(dlg)
 
     # ---------- hồ sơ kênh ----------
     def _set_profile_label(self, name: str) -> None:
@@ -2443,8 +2483,10 @@ class MainWindow(QMainWindow):
 
     def _open_profiles(self) -> None:
         from .profiles_dialog import ProfileDialog
-        ProfileDialog(self.settings, self._capture_profile, self._apply_profile,
-                      str(self.settings.value("profiles/last", "") or ""), self).exec()
+        dlg = ProfileDialog(self.settings, self._capture_profile, self._apply_profile,
+                            str(self.settings.value("profiles/last", "") or ""), self)
+        dlg.exec()
+        w.dispose(dlg)
 
     def _apply_profile(self, p: dict) -> None:
         """Áp hồ sơ kênh vào dự án đang mở: intro / outro, màu & logo, âm thanh, nhạc, tiếng nền, mẫu bảng, xuất.
@@ -2493,13 +2535,15 @@ class MainWindow(QMainWindow):
             desc.append((ep, d))
         dlg = SeasonDialog(desc, preset_name, self.export_tab.out_dir.text().strip(), self)
         dlg.exec()
-        if dlg.choice == "one":
-            clips, _missing = tp.build(rows, groups.get(dlg.episode, []), dlg.episode)
+        choice, episode = dlg.choice, dlg.episode
+        w.dispose(dlg)
+        if choice == "one":
+            clips, _missing = tp.build(rows, groups.get(episode, []), episode)
             _c, infos, _d = self.video_tab._table_media()
-            self.video_tab._apply_arranged(clips, infos, f"Tập {dlg.episode} — mẫu “{preset_name}”")
+            self.video_tab._apply_arranged(clips, infos, f"Tập {episode} — mẫu “{preset_name}”")
             self.settings.setValue("table/last", preset_name)
             return
-        if dlg.choice != "all" or not self._confirm_sample_bookends():
+        if choice != "all" or not self._confirm_sample_bookends():
             return
         if not self.export_tab.out_dir.text().strip():
             d = QFileDialog.getExistingDirectory(self, "Chọn thư mục lưu cả mùa", self.settings.value("dir/output", ""))
@@ -2540,10 +2584,12 @@ class MainWindow(QMainWindow):
                                lines=[f"<b>{html.escape(Path(i.output).stem)}</b> — {html.escape(i.summary)}"
                                       for i in added], name=f"{len(added)} tập đã vào hàng đợi")
         box.exec()
-        if box.choice == "run":
+        box_choice = box.choice
+        w.dispose(box)
+        if box_choice == "run":
             self.go_to(2)
             self.run_queue()
-        elif box.choice == "next":
+        elif box_choice == "next":
             self.go_to(0)
         else:
             self.go_to(2)
@@ -2776,6 +2822,7 @@ class MainWindow(QMainWindow):
         if self._size_runner:
             self._size_runner.cancel()
         self.video_tab.thumbs.shutdown()
+        self.export_tab._q_thumbs.shutdown()
         self._prober.shutdown()
         ffmpeg_tools.clean_previews()  # bản xem thử nối là file tạm (file còn mở trong trình xem: lần mở app sau xoá)
         self._save_session()

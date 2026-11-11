@@ -254,7 +254,8 @@ class RenderJob:
         v_items = [(blocks[seg], video_build.seconds(seg.frames, tl.fps)) for seg in segs]
         video_build.write_concat(vlist, v_items)
 
-        exact = sum(os.path.getsize(p) for p, _ in v_items) + 320_000 / 8 * total
+        sizes = {p: os.path.getsize(p) for p in {p for p, _ in v_items}}
+        exact = sum(sizes[p] for p, _ in v_items) + 320_000 / 8 * total
         free = shutil.disk_usage(stage).free
         if free < exact * 1.05:
             shutil.rmtree(job_dir, ignore_errors=True)
@@ -262,23 +263,34 @@ class RenderJob:
                               f"còn trống {_fmt_size(free)}.")
         self.log(f"Dung lượng dự kiến: {_fmt_size(exact)}")
 
-        args = ["-v", "error", "-f", "concat", "-safe", "0", "-i", str(vlist)]
-        graph: list[str] = []
+        base_inputs = ["-v", "error", "-f", "concat", "-safe", "0", "-i", str(vlist)]
         source_label = None
+        next_in = 1
         if tl.use_source:
             alist = job_dir / "source_audio.ffconcat"
             a_items = [(src_blocks[seg], video_build.seconds(seg.frames, tl.fps)) for seg in segs]
             video_build.write_concat(alist, a_items)
-            args += ["-f", "concat", "-safe", "0", "-i", str(alist)]
+            base_inputs += ["-f", "concat", "-safe", "0", "-i", str(alist)]
             source_label = "1:a"
-        def audio_graph(force: bool = False) -> list[str]:
+            next_in = 2
+        gpath = job_dir / "graph.txt"
+        partial = stage / (self.output.stem + ".dang-xuat.mp4")
+
+        def build_mux_args(force: bool = False) -> tuple[list[str], bool]:
+            extra_in: list[str] = []
             g: list[str] = []
             music_label = None
             if tl.use_music and tl.music_items:
                 t_paths = {t: tl.track_infos[t].path for t in used_tracks}
                 self.progress(W_VIDEO + W_SRC + W_LOUD, "Đang kiểm tra file nhạc…")
                 t_paths = audio_build.usable_paths(self.runner, t_paths, self.log, force)  # đoạn hỏng → bản sạch
-                g += audio_build.music_graph(tl.music_items, t_paths, gains, ms, total)
+                if len(tl.music_items) > audio_build.MUSIC_DIRECT_MAX:
+                    m_in, m_lines = audio_build.music_concat_graph(
+                        self.runner, tl.music_items, t_paths, gains, ms, total, job_dir, next_in)
+                    extra_in += m_in
+                    g += m_lines
+                else:
+                    g += audio_build.music_graph(tl.music_items, t_paths, gains, ms, total)
                 music_label = "music"
             ambient_labels = []
             if tl.ambient_infos:
@@ -292,26 +304,23 @@ class RenderJob:
             if music_label or source_label or ambient_labels:
                 g += audio_build.master_graph(music_label, source_label, vs.music_volume,
                                               vs.source_volume, total, ambient_labels)
-            return g
-
-        graph += audio_graph()
-        gpath = job_dir / "graph.txt"
-        if graph:
-            gpath.write_text("\n".join(graph), encoding="utf-8")
-            args += ["-/filter_complex", str(gpath), "-map", "0:v", "-map", "[aout]",
-                     *encoders.audio_args(ex.audio, self.available), "-ar", "48000", "-ac", "2"]
-        else:
-            args += ["-map", "0:v", "-an"]
-        args += ["-c:v", "copy"]
-        if preset.codec == "hevc":
-            args += ["-tag:v", "hvc1"]
-        partial = stage / (self.output.stem + ".dang-xuat.mp4")
-        args += ["-t", f"{total:.6f}"]
-        if total <= FASTSTART_MAX:
-            # chỉ mục (moov) ở đầu file để xem được ngay trên web. Giữ sẵn chỗ cho nó thay vì +faststart:
-            # +faststart ghi lại CẢ file lần nữa (file 4 GB mất thêm 25–50 giây); giữ chỗ thì ghi một lần là xong.
-            args += ["-moov_size", str(moov_reserve(total, tl.fps))]
-        args += ["-metadata", f"title={proj.name}", "-f", "mp4", str(partial)]
+            cmd = [*base_inputs, *extra_in]
+            if g:
+                gpath.write_text("\n".join(g), encoding="utf-8")
+                cmd += ["-/filter_complex", str(gpath), "-map", "0:v", "-map", "[aout]",
+                        *encoders.audio_args(ex.audio, self.available), "-ar", "48000", "-ac", "2"]
+            else:
+                cmd += ["-map", "0:v", "-an"]
+            cmd += ["-c:v", "copy"]
+            if preset.codec == "hevc":
+                cmd += ["-tag:v", "hvc1"]
+            cmd += ["-t", f"{total:.6f}"]
+            if total <= FASTSTART_MAX:
+                # chỉ mục (moov) ở đầu file để xem được ngay trên web. Giữ sẵn chỗ cho nó thay vì +faststart:
+                # +faststart ghi lại CẢ file lần nữa (file 4 GB mất thêm 25–50 giây); giữ chỗ thì ghi một lần là xong.
+                cmd += ["-moov_size", str(moov_reserve(total, tl.fps))]
+            cmd += ["-metadata", f"title={proj.name}", "-f", "mp4", str(partial)]
+            return cmd, bool(g)
 
         # ----- 5. ghép -----
         base = W_VIDEO + W_SRC + W_LOUD
@@ -332,19 +341,22 @@ class RenderJob:
                           f"Đang ghép video + âm thanh… {_fmt_dur(t)}/{_fmt_dur(total)}"
                           + (f" — còn ~{_fmt_dur(eta)}" if eta else ""))
 
-        self.log("Đang ghép…")
         try:
+            has_graph = False
             try:
+                args, has_graph = build_mux_args(force=False)
+                self.log("Đang ghép…")
+                start = time.time()
                 self.runner.ffmpeg(args, on_progress=on_mux)
             except ft.FFmpegError as e:
-                if not (graph and audio_build.is_decode_failure(e)):
+                if not ((has_graph or tl.has_audio) and audio_build.is_decode_failure(e)):
                     raise
                 # một file nhạc / tiếng nền có gói dữ liệu hỏng lọt qua bước kiểm tra nhanh: dùng bản sạch cho mọi
                 # file âm thanh rồi ghép lại (khối hình đã mã hoá xong, chỉ làm lại bước ghép)
                 self.log("Một file nhạc / tiếng nền có đoạn hỏng làm lỗi lượt ghép — tạo bản sạch cho mọi file âm "
                          f"thanh rồi ghép lại. Chi tiết:\n{e}")
                 partial.unlink(missing_ok=True)
-                gpath.write_text("\n".join(audio_graph(force=True)), encoding="utf-8")
+                args, has_graph = build_mux_args(force=True)
                 start = time.time()
                 self.runner.ffmpeg(args, on_progress=on_mux)
         except BaseException:
@@ -418,10 +430,23 @@ class RenderJob:
         gains = self._measure_gains(tl, used_tracks, 0.0, 0.2)
         t_paths = {t: tl.track_infos[t].path for t in used_tracks}
 
-        def audio_graph(force: bool = False) -> list[str]:
+        job_dir = ft.cache_dir("jobs") / datetime.now().strftime("%Y%m%d_%H%M%S_%f")
+        job_dir.mkdir(parents=True)
+        gpath = job_dir / "graph.txt"
+        partial = self._stage_dir(tl) / (self.output.stem + ".dang-xuat" + self.output.suffix)
+
+        def build_audio_args(force: bool = False) -> list[str]:
             paths = audio_build.usable_paths(self.runner, t_paths, self.log, force)  # đoạn hỏng → bản sạch
+            extra_in: list[str] = []
             # chỉ có tiếng nền (không bài nhạc nào): xuất âm thanh môi trường / ASMR
-            g = audio_build.music_graph(tl.music_items, paths, gains, ms, total) if tl.music_items else []
+            if tl.music_items:
+                if len(tl.music_items) > audio_build.MUSIC_DIRECT_MAX:
+                    extra_in, g = audio_build.music_concat_graph(
+                        self.runner, tl.music_items, paths, gains, ms, total, job_dir, 0)
+                else:
+                    g = audio_build.music_graph(tl.music_items, paths, gains, ms, total)
+            else:
+                g = []
             ambient_labels = []
             if tl.ambient_infos:
                 keys = sorted(tl.ambient_infos)
@@ -434,17 +459,11 @@ class RenderJob:
             # âm lượng nhạc của Bảng trộn âm (dùng chung mọi chế độ)
             g += audio_build.master_graph("music" if tl.music_items else None, None, proj.video.music_volume, 0,
                                           total, ambient_labels)
-            return g
+            gpath.write_text("\n".join(g), encoding="utf-8")
+            return ["-v", "error", *extra_in, "-/filter_complex", str(gpath), "-map", "[aout]",
+                    *fmt.args(self.available), "-ar", "48000", "-ac", "2", "-t", f"{total:.6f}",
+                    "-metadata", f"title={proj.name}", str(partial)]
 
-        graph = audio_graph()
-        job_dir = ft.cache_dir("jobs") / datetime.now().strftime("%Y%m%d_%H%M%S_%f")
-        job_dir.mkdir(parents=True)
-        gpath = job_dir / "graph.txt"
-        gpath.write_text("\n".join(graph), encoding="utf-8")
-        partial = self._stage_dir(tl) / (self.output.stem + ".dang-xuat" + self.output.suffix)
-        args = ["-v", "error", "-/filter_complex", str(gpath), "-map", "[aout]",
-                *fmt.args(self.available), "-ar", "48000", "-ac", "2", "-t", f"{total:.6f}",
-                "-metadata", f"title={proj.name}", str(partial)]
         start = time.time()
 
         def on_prog(block: dict[str, str]) -> None:
@@ -457,9 +476,11 @@ class RenderJob:
             self.progress(0.2 + 0.8 * frac, f"Đang dựng nhạc… {_fmt_dur(t)}/{_fmt_dur(total)}"
                           + (f" — còn ~{_fmt_dur(eta)}" if eta else ""))
 
-        self.log("Đang dựng nhạc…")
         try:
             try:
+                args = build_audio_args(force=False)
+                self.log("Đang dựng nhạc…")
+                start = time.time()
                 self.runner.ffmpeg(args, on_progress=on_prog)
             except ft.FFmpegError as e:
                 if not audio_build.is_decode_failure(e):
@@ -467,7 +488,7 @@ class RenderJob:
                 self.log("Một file nhạc / tiếng nền có đoạn hỏng làm lỗi lượt dựng — tạo bản sạch cho mọi file âm "
                          f"thanh rồi dựng lại. Chi tiết:\n{e}")
                 partial.unlink(missing_ok=True)
-                gpath.write_text("\n".join(audio_graph(force=True)), encoding="utf-8")
+                args = build_audio_args(force=True)
                 start = time.time()
                 self.runner.ffmpeg(args, on_progress=on_prog)
         except BaseException:
