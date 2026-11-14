@@ -635,6 +635,9 @@ class ExportTab(QWidget):
                        "Clip khác fps được đổi theo — cột <b>Khi xuất</b> ghi rõ từng clip.")
         hint.setWordWrap(True)
         lay.addWidget(hint)
+        self.fps_suggest = QLabel("")  # đề xuất + cái giá phải trả: giữ fps cao thì mọi clip còn lại buộc phải nâng lên
+        self.fps_suggest.setWordWrap(True)
+        lay.addWidget(self.fps_suggest)
         self.fps_grid_box = QWidget()
         self.fps_grid = QGridLayout(self.fps_grid_box)
         self.fps_grid.setContentsMargins(0, 2, 0, 0)
@@ -685,6 +688,17 @@ class ExportTab(QWidget):
             if len(clips) > MAX_FPS_ROWS:
                 more = w.muted(f"+{len(clips) - MAX_FPS_ROWS} clip khác")
                 self.fps_grid.addWidget(more, len(shown) + 1, 0, 1, 4)
+        lows = sorted({f for _n, f, _p in clips if f < top})
+        low_names = [n for n, f, _p in clips if f < top]
+        top_names = [n for n, f, _p in clips if f == top]
+
+        def few(items: list[str]) -> str:
+            return ", ".join(items[:3]) + (f" +{len(items) - 3}" if len(items) > 3 else "")
+        self.fps_suggest.setText(
+            f"<b>Đề xuất:</b> giữ nguyên <b>{few(top_names)}</b> ({top:g} fps). Muốn giữ fps cao này thì <b>buộc phải nâng "
+            f"tất cả clip còn lại lên {top:g} fps</b> — {few(low_names)} ({' / '.join(f'{f:g}' for f in lows)} → {top:g} "
+            f"fps): app lặp khung, hình không mất khung nào nhưng cũng không mượt hơn. Ngược lại, giữ nguyên clip fps thấp "
+            f"thì {few(top_names)} bị hạ xuống, mất bớt khung.")
         picked = False
         for rb, eff, f in self._fps_rows:
             same = abs(f - out_fps) < 0.01
