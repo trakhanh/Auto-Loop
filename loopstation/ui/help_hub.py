@@ -34,23 +34,24 @@ FIRST_STEPS = (
 )
 # "Có gì mới" của bản đang chạy — hiện ở đầu trang Tổng quan (sửa cùng lúc với APP_VERSION khi ra bản mới)
 WHATS_NEW = (
+    ("film", "Clip khác fps: bạn chọn clip giữ nguyên",
+     "Content 30 fps + loop 24 fps: trang Xuất liệt kê từng clip, chọn clip cần giữ nguyên — app đề xuất fps cao nhất "
+     "để không clip nào mất khung."),
     ("chip", "Nhanh hơn, mượt hơn toàn ứng dụng",
      "Mở app, tạo ảnh nhỏ clip, tính lại dự án lớn, lọc tạp âm và xuất video từ ảnh tĩnh nhanh hơn rõ rệt; "
      "playlist dài hàng giờ nối mượt, không nghẽn bộ nhớ; bộ cài gọn nhẹ hơn."),
     ("waves", "Lọc tạp âm như Premiere",
      "Bỏ gió, ù nền trong tiếng gốc clip, giữ tiếng bước chân, nước, lửa. Trang Video → Lọc tạp âm (hoặc Bảng trộn âm); "
      "lọc riêng file: thanh bên → Lọc tạp âm…"),
-    ("video", "Mẫu bảng mở đầu bằng STT_Content",
-     "Loop A ×57 kẹp Loop B: mỗi tình huống mở đầu bằng 33_n_Content ×1 (chỉ khi có file), rồi LOOP AB và các loop."),
+    ("video", "Mẫu bảng nhận đủ kiểu tên Content",
+     "33_1_Content (mỗi tình huống), 33_Content (một lần đầu tập), Content.mp4. Bản tự lưu trùng tên mẫu có sẵn: Thư "
+     "viện mẫu → Khôi phục mẫu gốc."),
     ("upload", "Lưu thẳng vào Google Drive an toàn",
      "Thư mục lưu trên Drive / OneDrive: app xuất ra máy trước rồi tự chép lên khi xong — Drive chỉ nhận file đã hoàn "
      "chỉnh. Tắt / bật ở Cài đặt → Tuỳ chọn xuất video."),
     ("save", "Mất điện cũng không mất việc",
      "Tự lưu sau ~3 giây; bản lưu cũ giữ mỗi giờ một bản (24 giờ), mỗi ngày một bản (7 ngày). Dự án luôn gắn đúng file — "
      "Ctrl+S không ghi đè nhầm dự án khác."),
-    ("check", "File nhạc hỏng nặng vẫn xuất được",
-     "Lỗi “invalid band type” / “Invalid data found” (file trên Google Drive chưa tải hết…): chỗ hỏng thành vài giây "
-     "im lặng, bài giữ đúng độ dài. Mục đã lỗi: chuột phải → Chạy lại."),
 )
 SHORTCUTS = (("Space", "Phát / dừng"), ("F1", "Hướng dẫn"), ("Ctrl+S", "Lưu dự án"), ("Ctrl+Z", "Hoàn tác"),
              ("Ctrl+D", "Nhân bản dòng"), ("Ctrl+F", "Tìm"))
