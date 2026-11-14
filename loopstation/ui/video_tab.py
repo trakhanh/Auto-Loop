@@ -1548,6 +1548,11 @@ class VideoTab(QWidget):
         if missing or extra:
             bits = ([f"thiếu {', '.join(tp.missing_names(preset['rows'], missing, paths)[:3])}"] if missing else []) + \
                    ([f"chưa có trong mẫu: {', '.join(extra[:3])}"] if extra else [])
+            from .interleave_dialog import TABLE_BUILTIN
+            orig = next((t for t in TABLE_BUILTIN if t["name"] == preset["name"]), None)
+            if extra and preset.get("user") and orig and not tp.unused(orig["rows"], paths):
+                # bản của bạn cùng tên đang che mẫu có sẵn — mẫu có sẵn (bản mới) đã có dòng cho các file này
+                bits.append("mẫu có sẵn bản mới đã có dòng này: Thư viện mẫu → Khôi phục mẫu gốc")
             warn = f" <span style='color:{theme.css_color('warn_text')}'>({'; '.join(bits)})</span>"
         self._suggest_kind = "table"
         self.suggest_go.setText("Đổi mẫu…")

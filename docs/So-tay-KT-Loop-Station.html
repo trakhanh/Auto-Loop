@@ -315,14 +315,16 @@ footer { margin-top: 56px; padding-top: 18px; border-top: 1px solid var(--line);
     <li><b>Số lần phát mỗi loop</b>: <code>60</code> = 60 lần · <code>10p</code> = loop cho đủ 10 phút · <code>50-80</code> = ngẫu nhiên.</li>
     <li><b>Clip nội dung</b> (tên không có chữ loop): đặt ở đầu, ở cuối, hoặc cả đầu và cuối. <b>Lặp lại cả chuỗi</b>: N lượt.</li>
     <li>Loop xếp theo tên (Loop2 trước Loop10). Xuất hàng loạt có sẵn mẫu <i>Xếp lần lượt: từng loop ×60, clip nội dung ở đầu / ở cuối</i>.</li>
-    <li>Content và loop khác fps (ví dụ 30 và 24)? App xuất theo fps của clip phát lâu nhất để phần lớn video không giật.</li>
+    <li>Content và loop khác fps (ví dụ content 30, loop 24)? Từ bản 1.9.3 app xuất theo <b>fps cao nhất</b> (30): content giữ
+    đủ khung, loop 24 fps chỉ lặp khung, không mất khung nào. Muốn xuất theo loop như trước: trang Xuất → Khung hình/giây →
+    <i>Theo clip chính</i>.</li>
   </ul>
   <h3>Thư viện mẫu: xem mọi mẫu, tự tạo mẫu mới</h3>
   <p>Bấm <b>Thư viện mẫu…</b> (trên bảng clip, cạnh Xếp lần lượt). Mỗi mẫu có <b>dải màu ví dụ kết quả</b> (app áp thật mẫu
   lên bộ tên file ví dụ, mỗi clip 10 giây) và tổng thời lượng. Bấm <b>Dùng mẫu này</b> để áp vào bảng.</p>
   <div class="tbl"><table>
     <tr><th>7 mẫu có sẵn</th><th>Kết quả</th></tr>
-    <tr><td>Loop A ×57 kẹp Loop B (bảng clip)</td><td>(STT_Content nếu có) → (LOOP AB nếu có) → STT_loopB → STT_loopA ×57 → STT_loopB → STT_loopA; 1_… đến 10_… nối thành 1 video</td></tr>
+    <tr><td>Loop A ×57 kẹp Loop B (bảng clip)</td><td>(STT_Content nếu có — nhận 33_1_Content, 33_Content (một lần đầu tập) hoặc Content.mp4) → (LOOP AB nếu có) → STT_loopB → STT_loopA ×57 → STT_loopB → STT_loopA; 1_… đến 10_… nối thành 1 video</td></tr>
     <tr><td>Nền ×70 xen từng cảnh</td><td>Nền ×70 → Cảnh 2 → Nền ×70 → Cảnh 3 → … → Nền ×70</td></tr>
     <tr><td>Nền 10 phút xen từng cảnh</td><td>như trên, mỗi lần nền loop đủ 10 phút</td></tr>
     <tr><td>Nền ×70 xen cảnh — lặp cả mẫu 4 lượt</td><td>chuỗi nền / cảnh trên lặp 4 lượt</td></tr>
@@ -538,7 +540,7 @@ footer { margin-top: 56px; padding-top: 18px; border-top: 1px solid var(--line);
     <li><b>Lớn hơn clip gốc</b> (vd clip 1080p xuất 2K): hình to ra nhưng <b>không nét thêm</b>, file nặng gấp ~1,8 lần.
     Mẹo YouTube: bản 2K được YouTube nén tốt hơn — chỉ chọn khi cố ý, nhớ hạ Bitrate hình.</li>
     <li><b>Nhỏ hơn clip gốc</b> (vd 4K xuất 1080p): file nhẹ hơn, vẫn nét.</li>
-    <li><b>fps cao hơn clip gốc</b> (24 → 60): chỉ lặp lại khung cũ, <b>không mượt hơn</b>. Để <b>Theo clip chính</b>.</li>
+    <li><b>fps cao hơn clip gốc</b> (24 → 60): chỉ lặp lại khung cũ, <b>không mượt hơn</b>. Để <b>Giữ đủ khung</b> (mặc định).</li>
     <li><b>fps thấp hơn clip gốc</b>: bỏ bớt khung, chuyển động kém mượt hơn chút.</li>
     <li>Chất lượng thật do <b>Chất lượng hình ảnh</b> và <b>Bitrate hình</b> quyết định.</li>
   </ul>

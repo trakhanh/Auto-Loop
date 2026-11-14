@@ -1407,8 +1407,15 @@ class MainWindow(QMainWindow):
         self.export_tab.set_summary("<br>".join(lines))
         self.export_tab.set_format(tl.width, tl.height, float(tl.fps))
         m = tl.main_info
-        self.export_tab.set_source((m.width, m.height, float(timeline.snap_fps(m.fps))) if m else None,
-                                   (tl.width, tl.height, float(tl.fps)))
+        # gợi ý fps so với clip gốc: "Giữ đủ khung" lấy fps cao nhất của các clip → so với chính fps đó (không báo "lặp khung")
+        src_fps = float(tl.fps) if proj.export.fps == "source" else (float(timeline.snap_fps(m.fps)) if m else 0.0)
+        self.export_tab.set_source((m.width, m.height, src_fps) if m else None, (tl.width, tl.height, float(tl.fps)))
+        by_fps: dict[float, list[str]] = {}
+        for k, inf in sorted(tl.clip_infos.items()):
+            if k >= 0 and not inf.is_image:  # intro / outro không tính
+                by_fps.setdefault(round(float(timeline.snap_fps(inf.fps)), 3), []).append(Path(inf.path).stem)
+        self.export_tab.set_fps_mix([(f, list(dict.fromkeys(n))) for f, n in by_fps.items()], float(tl.fps),
+                                    round(float(timeline.snap_fps(m.fps)), 3) if m else 0.0)
         self._schedule_size(proj, tl)
 
     # ---------- dự đoán dung lượng ----------

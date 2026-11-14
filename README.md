@@ -309,7 +309,7 @@ Các script khác (đều dùng thư mục dữ liệu riêng, không đụng d�
 | `python tests/preview_check.py <thư_mục>` | Trình phát: đồng bộ hình / tiếng, tua, dừng, sửa dự án khi đang xem |
 | `python tests/player_audit_check.py <thư_mục>` | Trình phát: không tiếng, hết video, bộ nhớ đệm, nhấp đúp |
 | `python tests/keys_check.py <thư_mục>` | Phím Space / Ctrl+Space ở mọi chỗ |
-| `python tests/sequence_check.py <thư_mục>` | Xếp lần lượt, fps theo clip chính, Ctrl+C / V / D |
+| `python tests/sequence_check.py <thư_mục>` | Xếp lần lượt, fps giữ đủ khung, Ctrl+C / V / D |
 | `python tests/batch_kinds_check.py <thư_mục>` · `batch_volume_check.py` | Xuất hàng loạt: 3 kiểu, độ dài, âm lượng, trình phát |
 | `python tests/help_check.py <thư_mục>` · `input_check.py` | Trang Hướng dẫn · ô nhập giờ / phút / giây |
 | `python tests/look_check.py <thư_mục>` | Màu chủ đạo, chuyển trang, màn hình chào |

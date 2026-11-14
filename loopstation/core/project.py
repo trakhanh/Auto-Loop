@@ -109,7 +109,7 @@ class MusicSettings:
 class ExportSettings:
     preset: str = "youtube_1080p_h264"  # chỉ quyết định codec (H.264 / HEVC)
     resolution: str = "1080p"  # khoá trong encoders.RESOLUTIONS
-    fps: str = "source"  # source | 24 | 25 | 30 | 50 | 60
+    fps: str = "source"  # source (fps cao nhất của các clip) | main (clip phát lâu nhất) | 24 | 25 | 30 | 50 | 60
     encoder: str = "auto"  # auto | nvidia | intel | amd | cpu
     quality: str = "high"  # saving | balanced | high | very_high
     audio: str = "fast"  # fast (AAC 192k) | max (AAC 320k)

@@ -31,9 +31,16 @@ def _parts(path: str) -> tuple[int | None, int | None, str]:
     return None, int(m.group(1)), stem[m.end():]
 
 
+FREE_SUFFIX = ("content",)  # vai mà tên file hay có thêm đuôi: "Content 30fps", "Content_v2", "CONTENT (1)" → "content"
+
+
 def norm_role(role: str) -> str:
-    """"LOOP A" = "loopA" = "loop_a" = "Loop-A" → "loopa"."""
-    return SEP_RE.sub("", role).lower()
+    """"LOOP A" = "loopA" = "loop_a" = "Loop-A" → "loopa"; "Content 30fps" / "Content_v2" → "content"."""
+    r = SEP_RE.sub("", role).lower()
+    for k in FREE_SUFFIX:
+        if r.startswith(k):
+            return k
+    return r
 
 
 def role_of(path: str) -> str:
@@ -88,8 +95,14 @@ def episodes(paths: list[str]) -> list[int]:
 
 
 def in_episode(path: str, ep: int) -> bool:
-    """File thuộc tập `ep` — file không đánh số (Content.mp4…) dùng chung cho mọi tập."""
-    return episode_of(path) == ep or stt_of(path) is None
+    """File thuộc tập `ep` — file không đánh số (Content.mp4…) dùng chung cho mọi tập; file một số đúng bằng số tập
+    (33_Content.mp4) là file của cả tập 33 (đứng một lần ở đầu video)."""
+    return episode_of(path) == ep or stt_of(path) is None or episode_lead(path, ep)
+
+
+def episode_lead(path: str, ep: int | None) -> bool:
+    """"33_Content.mp4" khi đang dựng tập 33 (các file khác dạng 33_1_…): file của cả tập, không phải tình huống 33."""
+    return ep is not None and episode_of(path) is None and stt_of(path) == ep
 
 
 def by_episode(paths: list[str]) -> dict[int, list[str]]:
@@ -111,15 +124,23 @@ def plan(rows: list[dict], paths: list[str], episode: int | None = None
     Tên có số tập (33_4_LOOP A): chỉ dùng file của tập `episode` (mặc định tập nhỏ nhất) — mỗi tập một video.
     Dòng "chỉ khi có file" (`optional`, ví dụ LOOP AB): tình huống nào có file thì dùng, không có thì bỏ, không báo thiếu."""
     paths, episode = _episode_paths(paths, episode)
+    lead: dict[str, str] = {}  # 33_Content.mp4: file của cả tập → đứng một lần ở đầu video
     groups: dict[int | None, dict[str, str]] = {}
     for p in sorted(paths, key=_natural):
-        groups.setdefault(stt_of(p), {}).setdefault(role_of(p), p)
+        if episode_lead(p, episode):
+            lead.setdefault(role_of(p), p)
+        else:
+            groups.setdefault(stt_of(p), {}).setdefault(role_of(p), p)
     need = roles(rows)
     must = roles([r for r in rows if not r.get("optional")])
     shared = groups.get(None, {})
     numbered = [g for g in groups if g is not None and any(r in groups[g] for r in need)]
     used: list[int | None] = numbered or ([None] if any(r in shared for r in need) else [])
     out, missing = [], []
+    for r in rows:  # file của cả tập: dòng đầu tiên mang vai đó, một lần, trước tình huống đầu
+        path = lead.pop(_row_role(r), None)
+        if path:
+            out.append((r, path, None))
     for g in used:
         found = dict(shared, **groups.get(g, {})) if g is not None else shared
         for r in rows:
@@ -144,10 +165,10 @@ def _episode_paths(paths: list[str], episode: int | None) -> tuple[list[str], in
 def unused(rows: list[dict], paths: list[str], episode: int | None = None) -> list[str]:
     """File có số thứ tự (của tập đang dựng) mà vai không có trong mẫu → không được dùng, cần báo
     (ví dụ 33_2_LOOP AB khi mẫu chưa có dòng LOOP AB)."""
-    paths, _ep = _episode_paths(paths, episode)
+    paths, ep = _episode_paths(paths, episode)
     known = set(roles(rows))
     return [os.path.basename(p) for p in sorted(paths, key=_natural)
-            if stt_of(p) is not None and role_of(p) not in known]
+            if (stt_of(p) is not None or episode_lead(p, ep)) and role_of(p) not in known]
 
 
 def match(rows: list[dict], paths: list[str]) -> tuple[dict[str, str], list[str]]:

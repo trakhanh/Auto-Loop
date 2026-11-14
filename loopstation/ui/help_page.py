@@ -303,12 +303,13 @@ lặp 60 lần? Bấm <b>Xếp lần lượt…</b> (cạnh nút Xen kẽ clip n
     ("Thứ tự loop", "theo tên: Loop2 trước Loop10 (đánh số 1, 2, 3… là được)")], ("Ô", "Nghĩa là")) + box(
     "tip", "Xuất hàng loạt cũng có mẫu này: ô <b>Cách xếp clip</b> → <i>Xếp lần lượt: từng loop ×60, clip nội dung ở đầu / ở cuối</i>. "
            "Mọi clip loop đều nhận crossfade <b>Nối loop</b> của hộp thoại.") + box(
-    "tip", "Content và các loop khác fps (ví dụ 30 và 24)? App xuất theo fps của clip phát lâu nhất (các loop) "
-           "để phần lớn video không bị giật.") + """
+    "tip", "Content và các loop khác fps (ví dụ content 30, loop 24)? Từ bản 1.9.3 app xuất theo <b>fps cao nhất</b> "
+           "(30): content giữ đủ khung, loop 24 fps chỉ lặp khung, không mất khung nào. Muốn xuất theo loop như trước: "
+           "trang Xuất → Khung hình/giây → <i>Theo clip chính</i>.") + """
 <h2>Thư viện mẫu: xem mọi mẫu, tự tạo mẫu mới</h2>
 <p>Bấm <b>Thư viện mẫu…</b> (trên bảng clip, cạnh Xếp lần lượt). Mỗi mẫu có <b>dải màu ví dụ kết quả</b> — app áp thật
 mẫu lên bộ tên file ví dụ, mỗi clip 10 giây — kèm tổng thời lượng. Bấm <b>Dùng mẫu này</b> để áp vào bảng.</p>""" + examples([
-    ("Loop A ×57 kẹp Loop B (bảng clip)", "(STT_Content nếu có) → (LOOP AB nếu có) → STT_loopB → STT_loopA ×57 → STT_loopB "
+    ("Loop A ×57 kẹp Loop B (bảng clip)", "(STT_Content nếu có — nhận 33_1_Content, 33_Content (một lần đầu tập) hoặc Content.mp4) → (LOOP AB nếu có) → STT_loopB → STT_loopA ×57 → STT_loopB "
                                           "→ STT_loopA; 1_… đến 10_… nối thành 1 video"),
     ("Nền ×70 xen từng cảnh", "Nền ×70 → Cảnh 2 → Nền ×70 → Cảnh 3 → … → Nền ×70"),
     ("Nền 10 phút xen từng cảnh", "như trên, mỗi lần nền loop đủ 10 phút"),
@@ -545,7 +546,7 @@ topic("xuat", "Xuất file", "export", "Trang Xuất & dung lượng", hero(
     ("Lớn hơn clip gốc", "ví dụ clip 1080p xuất 2K: hình to ra nhưng <b>không nét thêm</b>, file nặng gấp ~1,8 lần. "
                          "(Mẹo YouTube: bản 2K được YouTube nén tốt hơn — chỉ chọn khi cố ý, nhớ hạ Bitrate hình.)"),
     ("Nhỏ hơn clip gốc", "ví dụ 4K xuất 1080p: file nhẹ hơn, vẫn nét."),
-    ("fps cao hơn clip gốc", "24 → 60 fps chỉ lặp lại khung cũ, <b>không mượt hơn</b>, file nặng hơn. Để <b>Theo clip chính</b>."),
+    ("fps cao hơn clip gốc", "24 → 60 fps chỉ lặp lại khung cũ, <b>không mượt hơn</b>, file nặng hơn. Để <b>Giữ đủ khung</b> (mặc định)."),
     ("fps thấp hơn clip gốc", "bỏ bớt khung: chuyển động kém mượt hơn chút."),
     ("Chất lượng thật", "do <b>Chất lượng hình ảnh</b> và <b>Bitrate hình</b> quyết định — mỗi đoạn luôn được nén lại một lần.")]) + """
 <h2>Video loop nặng? Làm nhẹ theo thứ tự hiệu quả</h2>""" + steps([

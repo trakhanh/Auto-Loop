@@ -92,7 +92,10 @@ def output_advice(src_w: int, src_h: int, src_fps: float, out_w: int, out_h: int
     return " · ".join(parts) + ".", "warn" if warn else ("success" if same else ""), not same
 
 
-FPS_CHOICES = {"source": "Theo clip chính (phát lâu nhất)", "24": "24", "25": "25", "30": "30", "50": "50", "60": "60"}
+# "source" (mặc định): fps cao nhất trong các clip → không clip nào bị bỏ khung (Content 30 + loop 24 → 30: content giữ
+# nguyên, loop chỉ lặp khung). "main": fps của clip phát lâu nhất (loop không lặp khung, nhưng content bị bỏ khung).
+FPS_CHOICES = {"source": "Giữ đủ khung — theo clip fps cao nhất", "main": "Theo clip chính (phát lâu nhất)",
+               "24": "24", "25": "25", "30": "30", "50": "50", "60": "60"}
 
 
 AUDIO_LABELS = {

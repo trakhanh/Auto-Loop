@@ -161,6 +161,8 @@ class RenderJob:
         tl = timeline.build(proj)
         for w in tl.warnings:
             self.log(f"Cảnh báo: {w}")
+        for n in tl.notes:
+            self.log(n)
         if not tl.ok:
             raise RenderError("\n".join(tl.errors))
         plan = tl.video

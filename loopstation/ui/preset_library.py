@@ -175,7 +175,7 @@ def _fmt(sec: float) -> str:
 
 
 class PresetCard(QFrame):
-    def __init__(self, p: dict, on_use, on_edit=None, on_delete=None, parent=None):
+    def __init__(self, p: dict, on_use, on_edit=None, on_delete=None, parent=None, on_restore=None):
         super().__init__(parent)
         self.setObjectName("presetCard")
         k = kind_of(p)
@@ -200,6 +200,13 @@ class PresetCard(QFrame):
             theme.tag(b, variant="ghost")
             b.clicked.connect(lambda: on_edit(p))
             head.addWidget(b)
+        if on_restore:  # mẫu có sẵn đã được cập nhật (vd thêm dòng STT_Content) nhưng bản cùng tên này đang che nó
+            b = QPushButton("Khôi phục mẫu gốc")
+            b.setIcon(icons.icon("undo", 14))
+            theme.tag(b, variant="tonal")
+            b.setToolTip("Bỏ bản của bạn, dùng lại mẫu có sẵn bản mới nhất của app")
+            b.clicked.connect(lambda: on_restore(p))
+            head.addWidget(b)
         if on_delete:
             b = QPushButton()
             b.setIcon(icons.icon("trash", 14))
@@ -217,6 +224,12 @@ class PresetCard(QFrame):
         desc = w.muted(describe(p))
         desc.setWordWrap(True)
         lay.addWidget(desc)
+        if on_restore:
+            note = QLabel(f"<span style='color:{theme.css_color('warn_text')}'>Bản của bạn đang thay mẫu có sẵn cùng tên. "
+                          "Mẫu có sẵn đã được cập nhật (vd thêm dòng STT_Content đầu tiên) — muốn dùng bản mới: "
+                          "<b>Khôi phục mẫu gốc</b>.</span>")
+            note.setWordWrap(True)
+            lay.addWidget(note)
         blocks, total, files = example(p)
         strip = FlowStrip()
         strip.set_blocks(blocks)
@@ -330,7 +343,9 @@ class PresetLibraryDialog(QDialog):
                                                 "mẫu…</b> ở trên."))
             for p in items:
                 edit = self._edit if editable else (self._edit_copy if kind_of(p) == "table" else None)
-                self.body_lay.addWidget(PresetCard(p, self._use, edit, self._delete if deletable else None))
+                shadows = p.get("user") and kind_of(p) == "table" and p["name"] in {t["name"] for t in TABLE_BUILTIN}
+                self.body_lay.addWidget(PresetCard(p, self._use, edit, self._delete if deletable else None,
+                                                   on_restore=self._restore if shadows else None))
         self.body_lay.addStretch(1)
 
     def _use(self, p: dict) -> None:
@@ -354,6 +369,14 @@ class PresetLibraryDialog(QDialog):
     def _edit_copy(self, p: dict) -> None:
         """Mẫu có sẵn không sửa trực tiếp: sửa thành bản của bạn (mẫu có sẵn vẫn còn)."""
         self._edit({"name": f"{p['name']} (bản của bạn)", "rows": [dict(r) for r in p.get("rows") or []]})
+
+    def _restore(self, p: dict) -> None:
+        if QMessageBox.question(self, "Khôi phục mẫu gốc",
+                                f"Bỏ bản của bạn “{p['name']}” và dùng lại mẫu có sẵn của app (bản mới nhất)?\n\n"
+                                "Các chỉnh sửa trong bản của bạn sẽ mất.") != QMessageBox.StandardButton.Yes:
+            return
+        save_table_presets(self.settings, [x for x in table_presets(self.settings) if x["name"] != p["name"]])
+        self._fill()
 
     def _delete(self, p: dict) -> None:
         if QMessageBox.question(self, "Xoá mẫu", f"Xoá mẫu “{p['name']}”?") != QMessageBox.StandardButton.Yes:

@@ -1,5 +1,7 @@
 import os
 
+import pytest
+
 from loopstation.core import batch, table_preset as tp
 from loopstation.core.project import ClipItem, Project, is_sample_file
 from loopstation.ui.interleave_dialog import arrange_from_preset
@@ -175,3 +177,32 @@ def test_content_row_opens_each_case_when_file_exists():
     assert names[:2] == ["33_1_Content.mp4", "33_1_LOOP B.mp4"]  # tình huống 1: Content rồi vào loop
     assert names[5:8] == ["33_2_CONTENT.mp4", "33_2_LOOP AB.mp4", "33_2_LOOP B.mp4"]  # hoa / thường đều nhận
     assert clips[0].count == 1
+
+
+@pytest.mark.parametrize("extra, first, count", [
+    (["D:/m/33_1_Content.mp4", "D:/m/33_2_Content.mp4"], "33_1_Content.mp4", 2),  # mỗi tình huống một content
+    (["D:/m/33_Content.mp4", "D:/m/34_Content.mp4"], "33_Content.mp4", 1),  # mỗi tập một content: đứng đầu, một lần
+    (["D:/m/Content.mp4"], "Content.mp4", 2),  # không số: dùng chung, đầu mỗi tình huống
+    (["D:/m/33_1_Content 30fps.mp4", "D:/m/33_2_CONTENT_v2.mp4"], "33_1_Content 30fps.mp4", 2),  # tên có đuôi
+])
+def test_content_three_namings(extra, first, count):
+    """1.9.4: STT_Content nhận cả 3 kiểu tên (và tên có đuôi) — trước đây 33_Content / Content 30fps bị bỏ âm thầm."""
+    from loopstation.ui.interleave_dialog import TABLE_BUILTIN
+    rows = TABLE_BUILTIN[0]["rows"]
+    paths = [f"D:/m/{e}_{n}_LOOP {r}.mp4" for e in (33, 34) for n in (1, 2) for r in "AB"] + extra
+    clips, missing = tp.build(rows, paths, 33)
+    names = [os.path.basename(c.path) for c in clips]
+    assert not missing and names[0] == first
+    assert sum("ontent" in n.lower() or "ONTENT" in n for n in names) == count
+    assert tp.unused(rows, paths, 33) == []
+    assert all("34_" not in n for n in names)  # đúng tập
+
+
+def test_user_copy_shadowing_builtin_gets_hint():
+    """Bản của bạn trùng tên mẫu có sẵn (bản cũ, chưa có dòng Content): file Content được báo, mẫu gốc thì dùng được."""
+    from loopstation.ui.interleave_dialog import TABLE_BUILTIN
+    rows = TABLE_BUILTIN[0]["rows"]
+    old = [r for r in rows if r["role"] != "content"]
+    paths = ["D:/m/33_1_Content.mp4", "D:/m/33_1_LOOP A.mp4", "D:/m/33_1_LOOP B.mp4"]
+    assert tp.unused(old, paths, 33) == ["33_1_Content.mp4"]
+    assert tp.unused(rows, paths, 33) == []

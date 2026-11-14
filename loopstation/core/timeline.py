@@ -35,6 +35,7 @@ class Timeline:
     use_source: bool = False
     errors: list[str] = field(default_factory=list)
     warnings: list[str] = field(default_factory=list)
+    notes: list[str] = field(default_factory=list)  # thông tin (không phải cảnh báo): vd loop 24 fps được lặp khung lên 30
     audio_total: float | None = None  # chế độ xuất riêng nhạc
     version_seeds: list[int] = field(default_factory=list)  # xuất nhiều bản: hạt giống thứ tự của từng bản
 
@@ -101,10 +102,14 @@ def build(project: Project) -> Timeline:
     first = videos[0] if videos else None
     main = _main_clip(vs, tl.clip_infos)
     tl.main_info = main
-    if ex.fps != "source":
-        tl.fps = Fraction(int(ex.fps))
-    else:
+    if ex.fps == "main":
         tl.fps = snap_fps(main.fps) if main else Fraction(30)
+    elif ex.fps == "source":
+        # fps cao nhất trong các clip (không tính intro / outro): không clip nào bị bỏ khung — Content 30 fps xen loop
+        # 24 fps → xuất 30 fps, content giữ nguyên, loop chỉ lặp khung (trước đây theo loop → content mất 1/5 số khung)
+        tl.fps = max((snap_fps(v.fps) for v in videos), default=Fraction(30))
+    else:
+        tl.fps = Fraction(int(ex.fps))
     _, w, h = RESOLUTIONS.get(ex.resolution, RESOLUTIONS["1080p"])
     if not w:  # theo clip đầu tiên (ảnh nếu không có video)
         ref = first or tl.clip_infos[min(tl.clip_infos)]
@@ -118,8 +123,16 @@ def build(project: Project) -> Timeline:
             tl.clip_infos[key] = info
         else:
             tl.warnings.append(f"Bỏ qua {label} lỗi: {path} ({info.error or 'không có hình'})")
-    if any(snap_fps(inf.fps) != tl.fps for inf in tl.clip_infos.values() if not inf.is_image):
-        tl.warnings.append(f"Có clip khác {float(tl.fps):g} fps — sẽ được đổi về {float(tl.fps):g} fps.")
+    vid_fps = [snap_fps(inf.fps) for inf in tl.clip_infos.values() if not inf.is_image]
+    out = f"{float(tl.fps):g}"
+    lower = sorted({f"{float(f):g}" for f in vid_fps if f < tl.fps}, key=float)
+    higher = sorted({f"{float(f):g}" for f in vid_fps if f > tl.fps}, key=float)
+    if higher:
+        tl.warnings.append(f"Clip {' / '.join(higher)} fps sẽ bị bỏ bớt khung để về {out} fps (chuyển động kém mượt hơn) "
+                           f"— muốn giữ đủ khung: trang Xuất → Khung hình/giây → Giữ đủ khung.")
+    elif lower:
+        tl.notes.append(f"Clip {' / '.join(lower)} fps được lặp khung lên {out} fps — không mất khung nào, "
+                       f"clip {out} fps giữ nguyên.")
     portrait = tl.height > tl.width
     if vs.fit == "letterbox" and any((inf.height > inf.width) != portrait and inf.width != inf.height
                                      for inf in tl.clip_infos.values()):

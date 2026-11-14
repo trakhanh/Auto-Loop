@@ -1,4 +1,4 @@
-"""Kiểm tra kiểu xếp "Lần lượt từng loop" (Content → Loop1 ×60 → Loop2 ×60 …), fps theo clip chính, mẫu trong
+"""Kiểm tra kiểu xếp "Lần lượt từng loop" (Content → Loop1 ×60 → Loop2 ×60 …), fps giữ đủ khung, mẫu trong
 Xuất hàng loạt, và Ctrl+C / Ctrl+V / Ctrl+D ở bảng clip + playlist nhạc. Không hiện cửa sổ, dữ liệu riêng.
 
 python tests/sequence_check.py <thư_mục_tạm>
@@ -60,7 +60,7 @@ parent = os.path.join(scratch, "loat")
 shutil.rmtree(parent, ignore_errors=True)
 folder = os.path.join(parent, "Video A")
 os.makedirs(folder)
-# Content 30 fps (các loop 24 fps) — như VideoTest2: xuất phải theo fps của loop (phát lâu nhất)
+# Content 30 fps (các loop 24 fps) — như VideoTest2: mặc định xuất 30 fps để content giữ đủ khung
 from loopstation.core import ffmpeg_tools as ft  # noqa: E402
 ft.run([ft.ffmpeg(), "-v", "error", "-y", "-f", "lavfi", "-i", "testsrc=size=1280x720:rate=30", "-f", "lavfi",
         "-i", "sine=frequency=440:sample_rate=48000", "-t", "6", "-c:v", "libx264", "-pix_fmt", "yuv420p",
@@ -118,12 +118,16 @@ dlg2.plays.setText("abc")
 wait(0.1)
 check("gõ sai số lần → không cho áp dụng", not dlg2.ok_btn.isEnabled())
 
-# ---- fps theo clip phát lâu nhất ----
+# ---- fps: mặc định giữ đủ khung (fps cao nhất = Content 30); "Theo clip chính" = loop phát lâu nhất ----
 p = win.collect_project()
 tl = timeline.build(p)
 infos_fps = {os.path.basename(i.path): float(i.fps) for i in tl.clip_infos.values()}
 loop_fps = timeline.snap_fps(next(i.fps for i in tl.clip_infos.values() if "Loop1" in i.path))
-check("fps xuất theo clip loop (phát lâu nhất)", tl.fps == loop_fps, f"{float(tl.fps)} · {infos_fps}")
+top_fps = max(timeline.snap_fps(i.fps) for i in tl.clip_infos.values() if not i.is_image)
+check("mặc định: fps cao nhất, content không mất khung", tl.fps == top_fps and top_fps > loop_fps,
+      f"{float(tl.fps)} · {infos_fps}")
+p.export.fps = "main"
+check("Theo clip chính: fps của loop (phát lâu nhất)", timeline.build(p).fps == loop_fps)
 
 # ---- Ctrl+C / Ctrl+V / Ctrl+D ở bảng clip ----
 win.activateWindow()
