@@ -35,8 +35,8 @@ FIRST_STEPS = (
 # "Có gì mới" của bản đang chạy — hiện ở đầu trang Tổng quan (sửa cùng lúc với APP_VERSION khi ra bản mới)
 WHATS_NEW = (
     ("film", "Clip khác fps: bạn chọn clip giữ nguyên",
-     "Content 30 fps + loop 24 fps: trang Xuất liệt kê từng clip, chọn clip cần giữ nguyên — app đề xuất fps cao nhất "
-     "để không clip nào mất khung."),
+     "Content 30 fps + loop 24 fps: trang Xuất liệt kê từng clip, chọn clip cần giữ nguyên. Đề xuất ghi rõ: giữ fps "
+     "cao thì mọi clip còn lại buộc phải nâng lên fps đó (lặp khung, không mất khung)."),
     ("chip", "Nhanh hơn, mượt hơn toàn ứng dụng",
      "Mở app, tạo ảnh nhỏ clip, tính lại dự án lớn, lọc tạp âm và xuất video từ ảnh tĩnh nhanh hơn rõ rệt; "
      "playlist dài hàng giờ nối mượt, không nghẽn bộ nhớ; bộ cài gọn nhẹ hơn."),

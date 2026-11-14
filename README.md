@@ -6,7 +6,7 @@
 
 **Ghép và loop clip + nhạc thành video YouTube dài hàng giờ — xem trước ngay trong app, xuất nhanh bằng card đồ hoạ.**
 
-<sub>By Khánh Trà · Ứng dụng Windows · Giao diện tiếng Việt · Bản mới nhất: <b>1.9.4</b></sub>
+<sub>By Khánh Trà · Ứng dụng Windows · Giao diện tiếng Việt · Bản mới nhất: <b>1.9.5</b></sub>
 
 <br>
 
@@ -34,6 +34,8 @@
 <br>
 
 ## Có gì mới ở 1.9
+
+> **1.9.5** · Bảng <b>Các clip khác fps</b> có thêm dòng <b>Đề xuất</b> nói rõ cái giá của từng lựa chọn: muốn giữ fps cao (vd content 30 fps) thì <b>buộc phải nâng tất cả clip còn lại</b> lên fps đó — app lặp khung, không clip nào mất khung nhưng loop cũng không mượt hơn; giữ nguyên clip fps thấp thì clip fps cao bị hạ xuống, mất bớt khung.
 
 > **1.9.4** · <b>Clip khác fps — bạn chọn clip giữ nguyên</b>: content 30 fps xen loop 24 fps (hay clip nào khác fps) thì trang Xuất hiện bảng từng clip — fps, số lần phát, khi xuất ra sao (giữ nguyên / lặp khung, không mất khung / bỏ bớt khung). Chọn clip cần giữ nguyên, video xuất theo fps của clip đó; app đề xuất clip fps cao nhất (không clip nào mất khung). Trước đây app tự xuất theo loop 24 fps làm content 30 fps mất 1/5 số khung. Mẫu bảng nhận đủ 3 kiểu tên Content (<code>33_1_Content</code>, <code>33_Content</code> một lần đầu tập, <code>Content.mp4</code>) và tên có đuôi; bản tự lưu trùng tên mẫu có sẵn có nút <b>Khôi phục mẫu gốc</b>.
 
