@@ -329,9 +329,9 @@ def track_gains(runner: ft.Runner, ms: MusicSettings, paths: dict[int, str], log
                 for msg in notes:
                     log(msg)
             if lufs is not None:
-                gains[t] = max(-20.0, min(20.0, ms.lufs - lufs))
+                gains[t] = level_gain(ms.lufs, lufs, 20.0)
                 if log:
-                    log(f"  {Path(paths[t]).name}: {lufs:.1f} LUFS → {gains[t]:+.1f} dB")
+                    log(f"  {Path(paths[t]).name}: {lufs:.1f} LUFS → {gains[t]:+.1f} dB{quiet_note(ms.lufs, lufs)}")
         vol = ms.tracks[t].volume if 0 <= t < len(ms.tracks) else 100
         if vol != 100:
             gains[t] = gains.get(t, 0.0) + volume_db(vol)
@@ -340,7 +340,22 @@ def track_gains(runner: ft.Runner, ms: MusicSettings, paths: dict[int, str], log
     return gains
 
 
-SOURCE_GAIN_MAX = 15.0  # tiếng gốc: cân tối đa ±15 dB (clip gần như im lặng thì để nguyên, không kéo ồn nền lên)
+SOURCE_GAIN_MAX = 15.0  # tiếng gốc: cân tối đa ±15 dB
+QUIET_LUFS = -40.0  # từ mức này trở xuống là gần như im lặng (gió, tiếng phòng, ù nền): không kéo to
+
+
+def level_gain(target: float, lufs: float, cap: float) -> float:
+    """dB đưa bài / clip về mức đích, kẹp trong ±cap. Bài gần như im lặng (≤ -40 LUFS) thì KHÔNG kéo to: kéo lên
+    15–20 dB chỉ làm to tiếng gió, ù nền chứ không có nội dung gì to lên (vẫn được giảm nếu đích còn nhỏ hơn)."""
+    g = target - lufs
+    if lufs <= QUIET_LUFS and g > 0:
+        return 0.0
+    return max(-cap, min(cap, g))
+
+
+def quiet_note(target: float, lufs: float) -> str:
+    return (" (gần như im lặng — giữ nguyên, không kéo to tiếng ồn nền)"
+            if lufs <= QUIET_LUFS and target > lufs else "")
 
 
 def source_gains(runner: ft.Runner, paths: dict[int, str], audible: dict[int, bool], target: float,
@@ -354,14 +369,14 @@ def source_gains(runner: ft.Runner, paths: dict[int, str], audible: dict[int, bo
         seen = dict(zip(files, pool.map(lambda p: loudness_or_none(runner, p, p, log), files)))
     for path in files:
         if log and seen[path] is not None:
-            g = max(-SOURCE_GAIN_MAX, min(SOURCE_GAIN_MAX, target - seen[path]))
-            log(f"  Tiếng gốc {Path(path).name}: {seen[path]:.1f} LUFS → {g:+.1f} dB")
+            g = level_gain(target, seen[path], SOURCE_GAIN_MAX)
+            log(f"  Tiếng gốc {Path(path).name}: {seen[path]:.1f} LUFS → {g:+.1f} dB{quiet_note(target, seen[path])}")
     for k, path in sorted(paths.items()):
         if not audible.get(k):
             continue
         lufs = seen[path]
         if lufs is not None:
-            gains[k] = max(-SOURCE_GAIN_MAX, min(SOURCE_GAIN_MAX, target - lufs))
+            gains[k] = level_gain(target, lufs, SOURCE_GAIN_MAX)
     return gains
 
 

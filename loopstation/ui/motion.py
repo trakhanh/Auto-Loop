@@ -109,11 +109,13 @@ def fade_window_in(win: QWidget, ms: int = 220) -> None:
 
 def slide_visible(widget: QWidget, show: bool, ms: int = 220) -> None:
     """Hiện / ẩn widget bằng cách trượt chiều cao (cho thanh gợi ý, thông báo trong trang)."""
-    if show == (widget.isVisible() and widget.maximumHeight() > 0):
-        return
     old = widget.property("_slide_anim")
-    if old is not None:
-        old.stop()
+    if old is not None and old.state() == QAbstractAnimation.State.Running:
+        if (old.endValue() > 0) == show:
+            return  # đang trượt đúng chiều rồi
+        old.stop()  # đang trượt ra mà lại cần ẩn (hoặc ngược lại): đổi chiều ngay, không bỏ qua lệnh
+    elif show == (widget.isVisible() and widget.maximumHeight() > 0):
+        return
     if show:
         widget.setMaximumHeight(0)
         widget.setVisible(True)

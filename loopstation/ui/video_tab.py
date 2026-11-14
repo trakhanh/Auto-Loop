@@ -3,6 +3,8 @@ from __future__ import annotations
 
 import os
 import random
+from concurrent.futures import ThreadPoolExecutor
+from dataclasses import replace
 from pathlib import Path
 
 import shiboken6
@@ -14,6 +16,7 @@ from PySide6.QtWidgets import (
     QSpinBox, QSplitter, QTabWidget, QTextEdit, QTreeWidgetItem, QVBoxLayout, QWidget,
 )
 
+from ..core import seam as seam_mod
 from ..core.probe import MediaInfo
 from ..core.project import ClipItem, VideoSettings, format_hms, is_sample_file, parse_hms
 from . import effects, icons, motion, theme
@@ -189,6 +192,7 @@ class VideoTab(QWidget):
     seasonDropped = Signal(list, str)  # thả file của nhiều tập (33_…, 34_…): (đường dẫn, tên mẫu bảng hợp nhất)
     # sắp mở hộp thoại / cửa sổ tự phát hình, tiếng (Đoạn lấy, mở file bằng app khác) → cửa sổ chính dừng trình phát
     media_dialog_opening = Signal()
+    _seamMeasured = Signal()  # đo xong chỗ nối của một clip (luồng nền → giao diện)
 
     def __init__(self, settings: QSettings, parent=None):
         super().__init__(parent)
@@ -251,7 +255,8 @@ class VideoTab(QWidget):
                                  ("copy", "Nhân bản dòng (Ctrl+D) — dùng lại clip này ở chỗ khác", self._duplicate),
                                  ("copy", "Chép các dòng đang chọn (Ctrl+C)", lambda _it: self._copy_rows()),
                                  ("file_plus", "Dán bên dưới (Ctrl+V)", lambda _it: self._paste_rows()),
-                                 ("repeat", "Xen kẽ clip nền giữa các cảnh…", lambda _it: self._open_interleave())]
+                                 ("repeat", "Xen kẽ clip nền giữa các cảnh…", lambda _it: self._open_interleave()),
+                                 ("refresh", "Tạo bản lặp xuôi–ngược (hết giật chỗ nối)…", self._boomerang_rows)]
         self.toolbar = w.ListToolbar(self.list, self._add_files, self._add_folder, random.Random)
 
         # ----- thanh đặt nhanh (Quick Action Bar) -----
@@ -599,6 +604,7 @@ class VideoTab(QWidget):
         self.shuffle_bar.setVisible(False)
         self._shuffle_order: list[int] = []
         lv.addWidget(self.shuffle_bar)
+        lv.addWidget(self._build_seam_bar())
         self.list.setMinimumHeight(210)
         lv.addWidget(self.list, 1)
         lv.addWidget(quick_bar)
@@ -1088,6 +1094,9 @@ class VideoTab(QWidget):
                 active += 1
         total = len(items)
         self.count_label.setText(f"{active}/{total} clip bật" if total else "0 clip")
+        if hasattr(self, "seam_bar"):
+            self._mark_seams()
+            self._seam_timer.start()  # clip lặp mới / đổi đoạn lấy: đo chỗ nối ở luồng nền
 
     def _refresh_row(self, it: QTreeWidgetItem, ref: MediaInfo | None) -> None:
         self._refresh_row_inner(it, ref)
@@ -1181,6 +1190,220 @@ class VideoTab(QWidget):
             hi = c.max * d - max(0, c.max - 1) * x
             it.setText(COL_DUR, f"{w.fmt_dur(lo)}–{w.fmt_dur(hi)}")
         it.setForeground(COL_DUR, theme.qcolor("text_disabled") if skipped else theme.qcolor("text"))
+
+    # ---------- chỗ nối khi lặp: đo, đánh dấu, đề xuất ----------
+    def _build_seam_bar(self) -> QFrame:
+        """Dải gợi ý khi clip lặp nhiều lần mà khung cuối khác hẳn khung đầu (lặp lại sẽ thấy giật). Chỉ đề xuất:
+        hoà hình ở chỗ nối, làm bản xuôi–ngược, hoặc xem thử — người dùng chọn."""
+        self._seam_pool = ThreadPoolExecutor(max_workers=2, thread_name_prefix="seam")
+        self._seam_pending: set[tuple] = set()
+        self._seam_dismissed: set[tuple] = set()
+        self._seam_rows: list[QTreeWidgetItem] = []
+        self._seam_shown = False
+        self._seam_timer = QTimer(self)
+        self._seam_timer.setSingleShot(True)
+        self._seam_timer.setInterval(700)
+        self._seam_timer.timeout.connect(self._check_seams)
+        self._seamMeasured.connect(self._mark_seams)
+        bar = QFrame()
+        bar.setObjectName("suggestBar")
+        outer = QVBoxLayout(bar)
+        outer.setContentsMargins(12, 8, 8, 8)
+        outer.setSpacing(6)
+        top = QHBoxLayout()
+        top.setSpacing(8)
+        ic = QLabel()
+        icons.bind(ic, "repeat", 15, "warn_text")
+        top.addWidget(ic, 0, Qt.AlignmentFlag.AlignTop)
+        self.seam_text = QLabel()
+        self.seam_text.setWordWrap(True)
+        top.addWidget(self.seam_text, 1)
+        outer.addLayout(top)
+        lay = QHBoxLayout()  # nút ở dòng riêng: chung dòng với chữ thì chữ bị ép thành cột hẹp
+        lay.setSpacing(8)
+        lay.addStretch(1)
+        xf = QPushButton("Hoà 1 s ở chỗ nối")
+        xf.setObjectName("accentBtn")
+        xf.setToolTip("Đặt Nối loop 1 s cho các clip bị giật: cuối lần phát mờ dần sang đầu lần sau (Ctrl+Z để bỏ)")
+        xf.clicked.connect(self._seam_fix_xfade)
+        boom = QPushButton("Xuôi–ngược…")
+        boom.setObjectName("pill")
+        boom.setIcon(icons.icon("refresh", 13))
+        boom.setIconSize(QSize(13, 13))
+        boom.setToolTip("Tạo bản clip chạy xuôi rồi chạy ngược (lưu cạnh file gốc): mỗi lần lặp nối khớp khung, "
+                        "hợp với khói, nước, lửa, mây. Tiếng phần sau phát ngược.")
+        boom.clicked.connect(lambda: self._boomerang_rows(None, self._seam_rows))
+        look = QPushButton("Xem thử")
+        look.setObjectName("pill")
+        look.setIcon(icons.icon("play", 13))
+        look.setIconSize(QSize(13, 13))
+        look.setToolTip("Xuất nhanh đoạn ngắn: clip giật đầu tiên phát 2 lần để xem chỗ nối")
+        look.clicked.connect(self._seam_preview)
+        later = QPushButton("Để sau")
+        later.setObjectName("ghost")
+        later.clicked.connect(self._seam_dismiss)
+        for b in (look, boom, xf, later):
+            lay.addWidget(b)
+        outer.addWidget(flow_row(lay))  # khung hẹp: nút tự xuống dòng
+        bar.setVisible(False)
+        self.seam_bar = bar
+        return bar
+
+    @staticmethod
+    def _loops(c: ClipItem) -> bool:
+        return c.enabled and ((c.plays_mode in ("fixed", "duration") and c.count > 1)
+                              or (c.plays_mode == "random" and c.max > 1))
+
+    def _seam_target(self, it: QTreeWidgetItem):
+        """(ClipItem, MediaInfo) nếu dòng này là video được lặp nhiều lần; không thì None."""
+        c: ClipItem = it.data(0, w.ROLE_DATA)
+        info: MediaInfo = it.data(0, w.ROLE_INFO)
+        if c is None or info is None or not info.ok or info.is_image or not info.has_video or not self._loops(c):
+            return None
+        return c, info
+
+    def _check_seams(self) -> None:
+        for it in self.list.items():
+            t = self._seam_target(it)
+            if t is None:
+                continue
+            c, info = t
+            k = seam_mod.key(c.path, c.trim_start, c.trim_end)
+            done, _res = seam_mod.cached(c.path, c.trim_start, c.trim_end)
+            if done or k in self._seam_pending:
+                continue
+            self._seam_pending.add(k)
+
+            def job(c=c, info=info, k=k) -> None:
+                try:
+                    seam_mod.measure_cached(c.path, info.duration, float(info.fps or 0), c.trim_start, c.trim_end)
+                finally:
+                    self._seam_pending.discard(k)
+                    try:
+                        self._seamMeasured.emit()
+                    except RuntimeError:  # cửa sổ đã đóng
+                        pass
+
+            self._seam_pool.submit(job)
+
+    def _mark_seams(self) -> None:
+        """Ô "Nối loop" của clip lặp bị giật (đang Cắt thẳng): tô cảnh báo + lời khuyên; dải gợi ý phía trên bảng."""
+        rows: list[tuple[QTreeWidgetItem, seam_mod.Seam]] = []
+        was = self.list.blockSignals(True)
+        for it in self.list.items():
+            t = self._seam_target(it)
+            if t is None:
+                continue
+            c, _info = t
+            done, res = seam_mod.cached(c.path, c.trim_start, c.trim_end)
+            if not (done and res and res.jumpy and c.loop_xfade <= 0):
+                continue
+            rows.append((it, res))
+            it.setForeground(COL_LOOPXF, theme.qcolor("warn_text"))
+            it.setToolTip(COL_LOOPXF, f"Chỗ nối bị giật: khung cuối khác khung đầu ~{res.times:.0f} lần mức bình "
+                                      "thường giữa hai khung liền nhau. Đề xuất: Nối loop 1 s, hoặc chuột phải → Tạo "
+                                      "bản lặp xuôi–ngược.")
+        self.list.blockSignals(was)
+        self._seam_rows = [it for it, _r in rows]
+        keys = {seam_mod.key(c.path, c.trim_start, c.trim_end)
+                for c in (it.data(0, w.ROLE_DATA) for it in self._seam_rows)}
+        show = bool(keys - self._seam_dismissed)
+        if show:
+            names = list(dict.fromkeys(Path(it.data(0, w.ROLE_DATA).path).stem for it in self._seam_rows))
+            few = ", ".join(f"<b>{n}</b>" for n in names[:3]) + (f" +{len(names) - 3}" if len(names) > 3 else "")
+            worst = max(r.times for _it, r in rows)
+            self.seam_text.setText(
+                f"Lặp lại sẽ thấy <b>giật ở chỗ nối</b>: {few} — khung cuối khác khung đầu tới ~{worst:.0f} lần mức "
+                "bình thường. <b>Đề xuất:</b> hoà 1 s ở chỗ nối (mờ dần sang lần lặp sau), hoặc làm bản "
+                "<b>xuôi–ngược</b> (chạy xuôi rồi ngược, nối khớp từng khung).")
+        if show != self._seam_shown:  # theo trạng thái muốn có (đang trượt dở thì isVisible chưa đúng)
+            self._seam_shown = show
+            if self.isVisible():
+                motion.slide_visible(self.seam_bar, show)
+            else:
+                self.seam_bar.setVisible(show)
+
+    def _seam_dismiss(self) -> None:
+        for it in self._seam_rows:
+            c: ClipItem = it.data(0, w.ROLE_DATA)
+            self._seam_dismissed.add(seam_mod.key(c.path, c.trim_start, c.trim_end))
+        self._seam_shown = False
+        motion.slide_visible(self.seam_bar, False)
+
+    def _seam_fix_xfade(self) -> None:
+        rows = [it for it in self._seam_rows if shiboken6.isValid(it)]
+        if not rows:
+            return
+        self.list.blockSignals(True)
+        for it in rows:
+            c: ClipItem = it.data(0, w.ROLE_DATA)
+            info: MediaInfo = it.data(0, w.ROLE_INFO)
+            d = max(0.2, info.duration - c.trim_start - c.trim_end)
+            c.loop_xfade = min(1.0, round(d * 0.45, 1))
+            it.setData(0, w.ROLE_DATA, c)
+            it.setText(COL_LOOPXF, w.xf_text(c.loop_xfade))
+        self._refresh_rows()
+        self.list.blockSignals(False)
+        self.status.setText(f"Đã đặt Nối loop 1 s cho {len(rows)} clip — Ctrl+Z để bỏ.")
+        self._emit(step=True)
+
+    def _seam_preview(self) -> None:
+        rows = [it for it in self._seam_rows if shiboken6.isValid(it)]
+        if rows:
+            self.list.setCurrentItem(rows[0])
+            self.previewSeamRequested.emit(self.list.indexOfTopLevelItem(rows[0]))
+
+    def _boomerang_rows(self, it: QTreeWidgetItem | None, rows: list[QTreeWidgetItem] | None = None) -> None:
+        """Tạo bản xuôi–ngược cho các dòng (chuột phải: các dòng đang chọn) rồi cho các dòng đó dùng file mới.
+        File mới nằm cạnh file gốc (…_XuoiNguoc.mp4), lấy đúng đoạn đang cắt; Ctrl+Z quay lại file cũ."""
+        from .boomerang_runner import job_key, make_all
+        if rows is None:
+            rows = self.list.selectedItems()
+            if it is not None and it not in rows:
+                rows = [it]
+        vids = []
+        for r in rows:
+            if not shiboken6.isValid(r):
+                continue
+            info: MediaInfo = r.data(0, w.ROLE_INFO)
+            if info is not None and info.ok and info.has_video and not info.is_image:
+                vids.append(r)
+        if not vids:
+            QMessageBox.information(self, "Lặp xuôi–ngược", "Chọn ít nhất một video (ảnh tĩnh không cần).")
+            return
+        jobs = [(c.path, c.trim_start, c.trim_end) for c in (r.data(0, w.ROLE_DATA) for r in vids)]
+        self._flush_pending()
+        self._push_history()
+        results, errors, cancelled = make_all(self.window(), jobs)
+        made = {k: (out, info) for k, out, info in results}
+        changed = 0
+        self.list.blockSignals(True)
+        for row in vids:  # chỉ các dòng được chọn: dòng khác dùng cùng file (vd phát 1 lần) giữ nguyên
+            if not shiboken6.isValid(row) or (idx := self.list.indexOfTopLevelItem(row)) < 0:
+                continue
+            c: ClipItem = row.data(0, w.ROLE_DATA)
+            hit = made.get(job_key(c.path, c.trim_start, c.trim_end))
+            if not hit:
+                continue
+            out, info = hit
+            was_sel = row.isSelected()
+            new = self._make_item(replace(c, path=out, trim_start=0.0, trim_end=0.0), info)
+            self.list.takeTopLevelItem(idx)
+            self.list.insertTopLevelItem(idx, new)
+            new.setSelected(was_sel)
+            changed += 1
+        self._refresh_rows()
+        self.list.blockSignals(False)
+        if changed:
+            names = ", ".join(Path(o).name for o, _i in list(made.values())[:2])
+            self.status.setText(f"Đã tạo {names} cạnh file gốc — {changed} dòng dùng bản xuôi–ngược. "
+                                "Ctrl+Z để quay lại.")
+            self.notify.emit(f"Xong bản lặp xuôi–ngược ({len(made)} clip)", "ok")
+            self._emit(step=True)
+        if errors:
+            QMessageBox.warning(self, "Lặp xuôi–ngược", "Không tạo được:\n" + "\n".join(errors[:5]))
+        elif cancelled and not changed:
+            self.status.setText("Đã huỷ tạo bản xuôi–ngược.")
 
     def _on_thumb(self, path: str, img) -> None:
         items = self._thumb_waiting.pop(path, None)

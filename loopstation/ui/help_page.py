@@ -261,8 +261,10 @@ topic("video", "Làm video", "film", "Trang Video: clip & số lần loop", hero
 <ul>
 <li><b>Ô tick</b> đầu dòng: bật / tắt clip (phím <span class="k">Ctrl+Space</span> cho các dòng đang chọn).</li>
 <li><b>Bấm đúp tên file</b> để xem clip. <b>Chuột phải</b> một dòng: Mở / Xem thử file, Hiện trong Explorer, Chọn đoạn lấy…,
-Nhân bản dòng, Xen kẽ clip nền…, Bật / Tắt, Đưa lên / xuống, Xoá.</li>
+Nhân bản dòng, Xen kẽ clip nền…, Tạo bản lặp xuôi–ngược…, Bật / Tắt, Đưa lên / xuống, Xoá.</li>
 <li><b>Xem thử nối</b> (hàng <i>Cắt đoạn &amp; hoà hình ▾</i>): xuất nhanh clip đang chọn phát 2 lần rồi sang clip kế, để xem crossfade có mượt không.</li>
+<li><b>Chỗ nối bị giật</b>: clip lặp nhiều lần mà khung cuối khác hẳn khung đầu thì ô <b>Nối loop</b> hiện màu cam và hiện dải <i>Lặp lại sẽ thấy giật ở chỗ nối</i> — app chỉ đề xuất, bạn chọn: <b>Hoà 1 s ở chỗ nối</b>, <b>Xuôi–ngược…</b>, <b>Xem thử</b> hoặc <b>Để sau</b>.</li>
+<li><b>Lặp xuôi–ngược</b> (chuột phải → <i>Tạo bản lặp xuôi–ngược</i>): tạo file <code>…_XuoiNguoc.mp4</code> cạnh file gốc — clip chạy xuôi rồi chạy ngược nên mỗi lần lặp nối khớp từng khung (hợp với khói, nước, lửa, mây). Tiếng phần sau phát ngược: clip có lời nói thì nên tắt tiếng gốc. <span class="k">Ctrl+Z</span> quay lại file cũ.</li>
 <li>Clip khác độ phân giải / fps: không sao, app tự chuẩn hoá (thông tin hiện màu cam).</li>
 <li>Làm sai? <span class="k">Ctrl+Z</span> để quay lại.</li>
 </ul>
@@ -445,7 +447,8 @@ topic("nhac", "Âm thanh", "music", "Trang Nhạc: playlist", hero(
 <li><b>Thứ tự phát</b>: theo bảng · ngẫu nhiên · <b>ngẫu nhiên không lặp bài liền nhau</b>.</li>
 <li><b>Ghim bài</b> (chuột phải → Ghim): bài ghim luôn có trong file, kể cả khi file ngắn hơn cả playlist.</li>
 <li><b>Nâng cao ▾</b>: crossfade giữa bài (mặc định 3 giây), <b>khoảng lặng giữa bài</b>, to dần đầu (2 giây) / nhỏ dần cuối (5 giây),
-<b>chuẩn hoá độ to</b> mặc định -14 LUFS (chuẩn YouTube; đổi được từ -30 đến -5) để các bài to đều nhau.</li>
+<b>chuẩn hoá độ to</b> mặc định -14 LUFS (chuẩn YouTube; đổi được từ -30 đến -5) để các bài to đều nhau. Bài / clip gần như
+im lặng (từ -40 LUFS trở xuống: gió, tiếng phòng) thì giữ nguyên, không kéo to tiếng ồn nền.</li>
 </ul>""" + box("tip", "Playlist dài hơn video thì chỉ phát những bài kịp phát. Video dài hơn playlist thì playlist tự lặp lại.") + box(
     "warn", "Ở kiểu <b>Chỉ video</b> (hoặc chọn <i>Chỉ tiếng gốc clip</i>), playlist bị làm mờ vì không dùng — tiếng nền vẫn dùng được."))
 
