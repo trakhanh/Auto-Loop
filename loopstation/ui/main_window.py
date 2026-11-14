@@ -1410,12 +1410,19 @@ class MainWindow(QMainWindow):
         # gợi ý fps so với clip gốc: "Giữ đủ khung" lấy fps cao nhất của các clip → so với chính fps đó (không báo "lặp khung")
         src_fps = float(tl.fps) if proj.export.fps == "source" else (float(timeline.snap_fps(m.fps)) if m else 0.0)
         self.export_tab.set_source((m.width, m.height, src_fps) if m else None, (tl.width, tl.height, float(tl.fps)))
-        by_fps: dict[float, list[str]] = {}
+        rows: dict[str, list] = {}  # mỗi file một dòng (file dùng ở nhiều dòng bảng: cộng số lần phát)
         for k, inf in sorted(tl.clip_infos.items()):
-            if k >= 0 and not inf.is_image:  # intro / outro không tính
-                by_fps.setdefault(round(float(timeline.snap_fps(inf.fps)), 3), []).append(Path(inf.path).stem)
-        self.export_tab.set_fps_mix([(f, list(dict.fromkeys(n))) for f, n in by_fps.items()], float(tl.fps),
-                                    round(float(timeline.snap_fps(m.fps)), 3) if m else 0.0)
+            if k < 0 or inf.is_image:  # intro / outro, ảnh tĩnh: không tính
+                continue
+            c = proj.video.clips[k]
+            key = os.path.normcase(inf.path)
+            row = rows.setdefault(key, [Path(inf.path).stem, round(float(timeline.snap_fps(inf.fps)), 3), 0, False])
+            if c.plays_mode == "fixed":
+                row[2] += c.count
+            else:
+                row[3] = True  # số lần phát ngẫu nhiên / theo thời lượng
+        self.export_tab.set_fps_mix([(n, f, "—" if other else f"×{cnt}") for n, f, cnt, other in rows.values()],
+                                    float(tl.fps), round(float(timeline.snap_fps(m.fps)), 3) if m else 0.0)
         self._schedule_size(proj, tl)
 
     # ---------- dự đoán dung lượng ----------

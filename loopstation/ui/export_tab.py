@@ -12,7 +12,7 @@ from PySide6.QtGui import QColor, QIcon
 from PySide6.QtWidgets import (
     QCheckBox, QComboBox, QDoubleSpinBox, QFileDialog, QFormLayout, QFrame, QGroupBox, QHBoxLayout, QHeaderView, QLabel,
     QLineEdit, QMenu, QPlainTextEdit, QProgressBar, QPushButton, QScrollArea, QSplitter, QTreeWidget, QTreeWidgetItem,
-    QVBoxLayout, QWidget,
+    QVBoxLayout, QWidget, QButtonGroup, QGridLayout, QRadioButton,
 )
 
 from ..core import cloud, encoders, ffmpeg_tools
@@ -23,6 +23,9 @@ from . import widgets as w
 from .video_tab import combo, hms_edit, quick_buttons, set_combo
 
 AUDIO_LENGTH = [("target", "Theo thời lượng đích"), ("rounds", "Theo số lượt phát playlist")]
+
+
+MAX_FPS_ROWS = 8  # bảng chọn clip giữ nguyên fps: hiện tối đa 8 clip
 
 
 class ExportTab(QWidget):
@@ -607,10 +610,10 @@ class ExportTab(QWidget):
             markers=self.markers.isChecked(),
         )
 
-    # ---------- clip khác fps: đề xuất, người dùng chọn ----------
+    # ---------- clip khác fps: bảng từng clip, người dùng chọn clip cần giữ nguyên ----------
     def _build_fps_card(self) -> None:
-        """Thẻ hiện khi các clip khác fps (vd Content 30 + loop 24): liệt kê clip theo fps, mỗi lựa chọn một nút ghi rõ
-        clip nào giữ nguyên / clip nào bị đổi — app chỉ đề xuất, người dùng bấm chọn (không tự đổi ngầm)."""
+        """Thẻ hiện khi các clip khác fps (vd Content 30 + loop 24): bảng từng clip (fps, số lần phát, khi xuất ra
+        sao). Chọn clip cần giữ nguyên chất lượng → video xuất theo fps của clip đó. App chỉ đề xuất, không tự đổi ngầm."""
         card = QFrame()
         card.setObjectName("featureCard")
         theme.tag(card, state="on")
@@ -622,70 +625,89 @@ class ExportTab(QWidget):
         ic = QLabel()
         icons.bind(ic, "film", 16, "accent_text")
         ic.setFixedSize(16, 16)
-        title = QLabel("Các clip khác fps — chọn fps cho video")
+        title = QLabel("Các clip khác fps — chọn clip cần giữ nguyên")
         title.setObjectName("featureTitle")
         head.addWidget(ic)
         head.addWidget(title)
         head.addStretch(1)
         lay.addLayout(head)
-        self.fps_groups = w.muted("")
-        self.fps_groups.setWordWrap(True)
-        lay.addWidget(self.fps_groups)
-        self.fps_btn_box = QWidget()
-        self.fps_btn_row = w.FlowLayout(self.fps_btn_box, spacing=6)
-        lay.addWidget(self.fps_btn_box)
-        self.fps_effect = QLabel("")
-        self.fps_effect.setWordWrap(True)
-        lay.addWidget(self.fps_effect)
+        hint = w.muted("Video chỉ có <b>một</b> fps: chọn clip cần giữ nguyên chất lượng, video xuất theo fps của clip đó. "
+                       "Clip khác fps được đổi theo — cột <b>Khi xuất</b> ghi rõ từng clip.")
+        hint.setWordWrap(True)
+        lay.addWidget(hint)
+        self.fps_grid_box = QWidget()
+        self.fps_grid = QGridLayout(self.fps_grid_box)
+        self.fps_grid.setContentsMargins(0, 2, 0, 0)
+        self.fps_grid.setHorizontalSpacing(14)
+        self.fps_grid.setVerticalSpacing(3)
+        self.fps_grid.setColumnStretch(3, 1)
+        lay.addWidget(self.fps_grid_box)
         card.hide()
         self.fps_card = card
-        self._fps_btns: list[QPushButton] = []
+        self._fps_group = QButtonGroup(self)
+        self._fps_rows: list[tuple[QRadioButton, QLabel, float]] = []
         self._fps_sig = None
 
-    def set_fps_mix(self, groups: list[tuple[float, list[str]]], out_fps: float, main_fps: float) -> None:
-        """`groups`: [(fps, [tên clip])] — các fps khác nhau của clip. Một fps → ẩn thẻ."""
-        self.fps_card.setVisible(len(groups) > 1)
-        if len(groups) < 2:
+    def set_fps_mix(self, clips: list[tuple[str, float, str]], out_fps: float, main_fps: float) -> None:
+        """`clips`: [(tên clip, fps, số lần phát "×57")] — mỗi file một dòng. Chỉ một fps → ẩn thẻ."""
+        fps_set = {f for _n, f, _p in clips}
+        self.fps_card.setVisible(len(fps_set) > 1)
+        if len(fps_set) < 2:
             return
-        groups = sorted(groups, key=lambda g: -g[0])
-        top = groups[0][0]
-
-        def names(items: list[str]) -> str:
-            return ", ".join(items[:3]) + (f" +{len(items) - 3}" if len(items) > 3 else "")
-        self.fps_groups.setText(" · ".join(f"<b>{f:g} fps</b>: {names(n)}" for f, n in groups)
-                                + " — video chỉ có một fps, clip khác fps sẽ được đổi theo fps bạn chọn.")
-        sig = tuple((f, tuple(n)) for f, n in groups)
-        if sig != self._fps_sig:  # đổi bộ clip: dựng lại nút
+        top = max(fps_set)
+        sig = tuple(clips)
+        if sig != self._fps_sig:  # đổi bộ clip: dựng lại bảng
             self._fps_sig = sig
-            for b in self._fps_btns:
-                self.fps_btn_row.removeWidget(b)
-                b.deleteLater()
-            self._fps_btns = []
-            for f, _n in groups:
-                b = QPushButton(f"{f:g} fps" + (" · đề xuất" if f == top else "")
-                                + (" · như clip phát lâu nhất" if f == main_fps and f != top else ""))
-                b.setObjectName("pill")
-                b.setCheckable(True)
-                b.setProperty("fps", f)
-                b.clicked.connect(lambda _=False, f=f: self._pick_fps(f, top, main_fps))
-                self.fps_btn_row.addWidget(b)
-                self._fps_btns.append(b)
-        for b in self._fps_btns:
-            b.setChecked(abs(b.property("fps") - out_fps) < 0.01)
-        keep = [n for f, items in groups if abs(f - out_fps) < 0.01 for n in items]
-        up = [n for f, items in groups if f < out_fps - 0.01 for n in items]
-        down = [n for f, items in groups if f > out_fps + 0.01 for n in items]
-        bits = [f"Đang xuất <b>{out_fps:g} fps</b>: {names(keep)} giữ nguyên"] if keep else \
-            [f"Đang xuất <b>{out_fps:g} fps</b>"]
-        if up:
-            bits.append(f"{names(up)} được lặp khung (không mất khung)")
-        if down:
-            bits.append(f"<span style='color:{theme.css_color('warn_text')}'>{names(down)} bị bỏ bớt khung — "
-                        "chuyển động kém mượt hơn</span>")
-        self.fps_effect.setText(" · ".join(bits) + ".")
+            while self.fps_grid.count():
+                item = self.fps_grid.takeAt(0)
+                if item.widget():
+                    item.widget().deleteLater()
+            for b in self._fps_group.buttons():
+                self._fps_group.removeButton(b)
+            self._fps_rows = []
+            for col, text in enumerate(("Giữ nguyên", "fps", "Phát", "Khi xuất")):
+                h = QLabel(f"<b>{text}</b>")
+                h.setObjectName("muted")
+                self.fps_grid.addWidget(h, 0, col)
+            shown = clips[:MAX_FPS_ROWS]
+            for r, (name, f, plays) in enumerate(shown, start=1):
+                rb = QRadioButton(name + ("  · đề xuất" if f == top else ""))
+                rb.setToolTip(f"Giữ nguyên {name} ({f:g} fps): video xuất {f:g} fps")
+                rb.clicked.connect(lambda _=False, f=f: self._pick_fps(f, top, main_fps))
+                self._fps_group.addButton(rb)
+                fps_lab = QLabel(f"{f:g}")
+                plays_lab = QLabel(plays)
+                eff = QLabel("")
+                eff.setWordWrap(True)
+                for c, wd in enumerate((rb, fps_lab, plays_lab, eff)):
+                    self.fps_grid.addWidget(wd, r, c)
+                self._fps_rows.append((rb, eff, f))
+            if len(clips) > MAX_FPS_ROWS:
+                more = w.muted(f"+{len(clips) - MAX_FPS_ROWS} clip khác")
+                self.fps_grid.addWidget(more, len(shown) + 1, 0, 1, 4)
+        picked = False
+        for rb, eff, f in self._fps_rows:
+            same = abs(f - out_fps) < 0.01
+            rb.blockSignals(True)
+            if same and not picked:  # nhiều clip cùng fps: đánh dấu clip đầu tiên, các clip kia cũng "giữ nguyên"
+                rb.setChecked(True)
+                picked = True
+            rb.blockSignals(False)
+            if same:
+                eff.setText(f"<span style='color:{theme.css_color('success_text')}'>✓ Giữ nguyên</span>")
+            elif f < out_fps:
+                eff.setText(f"Lặp khung lên {out_fps:g} fps — không mất khung")
+            else:
+                eff.setText(f"<span style='color:{theme.css_color('warn_text')}'>Bỏ bớt {1 - out_fps / f:.0%} khung "
+                            f"(→ {out_fps:g} fps) — chuyển động kém mượt hơn</span>")
+        if not picked:  # fps xuất không trùng clip nào (vd chọn tay 60): không clip nào được đánh dấu
+            self._fps_group.setExclusive(False)
+            for rb, _e, _f in self._fps_rows:
+                rb.setChecked(False)
+            self._fps_group.setExclusive(True)
 
     def _pick_fps(self, fps: float, top: float, main_fps: float) -> None:
-        """Bấm một nút fps: fps cao nhất = "Giữ đủ khung"; fps của clip phát lâu nhất = "Theo clip chính"; còn lại =
+        """Chọn clip giữ nguyên: fps cao nhất = "Giữ đủ khung"; fps của clip phát lâu nhất = "Theo clip chính"; còn lại =
         đúng số đó nếu có trong danh sách."""
         key = "source" if fps == top else "main" if fps == main_fps else str(round(fps))
         if self.fps.findData(key) < 0:
