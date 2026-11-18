@@ -156,6 +156,7 @@ class MainWindow(QMainWindow):
         self._preview_timer.timeout.connect(self._preview_refresh)
         self.music_tab.mixer.changed.connect(self._preview_gains)
         self.video_tab.timeline.seekRequested.connect(self._preview_seek)
+        self.video_tab.timeline.trackMoveRequested.connect(self._move_track_from_timeline)
         self.video_tab.timeline.seek_enabled = True
         self.music_tab.mixer.playbackStopped.connect(self._mixer_stopped)
         self.music_tab.mixer.previewRequested.connect(self.preview_audio)
@@ -1307,6 +1308,12 @@ class MainWindow(QMainWindow):
             proj.export.filename = want
         self._auto_name = want
 
+    def _move_track_from_timeline(self, src: int, target: int, after: bool) -> None:
+        """Kéo khối bài trên làn NHẠC: đổi chỗ bài trong playlist trang Nhạc, khối vừa chuyển nhấp sáng."""
+        dest = self.music_tab.move_track_row(src, target, after)
+        if dest is not None:
+            self.video_tab.timeline.flash_track(dest)
+
     def _recompute_core(self) -> None:
         proj = self._recompute_proj or self.collect_project()
         self._suggest_filename(proj)
@@ -1322,6 +1329,9 @@ class MainWindow(QMainWindow):
         self.video_tab.set_ready("")
         self.video_tab.set_shuffle("", [])
         self.video_tab.timeline.setEnabled(True)
+        self.video_tab.timeline.music_reorder_block = (
+            "" if proj.music.order == "list" else
+            "Playlist đang phát ngẫu nhiên — chọn Chế độ phát “Theo thứ tự trong bảng” ở trang Nhạc để kéo đổi chỗ")
         try:
             tl = timeline.build(proj)
         except Exception as e:  # noqa: BLE001
@@ -1369,13 +1379,15 @@ class MainWindow(QMainWindow):
         self.video_tab.set_preview(preview)
 
         vs = proj.video
+        detail = ""
         if self.mode == "video_only":
-            banner = ("Chế độ <b>Chỉ video</b>: không dùng playlist nhạc. Có thể thêm <b>tiếng nền</b> (mưa, sóng, "
-                      "gió…) ở cột phải — tự lặp hết video.")
+            banner = "<b>Chỉ video</b>: không dùng playlist nhạc · thêm <b>tiếng nền</b> ở cột phải nếu muốn"
+            detail = ("Chế độ Chỉ video: không dùng playlist nhạc. Có thể thêm tiếng nền (mưa, sóng, gió…) ở cột phải — "
+                      "tự lặp hết video.")
         elif vs.source_audio == "only":
             banner = "Đang ở chế độ <b>chỉ tiếng gốc của clip</b> — playlist nhạc được bỏ qua."
         elif not tl.use_music:
-            banner = "Chưa có bài nào được bật. Thêm nhạc vào bảng bên dưới — nhạc sẽ tự lặp theo độ dài video."
+            banner = "Chưa có bài nào được bật — thêm nhạc, nhạc tự lặp theo độ dài video"
         elif vs.length_mode == "music":
             banner = (f"Video đang chạy <b>theo độ dài nhạc</b>: 1 lượt playlist = "
                       f"<b>{fmt_dur(tl.total)}</b>.")
@@ -1383,17 +1395,22 @@ class MainWindow(QMainWindow):
             one = planner.rounds_seconds(proj.music, tl.track_durations, 1)
             n_songs = len(tl.track_durations)
             if n_songs == 1:
-                how = f"1 bài dài {fmt_dur(one)} → phát lặp <b>{tl.total / one:.1f} lần</b>" if one else ""
+                how = f"1 bài dài {fmt_dur(one)} → phát lặp {tl.total / one:.1f} lần" if one else ""
+                short = f"1 bài lặp <b>{tl.total / one:.1f} lần</b>" if one else "1 bài"
             elif one and tl.total > one:
-                how = f"playlist {n_songs} bài dài {fmt_dur(one)} → phát <b>{tl.total / one:.1f} lượt</b>"
+                how = f"playlist {n_songs} bài dài {fmt_dur(one)} → phát {tl.total / one:.1f} lượt"
+                short = f"{n_songs} bài phát <b>{tl.total / one:.1f} lượt</b>"
             else:
                 how = (f"playlist {n_songs} bài dài {fmt_dur(one)} dài hơn video → chỉ kịp phát "
-                       f"<b>{len(tl.music_items)} bài</b>")
-            banner = (f"Nhạc <b>tự lặp theo độ dài video ({fmt_dur(tl.total)})</b>: {how} "
-                      f"({len(tl.music_items)} lượt bài), bài cuối nhỏ dần khi video kết thúc.")
+                       f"{len(tl.music_items)} bài")
+                short = f"kịp phát <b>{len(tl.music_items)}/{n_songs} bài</b>"
+            banner = f"Nhạc tự lặp theo video (<b>{fmt_dur(tl.total)}</b>) · {short}"
+            detail = (f"Nhạc tự lặp theo độ dài video ({fmt_dur(tl.total)}): {how} ({len(tl.music_items)} lượt bài), "
+                      "bài cuối nhỏ dần khi video kết thúc.")
         if tl.ambient_infos:
-            banner += f" · {len(tl.ambient_infos)} lớp tiếng nền."
-        self.music_tab.set_schedule(tl.music_items, track_paths, tl.total, banner)
+            banner += f" · {len(tl.ambient_infos)} lớp tiếng nền"
+            detail += f" · {len(tl.ambient_infos)} lớp tiếng nền." if detail else ""
+        self.music_tab.set_schedule(tl.music_items, track_paths, tl.total, banner, detail)
 
         parts = (["nhạc"] if tl.use_music else []) + (["tiếng gốc"] if tl.use_source else []) \
             + (["tiếng nền"] if tl.ambient_infos else [])
@@ -1552,9 +1569,9 @@ class MainWindow(QMainWindow):
             if empty:
                 self.export_tab.set_empty("music")
             self._set_chips(error="Chưa có nhạc" if empty else " · ".join(tl.errors), neutral=empty)
-            self.music_tab.set_schedule([], track_paths, 0, "Chế độ <b>Chỉ nhạc</b>: thêm bài nhạc vào bảng bên dưới "
-                                                           "(hoặc chỉ thêm <b>tiếng nền</b> ở cột phải). Độ dài file chỉnh ở "
-                                                           "thẻ <b>Độ dài file nhạc</b>, định dạng ở trang <b>Xuất</b>.")
+            self.music_tab.set_schedule([], track_paths, 0, "<b>Chỉ nhạc</b>: thêm bài nhạc (hoặc tiếng nền ở cột phải)",
+                                        "Chế độ Chỉ nhạc: thêm bài nhạc vào bảng bên dưới (hoặc chỉ thêm tiếng nền ở cột "
+                                        "phải). Độ dài file chỉnh ở thẻ Độ dài file nhạc, định dạng ở trang Xuất.")
             self.export_tab.set_summary("Chưa có bài nhạc hoặc tiếng nền nào được bật. Hãy thêm ở trang <b>2. Nhạc</b>.")
             return
         self.export_tab.set_can_export(True)
@@ -1563,21 +1580,24 @@ class MainWindow(QMainWindow):
                         music_only=True)
         if not tl.music_items:  # chỉ tiếng nền: âm thanh môi trường / ASMR / white noise
             n_ver = 1
-            banner = (f"Chế độ <b>Chỉ nhạc</b> — <b>chỉ có tiếng nền</b> ({len(tl.ambient_infos)} lớp, tự lặp liền mạch) "
-                      f"dài <b>{fmt_dur(tl.total)}</b> → file {fmt.label}. Đổi độ dài ở thẻ <b>Độ dài file nhạc</b> "
-                      "(tính theo thời lượng).")
+            banner = f"<b>Chỉ nhạc</b> — chỉ tiếng nền ({len(tl.ambient_infos)} lớp) · <b>{fmt_dur(tl.total)}</b> → {fmt.label}"
+            detail = (f"Chế độ Chỉ nhạc — chỉ có tiếng nền ({len(tl.ambient_infos)} lớp, tự lặp liền mạch) dài "
+                      f"{fmt_dur(tl.total)} → file {fmt.label}. Đổi độ dài ở thẻ Độ dài file nhạc (tính theo thời lượng).")
         else:
-            banner = (f"Chế độ <b>Chỉ nhạc</b>: playlist {len(tl.track_durations)} bài dài {fmt_dur(one)} lặp cho đủ "
-                      f"<b>{fmt_dur(tl.total)}</b> ({len(tl.music_items)} lượt bài) → file {fmt.label}. "
-                      "Đổi độ dài ở thẻ <b>Độ dài file nhạc</b> bên phải.")
+            banner = (f"<b>Chỉ nhạc</b>: {len(tl.track_durations)} bài lặp đủ <b>{fmt_dur(tl.total)}</b> "
+                      f"({len(tl.music_items)} lượt bài) → {fmt.label}")
+            detail = (f"Chế độ Chỉ nhạc: playlist {len(tl.track_durations)} bài dài {fmt_dur(one)} lặp cho đủ "
+                      f"{fmt_dur(tl.total)} ({len(tl.music_items)} lượt bài) → file {fmt.label}. "
+                      "Đổi độ dài ở thẻ Độ dài file nhạc bên phải.")
         if n_ver > 1:
-            banner += (f" · <b>{n_ver} bản</b>, mỗi bản một thứ tự phát khác nhau (đang xem "
-                       f"<b>bản {self.music_tab.preview_version() + 1}</b>).")
+            banner += f" · <b>{n_ver} bản</b> (đang xem bản {self.music_tab.preview_version() + 1})"
+            detail += f" · {n_ver} bản, mỗi bản một thứ tự phát khác nhau."
         if tl.ambient_infos:
-            banner += f" · {len(tl.ambient_infos)} lớp tiếng nền."
+            banner += f" · {len(tl.ambient_infos)} lớp tiếng nền"
         if tl.warnings:
             banner += "<br><span style='color:" + theme.T["warn_text"] + "'>" + "<br>".join(tl.warnings) + "</span>"
-        self.music_tab.set_schedule(tl.music_items, track_paths, tl.total, banner)
+            detail += "\n" + "\n".join(tl.warnings)
+        self.music_tab.set_schedule(tl.music_items, track_paths, tl.total, banner, detail)
         self.export_tab.start_btn.setText(f"Xuất {n_ver} bản nhạc" if n_ver > 1 else "Bắt đầu xuất file nhạc")
         self.video_tab.set_preview("Kiểu “Chỉ nhạc” — trang Video đã được bỏ qua.")
         # byte/giây theo định dạng (FLAC tuỳ bài, lấy mức trung bình)

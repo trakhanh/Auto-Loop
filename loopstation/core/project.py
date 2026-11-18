@@ -33,6 +33,7 @@ class ClipItem:
     play_seconds: float = 0.0  # kiểu "duration": loop clip này cho đủ bao nhiêu giây (ví dụ 600 = 10 phút)
     trim_start: float = 0.0  # bỏ bao nhiêu giây ở đầu clip (chỉ lấy đoạn giữa)
     trim_end: float = 0.0  # bỏ bao nhiêu giây ở cuối clip
+    music: bool = True  # có phát nhạc nền trong lúc clip này chạy (bỏ tick: nhạc ngừng, tới clip có tick thì sang bài kế)
 
 
 @dataclass
@@ -194,6 +195,7 @@ class Project:
                         "loop_crossfade": c.loop_xfade,
                         "next_crossfade": c.next_xfade,
                         "trim": {"start": c.trim_start, "end": c.trim_end},
+                        "music": c.music,
                     }
                     for c in v.clips
                 ],
@@ -295,7 +297,8 @@ class Project:
                          loop_xfade=float(cd.get("loop_crossfade", 0.0)),
                          next_xfade=float(cd.get("next_crossfade", 0.0)),
                          trim_start=max(0.0, float((cd.get("trim") or {}).get("start", 0.0))),
-                         trim_end=max(0.0, float((cd.get("trim") or {}).get("end", 0.0))))
+                         trim_end=max(0.0, float((cd.get("trim") or {}).get("end", 0.0))),
+                         music=bool(cd.get("music", True)))
             if plays.get("mode") == "random":
                 c.plays_mode = "random"
                 c.min = int(plays.get("min", 1))

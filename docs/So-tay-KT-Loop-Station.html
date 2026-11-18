@@ -276,7 +276,7 @@ footer { margin-top: 56px; padding-top: 18px; border-top: 1px solid var(--line);
   <ol class="steps">
     <li><div><b>Chọn kiểu</b>Màn hình Bắt đầu → <b>Video có nhạc</b> (hoặc nút <b>Video có nhạc</b> trên thanh trên cùng).</div></li>
     <li><div><b>Thêm clip</b>Trang <b>Video</b>: kéo thả video, ảnh hoặc cả thư mục vào bảng (hoặc bấm <b>Thêm file</b> / <b>Thư mục</b>). Tick <b>Cả thư mục con</b> nếu clip nằm trong thư mục bên trong.</div></li>
-    <li><div><b>Xếp clip nền xen giữa các cảnh</b>Đặt tên clip nền có chữ <code>loop</code>, các cảnh đánh số <code>2_</code>, <code>3_</code>… (xem <a href="#dat-ten">mục 4</a>), rồi bấm <b>Xen kẽ clip nền</b> → chọn mẫu → <b>Áp dụng vào bảng</b>.</div></li>
+    <li><div><b>Xếp clip nền xen giữa các cảnh</b>Đặt tên clip nền có chữ <code>loop</code>, các cảnh đánh số <code>2_</code>, <code>3_</code>… (xem <a href="#dat-ten">mục 4</a>), rồi bấm <b>Xếp clip ▾ › Xen kẽ clip nền…</b> → chọn mẫu → <b>Áp dụng vào bảng</b>.</div></li>
     <li><div><b>Đặt độ dài video</b>Thẻ <b>Độ dài</b>: chọn <i>Thời lượng mục tiêu</i>, gõ số vào 3 ô <b>giờ · phút · giây</b> (ví dụ <code>3</code> ở ô giờ) hoặc bấm nút nhanh 30p · 1h · 2h · 3h · 10h. Bấm <kbd>Enter</kbd> để áp dụng.</div></li>
     <li><div><b>Thêm nhạc</b>Bấm <b>Tiếp theo</b> sang trang <b>Nhạc</b>: kéo thả bài hoặc cả thư mục nhạc. Nhạc tự lặp cho đủ độ dài video, bài cuối nhỏ dần đúng lúc video kết thúc.</div></li>
     <li><div><b>Chỉnh độ to, nghe thử</b>Ở <b>Bảng trộn âm</b> kéo thanh Nhạc / Tiếng gốc / tiếng nền, bấm <b>Nghe thử 20 giây</b> (xem <a href="#am-luong">mục 7</a>).</div></li>
@@ -288,11 +288,11 @@ footer { margin-top: 56px; padding-top: 18px; border-top: 1px solid var(--line);
     <figcaption>Trang Video với dự án mẫu “Loop 70 lần”.</figcaption></figure>
   <ol class="legend">
     <li><span class="b">1</span><span><b>Thêm clip</b> — Thêm file / Thư mục hoặc kéo thả. File mới vào bảng <b>chưa được chọn</b>: tick dòng cần dùng hoặc ô <b>Chọn tất cả</b> đầu hàng công cụ (bấm lần nữa để bỏ chọn tất cả). Nút <b>⋯</b> cạnh ô tìm: <b>Sắp xếp A–Z</b> (clip2 trước clip10), <b>Xáo ngẫu nhiên thứ tự</b>, <b>Bật / tắt nhanh</b> (bật / tắt / đảo ngược tất cả), <b>Xoá tất cả</b> (có hỏi lại). Ô tìm tên file (<kbd>Ctrl</kbd>+<kbd>F</kbd>) gõ không dấu cũng được.</span></li>
-    <li><span class="b">2</span><span><b>Bảng clip</b> — mỗi dòng một clip, kéo lên / xuống để đổi thứ tự. Bấm đúp ô để sửa Số lần phát, Đoạn lấy, Nối loop, Sang clip. Chuột phải để mở menu (Xem thử file, Hiện trong Explorer, Chọn đoạn lấy…, Nhân bản dòng, Xoá…).</span></li>
-    <li><span class="b">3</span><span><b>Xen kẽ clip nền</b> — tự xếp kiểu <i>nền ×70 → cảnh 2 → nền ×70 → cảnh 3…</i> theo tên file.</span></li>
-    <li><span class="b">4</span><span><b>Đặt nhanh</b> — bôi đen nhiều dòng rồi đặt số lần phát một lượt (×1, ×10, ×70, 10p, 1h) → <b>Áp dụng</b>. Hàng <i>Cắt đoạn &amp; hoà hình ▾</i>: Áp dụng cắt / Lấy toàn bộ, Áp dụng nối / Bỏ nối, Nhân bản, Xem thử nối.</span></li>
+    <li><span class="b">2</span><span><b>Bảng clip</b> — mỗi dòng một clip, kéo lên / xuống để đổi thứ tự. Bấm đúp ô để sửa Số lần phát, Đoạn lấy, Nối loop, Sang clip. Cột <b>Nhạc</b>: bỏ tick clip nào thì lúc đó không có nhạc nền; tới clip có tick nhạc sang bài kế, phát từ đầu (ví dụ chỉ có nhạc từ clip 5, hoặc clip 2–3 và 7–8; nhiều dòng một lúc: bôi đen → chuột phải → <i>Nhạc: bật / tắt</i>). Chuột phải để mở menu (Xem thử file, Hiện trong Explorer, Chọn đoạn lấy…, Nhân bản dòng, Xoá…).</span></li>
+    <li><span class="b">3</span><span><b>Xếp clip ▾</b> (Xen kẽ clip nền · Xếp lần lượt từng loop · Thư viện mẫu) — tự xếp kiểu <i>nền ×70 → cảnh 2 → nền ×70 → cảnh 3…</i> theo tên file.</span></li>
+    <li><span class="b">4</span><span><b>Đặt nhanh</b> — bôi đen nhiều dòng rồi đặt số lần phát một lượt (gõ số, hoặc chọn ×1, ×10, ×70, 10p, 1h ở mũi tên ▾ cuối ô) → <b>Áp dụng</b>. Hàng <i>Cắt đoạn &amp; hoà hình ▾</i>: Áp dụng cắt / Lấy toàn bộ, Áp dụng nối / Bỏ nối, Nhân bản, Xem thử nối.</span></li>
     <li><span class="b">5</span><span><b>3 thẻ cài đặt</b> — <b>Độ dài</b> (tổng thời lượng, thứ tự, Intro / Outro) · <b>Khung &amp; Tiếng</b> (clip khác tỉ lệ, ảnh tĩnh, mờ dần cuối, tiếng gốc) · <b>Màu &amp; Logo</b>.</span></li>
-    <li><span class="b">6</span><span><b>Dòng thời gian</b> — làn CLIP và làn NHẠC. <b>Kéo một khối clip</b> sang trái / phải để đổi thứ tự trong bảng (<kbd>Ctrl</kbd>+<kbd>Z</kbd> để quay lại; đang phát ngẫu nhiên thì không kéo được). Lăn chuột để phóng to, kéo làn dưới để di chuyển, nhấp đúp để xem toàn bộ.</span></li>
+    <li><span class="b">6</span><span><b>Dòng thời gian</b> — làn CLIP và làn NHẠC. <b>Kéo một khối clip</b> sang trái / phải để đổi thứ tự trong bảng (<kbd>Ctrl</kbd>+<kbd>Z</kbd> để quay lại; đang phát ngẫu nhiên thì không kéo được); <b>kéo một khối bài nhạc</b> để đổi thứ tự playlist. Lăn chuột để phóng to, <kbd>Shift</kbd> + kéo (hoặc <kbd>Shift</kbd> + lăn) để di chuyển, nhấp đúp để xem toàn bộ.</span></li>
     <li><span class="b">7</span><span><b>Thanh hướng dẫn</b> — đang ở bước mấy và việc nên làm tiếp.</span></li>
     <li><span class="b">8</span><span><b>Tiếp theo</b> — sang bước Nhạc (hoặc Xuất nếu không dùng nhạc).</span></li>
   </ol>
@@ -310,7 +310,7 @@ footer { margin-top: 56px; padding-top: 18px; border-top: 1px solid var(--line);
   </ol>
 
   <h3>Nhiều clip loop: xếp lần lượt từng loop</h3>
-  <p>Thư mục có <code>Content.mp4</code> và <code>Loop1.mp4</code> … <code>Loop6.mp4</code>, muốn phát Content rồi lần lượt từng loop, mỗi cái 60 lần: kéo cả thư mục vào bảng → app tự gợi ý → bấm <b>Xếp lần lượt…</b> (hoặc nút cùng tên cạnh <i>Xen kẽ clip nền</i>).</p>
+  <p>Thư mục có <code>Content.mp4</code> và <code>Loop1.mp4</code> … <code>Loop6.mp4</code>, muốn phát Content rồi lần lượt từng loop, mỗi cái 60 lần: kéo cả thư mục vào bảng → app tự gợi ý → bấm <b>Xếp lần lượt…</b> (hoặc nút <i>Xếp clip ▾</i> trên bảng).</p>
   <ul>
     <li><b>Số lần phát mỗi loop</b>: <code>60</code> = 60 lần · <code>10p</code> = loop cho đủ 10 phút · <code>50-80</code> = ngẫu nhiên.</li>
     <li><b>Clip nội dung</b> (tên không có chữ loop): đặt ở đầu, ở cuối, hoặc cả đầu và cuối. <b>Lặp lại cả chuỗi</b>: N lượt.</li>
@@ -320,7 +320,7 @@ footer { margin-top: 56px; padding-top: 18px; border-top: 1px solid var(--line);
     <i>Theo clip chính</i>.</li>
   </ul>
   <h3>Thư viện mẫu: xem mọi mẫu, tự tạo mẫu mới</h3>
-  <p>Bấm <b>Thư viện mẫu…</b> (trên bảng clip, cạnh Xếp lần lượt). Mỗi mẫu có <b>dải màu ví dụ kết quả</b> (app áp thật mẫu
+  <p>Bấm <b>Xếp clip ▾ › Thư viện mẫu…</b> (trên bảng clip). Mỗi mẫu có <b>dải màu ví dụ kết quả</b> (app áp thật mẫu
   lên bộ tên file ví dụ, mỗi clip 10 giây) và tổng thời lượng. Bấm <b>Dùng mẫu này</b> để áp vào bảng.</p>
   <div class="tbl"><table>
     <tr><th>7 mẫu có sẵn</th><th>Kết quả</th></tr>
@@ -635,7 +635,7 @@ footer { margin-top: 56px; padding-top: 18px; border-top: 1px solid var(--line);
     <li><span class="b">1</span><span><b>Kiểu xuất</b> — Video có nhạc / Chỉ video / Chỉ nhạc — giống 3 nút ở thanh trên cùng. Kiểu của dự án đang mở được chọn sẵn; bấm kiểu khác là đổi ngay, giữ nguyên thư mục cha, độ dài, âm lượng.</span></li>
     <li><span class="b">2</span><span><b>Thư mục cha</b> — thư mục chứa các thư mục con (nút <i>Thư mục thử</i> để dùng thử).</span></li>
     <li><span class="b">3</span><span><b>Chế độ độ dài / Tính theo</b> — giống hệt trang Video (<i>Thủ công · Thời lượng mục tiêu · Theo độ dài nhạc</i>) và Chỉ nhạc (<i>Theo thời lượng · Theo số lượt playlist</i>), rồi ô <b>Dài bao lâu</b>. Ví dụ Thời lượng mục tiêu 3 giờ → video nào cũng dài 3:00:00.</span></li>
-    <li><span class="b">4</span><span><b>Cách xếp clip</b> — giống 2 nút ở trang Video: <b>Xen kẽ clip nền</b> hoặc <b>Xếp lần lượt</b>; hoặc <i>Không xếp — phát theo thứ tự tên file</i>.</span></li>
+    <li><span class="b">4</span><span><b>Cách xếp clip</b> — giống nút Xếp clip ▾ ở trang Video: <b>Xen kẽ clip nền</b> hoặc <b>Xếp lần lượt</b>; hoặc <i>Không xếp — phát theo thứ tự tên file</i>.</span></li>
     <li><span class="b">5</span><span><b>Âm lượng</b> — Nhạc / Tiếng gốc clip / từng lớp tiếng nền cho cả loạt. Nút <i>Theo dự án</i> đặt lại như Bảng trộn âm của dự án đang mở.</span></li>
     <li><span class="b">6</span><span><b>Danh sách</b> — bỏ tick dòng nào thì video đó không được thêm. Chuột phải: <i>Chỉnh âm lượng video này…</i>, <i>Bỏ chỉnh tay</i>, <i>Bỏ âm lượng riêng</i>.</span></li>
     <li><span class="b">7</span><span><b>Chỉnh…</b> — đổi thứ tự clip riêng cho video đó.</span></li>

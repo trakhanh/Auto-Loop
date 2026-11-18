@@ -568,6 +568,31 @@ class PlaceholderTree(QTreeWidget):
         paint_placeholder(self, self.placeholder, False, False)
 
 
+def plain_text(html_text: str) -> str:
+    """Bỏ thẻ HTML (xuống dòng <br> thành dòng mới) — để làm chú thích / đo độ dài chữ."""
+    import html as _html
+    t = re.sub(r"<br\s*/?>", "\n", html_text)
+    return _html.unescape(re.sub(r"<[^>]+>", "", t)).strip()
+
+
+def headline(html_text: str, limit: int = 90, plain: bool = False) -> str:
+    """Một dòng ngắn cho thông báo dài (chi tiết để ở chú thích): lấy dòng đầu, dài quá `limit` chữ thì cắt ở chỗ
+    ngắt ý gần nhất (· , — : →) và thêm "…". Có dòng lưu ý / lỗi phía sau thì ghi thêm "có lưu ý"."""
+    import html as _html
+    lines = re.split(r"<br\s*/?>", html_text)
+    first = lines[0]
+    flat = plain_text(first)
+    if len(flat) <= limit:
+        out = flat if plain else first
+    else:
+        cut = max((flat.rfind(sep, 0, limit - 1) for sep in (" · ", ", ", " — ", ": ", " → ")), default=-1)
+        flat = (flat[:cut] if cut > limit // 3 else flat[:limit - 1].rstrip()) + "…"
+        out = flat if plain else _html.escape(flat, quote=False)
+    if any("color:" in ln for ln in lines[1:]) and not plain:
+        out += f" · <span style='color:{theme.css_color('warn_text')}'>có lưu ý — rê chuột để xem</span>"
+    return out
+
+
 def fold(text: str) -> str:
     """Bỏ dấu tiếng Việt + chữ thường để tìm kiếm: "Mưa Tháng 6" → "mua thang 6"."""
     s = unicodedata.normalize("NFD", text.replace("đ", "d").replace("Đ", "D"))
@@ -1008,7 +1033,8 @@ class ListToolbar(QWidget):
         esc.activated.connect(self.search.clear)
 
     def _queue_sync(self, *_) -> None:
-        self._sync_timer.start()
+        if not self._sync_timer.isActive():  # đang chờ thì giữ nguyên: bảng cập nhật liên tục (ảnh nhỏ…) không đẩy lùi mãi
+            self._sync_timer.start()
 
     def _on_check_all(self) -> None:
         """Chưa chọn đủ → chọn tất cả; đã chọn đủ → bỏ chọn tất cả (đang tìm: chỉ các dòng đang hiện). Một bước Ctrl+Z."""

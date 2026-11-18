@@ -291,7 +291,7 @@ class BatchDialog(QDialog):
         frow.addWidget(browse)
         frow.addWidget(self.sample)
 
-        # cách xếp clip: cùng tên với 2 nút ở trang Video (Xen kẽ clip nền… / Xếp lần lượt…), mẫu tự lưu cũng có ở đây
+        # cách xếp clip: cùng tên với các mục của nút Xếp clip ▾ ở trang Video, mẫu tự lưu cũng có ở đây
         self.preset = QComboBox()
         for p in all_presets(settings):
             p = dict(p, key=(USER_PREFIX if p.get("user") else "") + p["name"])
@@ -876,7 +876,7 @@ class BatchDialog(QDialog):
             QMessageBox.information(self, "Mẫu bảng clip",
                                     "Mẫu bảng clip dựng bảng theo tên file — 5_loopA.mp4 (STT_Vai) hoặc 33_4_LOOP A.mp4 "
                                     "(Tập_STT_Vai). Muốn đổi số lần phát "
-                                    "hay thứ tự: sửa bảng ở trang Video rồi lưu lại mẫu (Thư viện mẫu… → Sửa).")
+                                    "hay thứ tự: sửa bảng ở trang Video rồi lưu lại mẫu (Xếp clip ▾ › Thư viện mẫu… → Sửa).")
             return
         if p.get("kind") == "sequence":  # mẫu "lần lượt từng loop": chỉnh bằng hộp thoại Xếp lần lượt
             self._edit_sequence(row, clips, durations, p, ov)

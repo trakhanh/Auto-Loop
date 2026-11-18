@@ -523,6 +523,40 @@ def plan_music(ms: MusicSettings, durations: dict[int, float], total: float) -> 
     return items
 
 
+def plan_music_windows(ms: MusicSettings, durations: dict[int, float], windows: list[tuple[float, float]],
+                       total: float) -> list[MusicItem]:
+    """Nhạc chỉ phát trong các đoạn `windows` [(bắt đầu, kết thúc)…] (các clip có tick "Nhạc"). Mỗi đoạn mở đầu bằng
+    bài kế tiếp trong playlist, phát từ đầu bài; bài cuối của đoạn bị cắt ở cuối đoạn (dựng âm thanh cho nhỏ dần).
+    Một đoạn phủ cả video = y hệt `plan_music` (không đổi gì khi không dùng cột Nhạc)."""
+    wins = [(max(0.0, a), min(total, b)) for a, b in windows if min(total, b) - max(0.0, a) > 0.05]
+    if not wins:
+        return []
+    if len(wins) == 1 and wins[0][0] <= 1e-6 and wins[0][1] >= total - 1e-6:
+        return plan_music(ms, durations, total)
+    longest = max(durations.values(), default=0.0)
+    if longest <= 0:
+        return []
+    need = sum(b - a for a, b in wins) + (len(wins) + 1) * longest  # đủ bài cho mọi đoạn (kể cả phần bị cắt)
+    order = [it.track for it in plan_music(ms, durations, need)]
+    if not order:
+        return []
+    step = _step(ms)
+    items: list[MusicItem] = []
+    k = 0
+    for a, b in wins:
+        pos = a
+        while pos < b - 0.05:
+            i = order[k % len(order)]
+            k += 1
+            d = durations[i]
+            if pos + d >= b - 1e-3:
+                items.append(MusicItem(i, pos, max(0.0, b - pos)))
+                break
+            items.append(MusicItem(i, pos, d))
+            pos = pos + d - step
+    return items
+
+
 def music_variant(ms: MusicSettings, seed: int) -> MusicSettings:
     """Một bản trong nhiều bản: cùng bài, thứ tự xáo theo `seed` (thứ tự cố định trong bảng → xáo không lặp liền)."""
     import copy

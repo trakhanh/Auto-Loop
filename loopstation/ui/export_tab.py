@@ -3,7 +3,6 @@ from __future__ import annotations
 
 import html
 import os
-import re
 import shutil
 from pathlib import Path
 
@@ -18,7 +17,7 @@ from PySide6.QtWidgets import (
 from ..core import cloud, encoders, ffmpeg_tools
 from ..core.project import ExportSettings, MusicSettings, format_hms, parse_hms
 from ..core.render_queue import KIND_LABELS, STATUS_LABELS, QueueItem, eta_text
-from . import effects, icons, theme
+from . import effects, icons, motion, theme
 from . import widgets as w
 from .video_tab import combo, hms_edit, quick_buttons, set_combo
 
@@ -242,10 +241,30 @@ class ExportTab(QWidget):
         self.cloud_note.hide()
         f_out.addRow(self.cloud_note)
         f_out.addRow(lab("Tên file"), self.filename)
-        f_out.addRow(self.own_folder)
-        f_out.addRow(self.markers)
-        f_out.addRow(self.tracklist)
-        f_out.addRow(self.project_copy)
+        # file xuất kèm: một dòng tóm tắt, bấm "Chọn ▾" mới mở 4 ô tick (trước đây 4 câu dài luôn hiện)
+        self.extras_summary = QLabel("")
+        self.extras_summary.setObjectName("muted")
+        self.extras_summary.setWordWrap(True)
+        self.extras_toggle = QPushButton("Chọn ▾")
+        self.extras_toggle.setObjectName("ghost")
+        self.extras_toggle.setCheckable(True)
+        self.extras_toggle.setToolTip("Chọn file xuất kèm: thư mục riêng, mốc thời gian cho editor, tracklist, bản sao dự án")
+        ex_row = QHBoxLayout()
+        ex_row.setSpacing(8)
+        ex_row.addWidget(self.extras_summary, 1)
+        ex_row.addWidget(self.extras_toggle)
+        f_out.addRow(lab("File kèm"), ex_row)
+        self.extras_box = QWidget()
+        exb = QVBoxLayout(self.extras_box)
+        exb.setContentsMargins(0, 0, 0, 0)
+        exb.setSpacing(4)
+        for cb in (self.own_folder, self.markers, self.tracklist, self.project_copy):
+            exb.addWidget(cb)
+            cb.toggled.connect(self._update_extras_summary)
+        f_out.addRow(self.extras_box)
+        self.extras_toggle.toggled.connect(lambda on: self.set_extras_open(on, remember=True))
+        self.set_extras_open(self.settings.value("ui/export_extras_open", "false") in (True, "true"))
+        self._update_extras_summary()
 
         # ----- thẻ tóm tắt (đầu trang) -----
         summary_card = QWidget()
@@ -815,11 +834,30 @@ class ExportTab(QWidget):
         gpus = [encoders.VENDOR_LABELS[v].split(" ")[0] for v in self.available.get("h264", []) if v != "cpu"]
         return ("GPU: " + ", ".join(gpus)) if gpus else "Không dùng được GPU — sẽ mã hoá bằng CPU"
 
+    def set_extras_open(self, on: bool, remember: bool = False) -> None:
+        """Mở / gấp 4 ô tick file xuất kèm (mượt khi đang hiện)."""
+        if self.extras_toggle.isChecked() != on:
+            self.extras_toggle.blockSignals(True)
+            self.extras_toggle.setChecked(on)
+            self.extras_toggle.blockSignals(False)
+        self.extras_toggle.setText("Thu gọn ▴" if on else "Chọn ▾")
+        if self.isVisible() and self.extras_box.isVisible() != on:
+            motion.slide_visible(self.extras_box, on, 200)
+        else:
+            self.extras_box.setVisible(on)
+        if remember:
+            self.settings.setValue("ui/export_extras_open", "true" if on else "false")
+
+    def _update_extras_summary(self, *_) -> None:
+        parts = [name for cb, name in ((self.own_folder, "thư mục riêng"), (self.markers, "mốc thời gian"),
+                                        (self.tracklist, "tracklist"), (self.project_copy, "bản sao dự án"))
+                 if cb.isChecked() and cb.isEnabled()]
+        self.extras_summary.setText(" · ".join(parts) if parts else "Không có file kèm")
+
     def set_summary(self, text: str) -> None:
         self.summary.setText(text)
-        plain = re.sub(r"<br\s*/?>", " · ", text)
-        plain = html.unescape(re.sub(r"<[^>]+>", "", plain))
-        self.footer_info.set_full_text(plain)
+        # chân trang (cạnh nút Xuất): chỉ dòng ngắn — đầy đủ đã có ở thẻ tóm tắt đầu trang, rê chuột để xem
+        self.footer_info.set_full_text(w.headline(text, 60, plain=True), w.plain_text(text))
 
     def _update_cloud_note(self) -> None:
         where = cloud.provider(self.out_dir.text().strip())
@@ -961,6 +999,7 @@ class ExportTab(QWidget):
         video_only = mode == "video_only"
         self._apply_mode_visibility()
         self.tracklist.setEnabled(not video_only)
+        self._update_extras_summary()
         self.project_copy.setVisible(True)
         self.start_btn.setText("Bắt đầu xuất file nhạc" if music else "Bắt đầu xuất video")
         self._update_audio_enabled()

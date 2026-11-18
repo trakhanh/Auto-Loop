@@ -12,7 +12,7 @@ from PySide6.QtCore import QEvent, QTimer, QRegularExpression, QSettings, QSize,
 from PySide6.QtGui import QColor, QFontMetrics, QIcon, QKeySequence, QPixmap, QRegularExpressionValidator, QShortcut
 from PySide6.QtWidgets import (
     QAbstractSpinBox, QApplication, QCheckBox, QComboBox, QDoubleSpinBox, QFormLayout, QFrame, QGroupBox, QHBoxLayout,
-    QHeaderView, QLabel, QLineEdit, QMessageBox, QPlainTextEdit, QPushButton, QScrollArea, QSizePolicy, QSlider,
+    QHeaderView, QLabel, QLineEdit, QMenu, QMessageBox, QPlainTextEdit, QPushButton, QScrollArea, QSizePolicy, QSlider,
     QSpinBox, QSplitter, QTabWidget, QTextEdit, QTreeWidgetItem, QVBoxLayout, QWidget,
 )
 
@@ -25,7 +25,7 @@ from .timeline_bar import TimelineBar
 from .interleave_dialog import InterleaveDialog, has_base_candidate
 from .trim_dialog import MIN_KEEP, TrimDialog, clamp_trim, trim_text
 
-COL_NAME, COL_INFO, COL_TRIM, COL_PLAYS, COL_STRETCH, COL_LOOPXF, COL_NEXTXF, COL_DUR = range(8)
+COL_NAME, COL_INFO, COL_TRIM, COL_PLAYS, COL_STRETCH, COL_LOOPXF, COL_NEXTXF, COL_DUR, COL_MUSIC = range(9)
 
 ORDER = [("list", "Theo thứ tự trong bảng"), ("shuffle", "Ngẫu nhiên — xem thứ tự ngay trên bảng clip")]
 LENGTH = [("manual", "Thủ công — đúng số lần phát trong bảng"),
@@ -206,7 +206,7 @@ class VideoTab(QWidget):
 
         # ----- bảng clip -----
         self.list = w.MediaList(["Clip", "Thông tin nguồn", "Đoạn lấy", "Số lần phát", "Tự giãn",
-                                 "Nối loop", "Sang clip", "Thời lượng"])
+                                 "Nối loop", "Sang clip", "Thời lượng", "Nhạc"])
         theme.on_change(self.list, lambda _wd: self._refresh_rows())  # cột có màu nhấn (số lần phát…) đổi theo bộ màu
         self.list.setObjectName("clips")
         self.list.setIconSize(QSize(w.ThumbLoader.W, w.ThumbLoader.H))
@@ -230,7 +230,7 @@ class VideoTab(QWidget):
         hdr.setStretchLastSection(False)
         hdr.setMinimumSectionSize(56)
         hdr.setSectionResizeMode(COL_NAME, QHeaderView.ResizeMode.Stretch)
-        for col in (COL_TRIM, COL_PLAYS, COL_STRETCH, COL_LOOPXF, COL_NEXTXF, COL_DUR):
+        for col in (COL_TRIM, COL_PLAYS, COL_STRETCH, COL_LOOPXF, COL_NEXTXF, COL_DUR, COL_MUSIC):
             hdr.setSectionResizeMode(col, QHeaderView.ResizeMode.ResizeToContents)  # luôn vừa chữ, không bị cắt
         hdr.setDefaultAlignment(Qt.AlignmentFlag.AlignCenter)
         head = self.list.headerItem()
@@ -241,6 +241,8 @@ class VideoTab(QWidget):
         head.setToolTip(COL_NAME, "Tên file và thông số của clip (độ phân giải · fps · thời lượng gốc)")
         head.setToolTip(COL_LOOPXF, "Crossfade giữa các lần loop của clip này. Cắt = nối thẳng")
         head.setToolTip(COL_NEXTXF, "Crossfade khi chuyển sang clip kế tiếp. Cắt = nối thẳng")
+        head.setToolTip(COL_MUSIC, "Có nhạc nền trong lúc clip này chạy. Bỏ tick: nhạc ngừng ở clip đó, tới clip có tick "
+                                   "thì sang bài kế (phát từ đầu). Chuột phải → Nhạc: bật / tắt cho nhiều dòng")
         head.setTextAlignment(COL_NAME, Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignVCenter)
         head.setTextAlignment(COL_TRIM, Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignVCenter)
         for col in (COL_PLAYS, COL_LOOPXF, COL_NEXTXF, COL_DUR):  # cột số: tiêu đề và giá trị cùng căn phải
@@ -256,7 +258,8 @@ class VideoTab(QWidget):
                                  ("copy", "Chép các dòng đang chọn (Ctrl+C)", lambda _it: self._copy_rows()),
                                  ("file_plus", "Dán bên dưới (Ctrl+V)", lambda _it: self._paste_rows()),
                                  ("repeat", "Xen kẽ clip nền giữa các cảnh…", lambda _it: self._open_interleave()),
-                                 ("refresh", "Tạo bản lặp xuôi–ngược (hết giật chỗ nối)…", self._boomerang_rows)]
+                                 ("refresh", "Tạo bản lặp xuôi–ngược (hết giật chỗ nối)…", self._boomerang_rows),
+                                 ("music", "Nhạc: bật / tắt cho các dòng đang chọn", self._toggle_music_rows)]
         self.toolbar = w.ListToolbar(self.list, self._add_files, self._add_folder, random.Random)
 
         # ----- thanh đặt nhanh (Quick Action Bar) -----
@@ -338,14 +341,16 @@ class VideoTab(QWidget):
         self.bulk.setMinimumHeight(30)
         self.bulk.setPlaceholderText("Số lần")
         r1.addWidget(self.bulk)
-        for p_txt, p_val in (("×1", "1"), ("×10", "10"), ("×70", "70"), ("10p", "10p"), ("1h", "1h")):
-            pb = QPushButton(p_txt)
-            pb.setObjectName("pill")
-            pb.setToolTip(f"Loop cho đủ {p_val.replace('p', ' phút').replace('h', ' giờ')} cho dòng đang chọn"
-                          if not p_val.isdigit() else f"Đặt nhanh {p_val} lần phát cho dòng đang chọn")
-            pb.clicked.connect(lambda _=False, v=p_val: self._quick_plays(v))
-            pb.setMinimumHeight(30)
-            r1.addWidget(pb)
+        # giá trị hay dùng: nằm trong ô nhập (mũi tên ▾ cuối ô) thay cho 5 nút rời ×1 ×10 ×70 10p 1h
+        self.bulk_presets = QMenu(self.bulk)
+        for p_txt, p_val, note in (("×1", "1", "không loop"), ("×10", "10", "10 lần"), ("×70", "70", "70 lần"),
+                                   ("10p", "10p", "loop đủ 10 phút"), ("1h", "1h", "loop đủ 1 giờ")):
+            act = self.bulk_presets.addAction(f"{p_txt}   {note}")
+            act.triggered.connect(lambda _=False, v=p_val: self._quick_plays(v))
+        drop = self.bulk.addAction(icons.icon("down", 14, "text_2"), QLineEdit.ActionPosition.TrailingPosition)
+        drop.setToolTip("Giá trị hay dùng: ×1, ×10, ×70, 10 phút, 1 giờ")
+        drop.triggered.connect(lambda: self.bulk_presets.exec(self.bulk.mapToGlobal(self.bulk.rect().bottomLeft())))
+        self.bulk.setMaximumWidth(104)
         b_apply.setObjectName("accentBtn")
         b_apply.setMinimumHeight(30)
         r1.addWidget(b_apply)
@@ -457,10 +462,9 @@ class VideoTab(QWidget):
         self.count_label.setObjectName("chip")
         self.status = w.ElidedLabel("")  # thông báo ngắn trên thanh tiêu đề bảng: dài thì rút gọn, không chèn nút
         self.status.setObjectName("muted")
-        hint = w.ElidedLabel()
-        hint.setObjectName("muted")
-        hint.set_full_text("Mẹo: bấm đúp ô số để sửa · kéo dòng để đổi thứ tự", "Kéo dòng để đổi thứ tự · Bấm đúp tên file để mở xem · "
-                           "Bấm đúp ô số để sửa · Chuột phải mở menu · Ctrl+A chọn hết")
+        # mẹo dùng bảng: chú thích khi rê chuột vào bảng (trước đây là một dòng chữ riêng dưới bảng)
+        self.list.setToolTip("Kéo dòng để đổi thứ tự · Bấm đúp tên file để mở xem · Bấm đúp ô số để sửa · "
+                             "Chuột phải mở menu · Ctrl+A chọn hết")
 
         # Khu vực xem trước thứ tự phát có thể thu gọn/mở rộng
         self.preview = QPlainTextEdit()
@@ -488,30 +492,28 @@ class VideoTab(QWidget):
         top_title.setObjectName("h2")
         top_bar.addWidget(top_title)
         top_bar.addWidget(self.count_label)
-        self.interleave_btn = QPushButton("Xen kẽ nền…")
-        self.interleave_btn.setObjectName("pill")
-        self.interleave_btn.setIcon(icons.icon("repeat", 13))
-        self.interleave_btn.setIconSize(QSize(13, 13))
-        self.interleave_btn.setToolTip("Tự dựng bảng theo mẫu nền ×70 → cảnh 2 → nền ×70 → cảnh 3 … dựa theo tên file "
-                                       "(clip nền có chữ 'loop' trong tên, cảnh chèn xếp theo số đầu tên)")
-        self.interleave_btn.clicked.connect(self._open_interleave)
-        top_bar.addWidget(self.interleave_btn)
-        self.sequence_btn = QPushButton("Xếp lần lượt…")
-        self.sequence_btn.setObjectName("pill")
-        self.sequence_btn.setIcon(icons.icon("sort", 13))
-        self.sequence_btn.setIconSize(QSize(13, 13))
-        self.sequence_btn.setToolTip("Content → Loop1 ×60 → Loop2 ×60 → … : phát lần lượt từng clip loop theo tên, mỗi "
-                                     "cái lặp N lần, clip nội dung (không có chữ 'loop') ở đầu / cuối")
-        self.sequence_btn.clicked.connect(self._open_sequence)
-        top_bar.addWidget(self.sequence_btn)
-        self.table_preset_btn = QPushButton("Thư viện mẫu…")
-        self.table_preset_btn.setObjectName("pill")
-        self.table_preset_btn.setIcon(icons.icon("queue", 13))
-        self.table_preset_btn.setIconSize(QSize(13, 13))
-        self.table_preset_btn.setToolTip("Mọi mẫu xếp clip (có sẵn + của bạn) kèm ví dụ kết quả · tạo mẫu mới tuỳ biến · "
-                                         "lưu bảng hiện tại thành mẫu theo tên file (STT_loopB ×1 → STT_loopA ×57 → …)")
-        self.table_preset_btn.clicked.connect(self._open_library)
-        top_bar.addWidget(self.table_preset_btn)
+        # một nút "Xếp clip ▾" thay cho 3 nút rời (Xen kẽ nền / Xếp lần lượt / Thư viện mẫu) — bớt nút đứng ngang hàng
+        self.arrange_btn = QPushButton("Xếp clip")
+        self.arrange_btn.setObjectName("pill")
+        self.arrange_btn.setIcon(icons.icon("repeat", 13))
+        self.arrange_btn.setIconSize(QSize(13, 13))
+        self.arrange_btn.setToolTip("Tự xếp bảng clip theo mẫu: xen kẽ clip nền, lần lượt từng loop, hoặc mẫu đã lưu")
+        arrange_menu = QMenu(self.arrange_btn)
+        arrange_menu.setToolTipsVisible(True)
+        for ic, text, tip, fn in (
+                ("repeat", "Xen kẽ clip nền…", "Nền ×70 → cảnh 2 → nền ×70 → cảnh 3 … theo tên file (clip nền có chữ "
+                 "'loop' trong tên, cảnh chèn xếp theo số đầu tên)", self._open_interleave),
+                ("sort", "Xếp lần lượt từng loop…", "Content → Loop1 ×60 → Loop2 ×60 → … : mỗi clip loop lặp N lần, clip "
+                 "nội dung (không có chữ 'loop') ở đầu / cuối", self._open_sequence),
+                ("queue", "Thư viện mẫu…", "Mọi mẫu xếp clip (có sẵn + của bạn) kèm ví dụ · tạo mẫu mới · lưu bảng hiện "
+                 "tại thành mẫu (STT_loopB ×1 → STT_loopA ×57 → …)", self._open_library)):
+            act = arrange_menu.addAction(icons.icon(ic, 14), text)
+            act.setToolTip(tip)
+            act.triggered.connect(lambda _=False, f=fn: f())
+        self.arrange_btn.setMenu(arrange_menu)
+        # tên cũ vẫn trỏ về nút xếp (ảnh hướng dẫn, code khác)
+        self.interleave_btn = self.sequence_btn = self.table_preset_btn = self.arrange_btn
+        top_bar.addWidget(self.arrange_btn)
         top_bar.addWidget(self.status)
         lv.addWidget(top_box)
         lv.addWidget(self.toolbar)
@@ -617,7 +619,7 @@ class VideoTab(QWidget):
 
         foot = QHBoxLayout()
         foot.setSpacing(8)
-        foot.addWidget(hint, 1)
+        foot.addStretch(1)
         # xếp dọc (cửa sổ vừa): phần cài đặt nằm dưới bảng → nút này cuộn xuống đó
         self.settings_btn = w.ShrinkButton("Cài đặt video")
         self.settings_btn.setObjectName("ghost")
@@ -1037,8 +1039,9 @@ class VideoTab(QWidget):
                  else w.plays_text(c.plays_mode, c.count, c.min, c.max))
         it = self.list.new_item([Path(c.path).name, "", "", plays,
                                  "", "—" if single_play else w.xf_text(c.loop_xfade),
-                                 w.xf_text(c.next_xfade), ""], c.enabled)
+                                 w.xf_text(c.next_xfade), "", ""], c.enabled)
         it.setCheckState(COL_STRETCH, Qt.CheckState.Checked if c.stretch else Qt.CheckState.Unchecked)
+        it.setCheckState(COL_MUSIC, Qt.CheckState.Checked if c.music else Qt.CheckState.Unchecked)
         it.setData(0, w.ROLE_DATA, c)
         it.setData(0, w.ROLE_INFO, info)
         it.setToolTip(COL_NAME, c.path)
@@ -1069,7 +1072,8 @@ class VideoTab(QWidget):
                         stretch=it.checkState(COL_STRETCH) == Qt.CheckState.Checked,
                         loop_xfade=loop_xf,
                         next_xfade=w.parse_xf(it.text(COL_NEXTXF)),
-                        trim_start=old.trim_start, trim_end=old.trim_end)
+                        trim_start=old.trim_start, trim_end=old.trim_end,
+                        music=it.checkState(COL_MUSIC) == Qt.CheckState.Checked)
 
     def _estimate_loops(self, it: QTreeWidgetItem, seconds: float, c: ClipItem, loop_xf: float) -> int:
         info: MediaInfo = it.data(0, w.ROLE_INFO)
@@ -1423,6 +1427,8 @@ class VideoTab(QWidget):
         lst, fm = self.list, self.list.fontMetrics()
         need = fm.horizontalAdvance("0") * 18 + w.ThumbLoader.W + 44
         shown = [c for c in (COL_PLAYS, COL_DUR, COL_TRIM, COL_LOOPXF, COL_NEXTXF)]
+        if not lst.isColumnHidden(COL_MUSIC):
+            shown.append(COL_MUSIC)
         for c in (COL_NEXTXF, COL_TRIM, COL_LOOPXF):
             lst.setColumnHidden(c, False)
         sizes = {c: max(lst.header().sectionSizeHint(c), lst.sizeHintForColumn(c) + 16) for c in shown}
@@ -1614,6 +1620,25 @@ class VideoTab(QWidget):
         self.timeline.flash_clip(dest)
         self.status.setText(f"Đã chuyển {it.text(COL_NAME)} tới dòng {dest + 1} — Ctrl+Z để hoàn tác.")
         self._emit(step=True)
+
+    def set_music_selected(self, on: bool) -> None:
+        """Bật / tắt nhạc nền cho các dòng đang chọn (một bước Hoàn tác)."""
+        sel = self._selected_or_warn()
+        if not sel:
+            return
+        self.list.blockSignals(True)
+        for it in sel:
+            it.setCheckState(COL_MUSIC, Qt.CheckState.Checked if on else Qt.CheckState.Unchecked)
+        self.list.blockSignals(False)
+        self.status.setText(f"{'Bật' if on else 'Tắt'} nhạc cho {len(sel)} dòng — Ctrl+Z để hoàn tác.")
+        self._emit(step=True)
+
+    def _toggle_music_rows(self, it: QTreeWidgetItem) -> None:
+        """Chuột phải → Nhạc: dòng bấm vào đang có nhạc thì tắt cho cả các dòng đang chọn, và ngược lại."""
+        if not it.isSelected():
+            self.list.clearSelection()
+            it.setSelected(True)
+        self.set_music_selected(it.checkState(COL_MUSIC) != Qt.CheckState.Checked)
 
     def _on_image_dur(self, *_) -> None:
         self.list.blockSignals(True)
@@ -1972,6 +1997,8 @@ class VideoTab(QWidget):
 
         # Ẩn/hiện cột Tự giãn và các nút liên quan
         self.list.setColumnHidden(COL_STRETCH, not stretch_on)
+        # cột Nhạc: chỉ khi video có nhạc nền (Chỉ video / chỉ tiếng gốc thì không có gì để bật tắt)
+        self.list.setColumnHidden(COL_MUSIC, self._mode == "video_only" or self.source.currentData() == "only")
         for b in self.stretch_buttons:
             b.setVisible(stretch_on)
         self.stretch_hint.setVisible(stretch_on)

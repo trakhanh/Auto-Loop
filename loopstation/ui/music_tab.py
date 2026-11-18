@@ -101,11 +101,9 @@ class MusicTab(QWidget):
         self.count_label = QLabel("0 bài")
         self.count_label.setObjectName("chip")
         self.status = w.muted("")
-        hint = w.ElidedLabel()
-        hint.setObjectName("muted")
-        hint.set_full_text("Mẹo: bỏ tick bài không muốn dùng · kéo dòng để đổi thứ tự",
-                           "Bỏ tick bài không muốn dùng · Kéo dòng để đổi thứ tự · Bấm đúp tên bài để nghe · "
-                           "Bấm đúp cột Âm lượng % để chỉnh to / nhỏ riêng bài đó")
+        # mẹo dùng bảng: chú thích khi rê chuột vào bảng (trước đây là một dòng chữ riêng dưới bảng)
+        self.list.setToolTip("Bỏ tick bài không muốn dùng · Kéo dòng để đổi thứ tự · Bấm đúp tên bài để nghe · "
+                             "Bấm đúp cột Âm lượng % để chỉnh to / nhỏ riêng bài đó")
 
         # Khung trên của cột trái: Playlist
         top_left = QWidget()
@@ -123,8 +121,6 @@ class MusicTab(QWidget):
         tlv.addWidget(self.toolbar)
         self.list.setMinimumHeight(170)
         tlv.addWidget(self.list, 1)
-        self.hint_label = hint
-        tlv.addWidget(hint)
 
         # Khung dưới của cột trái: Lịch phát nhạc (Chapters)
         self.schedule = w.PlaceholderTree("Lịch phát dự kiến (mốc thời gian từng bài) sẽ hiện tại đây khi có nhạc.")
@@ -636,8 +632,11 @@ class MusicTab(QWidget):
     def set_audio_info(self, text: str) -> None:
         self.len_info.setText(text)
 
-    def set_schedule(self, items: list[MusicItem], paths: list[str], total: float, banner: str) -> None:
-        self.banner.setText(banner)
+    def set_schedule(self, items: list[MusicItem], paths: list[str], total: float, banner: str,
+                     detail: str = "") -> None:
+        """`banner`: một dòng ngắn (dài quá thì tự rút gọn); `detail`: câu đầy đủ, hiện khi rê chuột."""
+        self.banner.setText(w.headline(banner, 90))
+        self.banner.setToolTip(w.plain_text(detail or banner))
         self.schedule_badge.setText(f"{len(items)} lượt phát")
         shown = items[:3000]
         sig = (theme.PALETTE, total >= 3600, len(items), tuple(paths),
@@ -885,6 +884,27 @@ class MusicTab(QWidget):
         self.lbl_lufs.setVisible(loud)
         self.lufs.setVisible(loud)
         self.lufs.setEnabled(loud)
+
+    def move_track_row(self, src: int, target: int, after: bool) -> int | None:
+        """Kéo khối bài nhạc trên dòng thời gian: đặt bài `src` ngay trước / sau bài `target`. Trả về vị trí mới."""
+        n = self.list.topLevelItemCount()
+        if not (0 <= src < n and 0 <= target < n) or src == target:
+            return None
+        dest = target + (1 if after else 0)
+        if src < dest:
+            dest -= 1  # rút bài nguồn ra rồi các dòng phía sau lùi lên một
+        if dest == src:
+            return None
+        self.list.blockSignals(True)
+        it = self.list.takeTopLevelItem(src)
+        self.list.insertTopLevelItem(dest, it)
+        self.list.blockSignals(False)
+        self.list.clearSelection()
+        it.setSelected(True)
+        self.list.scrollToItem(it)
+        self.status.setText(f"Đã chuyển {it.text(0)} tới vị trí {dest + 1} — kéo lại để đổi về.")
+        self.list._step_done()  # báo đổi thứ tự như kéo dòng trong bảng
+        return dest
 
     def _emit(self, *_) -> None:
         if self._loading:

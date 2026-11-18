@@ -429,6 +429,31 @@ def escape_filter_value(value: str) -> str:
     return re.sub(r"([\\'\[\],;])", r"\\\1", level1)
 
 
+EDGE_OUT, EDGE_IN = 2.0, 0.8  # nhạc theo clip: bài bị cắt ở cuối đoạn nhỏ dần, đoạn mới to dần (giây, tối đa)
+
+
+def music_edges(items: list[MusicItem], ms: MusicSettings, total: float):
+    """(fade_in, fade_out, pad, lead) cho từng lượt bài. Lịch liền mạch (không dùng cột Nhạc) → y như trước: crossfade
+    giữa hai bài, khoảng lặng `gap`. Có chỗ ngắt (nhạc ngừng ở các clip bỏ tick) → bài trước chỗ ngắt nhỏ dần, bài sau
+    to dần, khoảng lặng = đúng độ dài chỗ ngắt; `lead` = im lặng trước bài đầu (nhạc bắt đầu từ giữa video)."""
+    xf = ms.crossfade if ms.crossfade > 0 else 0.0
+    step = xf if xf > 0 else -ms.gap
+    n = len(items)
+    brk = [k < n - 1 and items[k + 1].start > items[k].start + items[k].duration - step + 0.05 for k in range(n)]
+    lead = items[0].start if n and items[0].start > 1e-4 else 0.0
+    fi, fo, pad = [], [], []
+    for k, it in enumerate(items):
+        before = (k == 0 and lead > 0) or (k > 0 and brk[k - 1])
+        cut_tail = k == n - 1 and it.start + it.duration < total - 0.05  # nhạc ngừng trước khi hết video
+        fi.append(min(EDGE_IN, it.duration * 0.3) if before else (xf if (xf > 0 and k > 0) else 0.0))
+        fo.append(min(EDGE_OUT, it.duration * 0.4) if (brk[k] or cut_tail) else (xf if (xf > 0 and k < n - 1) else 0.0))
+        if k < n - 1 and brk[k]:
+            pad.append(max(0.0, items[k + 1].start - (it.start + it.duration)))
+        else:
+            pad.append(ms.gap if (xf == 0 and ms.gap > 0 and k < n - 1) else 0.0)
+    return fi, fo, pad, lead
+
+
 MUSIC_DIRECT_MAX = 32  # lịch phát dài hơn mức này thì dựng sẵn khối FLAC rồi nối tuần tự, tránh mở hàng trăm amovie cùng lúc
 MUSIC_BLK_VERSION = "mb1"
 
@@ -520,13 +545,12 @@ def music_concat_graph(
 
     xf = ms.crossfade if ms.crossfade > 0 else 0.0
     n = len(items)
+    fis, fos, pads, lead = music_edges(items, ms, total)
     specs = []
     for k, it in enumerate(items):
-        fi = xf if (xf > 0 and k > 0) else 0.0
-        fo = xf if (xf > 0 and k < n - 1) else 0.0
-        pad = ms.gap if (xf == 0 and ms.gap > 0 and k < n - 1) else 0.0
+        pad = 0.0 if (xf > 0 and n > 1) else pads[k]  # làn crossfade tự chèn khoảng lặng theo mốc bắt đầu
         gdb = round(gains_db.get(it.track, 0.0), 2)
-        specs.append((paths[it.track], gdb, round(it.duration, 6), round(fi, 3), round(fo, 3), round(pad, 3)))
+        specs.append((paths[it.track], gdb, round(it.duration, 6), round(fis[k], 3), round(fos[k], 3), round(pad, 3)))
     uniq_specs = list(dict.fromkeys(specs))
     if len(uniq_specs) >= 2:
         with ThreadPoolExecutor(max_workers=min(4, len(uniq_specs))) as pool:
@@ -569,6 +593,8 @@ def music_concat_graph(
     else:
         cpath = job_dir / "music_lane0.ffconcat"
         citems = [(blk_map[specs[k]], items[k].duration + specs[k][5]) for k in range(n)]
+        if lead > 0:  # nhạc bắt đầu từ giữa video (các clip đầu bỏ tick "Nhạc")
+            citems.insert(0, (_silence_block(runner, round(lead, 6)), round(lead, 6)))
         video_build.write_concat(cpath, citems)
         inputs += ["-f", "concat", "-safe", "0", "-i", str(cpath)]
         lines.append(f"[{input_idx}:a]aresample=48000:async=1,"
@@ -596,6 +622,7 @@ def music_graph(
     lines = []
     xf = ms.crossfade if ms.crossfade > 0 else 0.0
     n = len(items)
+    fis, fos, pads, lead = music_edges(items, ms, total)
     for k, it in enumerate(items):
         src = escape_filter_value(paths[it.track].replace("\\", "/"))
         chain = (f"amovie=filename={src},asetpts=PTS-STARTPTS,aresample=48000,"
@@ -604,16 +631,16 @@ def music_graph(
                  # MP3 VBR thiếu header / AAC thô: ffprobe đoán dài hơn thực tế → đệm im lặng cho đúng độ dài
                  # đã lên lịch, để bài sau không bị lệch (không có khoảng lặng giữa chừng / 2 bài chồng nhau)
                  f"apad=whole_dur={it.duration:.6f},atrim=end={it.duration:.6f}")
-        if xf > 0 and k > 0:
-            chain += f",afade=t=in:d={xf:.3f}:curve=tri"
-        if xf > 0 and k < n - 1:
-            chain += f",afade=t=out:st={it.duration - xf:.6f}:d={xf:.3f}:curve=tri"
-        if xf == 0 and ms.gap > 0 and k < n - 1:
-            chain += f",apad=pad_dur={ms.gap:.3f}"
+        if fis[k] > 0:
+            chain += f",afade=t=in:d={fis[k]:.3f}:curve=tri"
+        if fos[k] > 0:
+            chain += f",afade=t=out:st={max(0.0, it.duration - fos[k]):.6f}:d={fos[k]:.3f}:curve=tri"
+        if pads[k] > 0 and not (xf > 0 and n > 1):  # làn crossfade tự chèn khoảng lặng theo mốc bắt đầu
+            chain += f",apad=pad_dur={pads[k]:.3f}"
         lines.append(f"{chain}[m{k}];")
-    if n == 1:
+    if n == 1 and lead <= 0:
         last = "m0"
-    elif xf > 0:
+    elif xf > 0 and n > 1:
         # Crossfade bằng 2 "làn": bài chẵn ở làn A, bài lẻ ở làn B, đệm khoảng lặng cho đúng
         # vị trí rồi trộn 2 làn. Chi phí tuyến tính, không bị chậm dần như chuỗi acrossfade.
         for lane in (0, 1):
@@ -631,7 +658,12 @@ def music_graph(
         lines.append("[lane0][lane1]amix=inputs=2:normalize=0:duration=longest[xc];")
         last = "xc"
     else:
-        lines.append("".join(f"[m{k}]" for k in range(n)) + f"concat=n={n}:v=0:a=1[xc];")
+        parts = [f"[m{k}]" for k in range(n)]
+        if lead > 0:  # nhạc bắt đầu từ giữa video (các clip đầu bỏ tick "Nhạc")
+            lines.append(f"aevalsrc=exprs=0|0:s=48000:d={lead:.6f},"
+                         "aformat=sample_fmts=fltp:channel_layouts=stereo[zlead];")
+            parts.insert(0, "[zlead]")
+        lines.append("".join(parts) + f"concat=n={len(parts)}:v=0:a=1[xc];")
         last = "xc"
     tail = f"[{last}]apad,atrim=end={total:.6f}"
     if ms.fade_in > 0:

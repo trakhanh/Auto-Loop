@@ -194,8 +194,31 @@ def build(project: Project) -> Timeline:
         return tl
     tl.warnings += tl.video.warnings
     if tl.use_music and not tl.errors:
-        tl.music_items = planner.plan_music(ms, tl.track_durations, tl.total)
+        tl.music_items = planner.plan_music_windows(ms, tl.track_durations, music_windows(tl, vs), tl.total)
     return tl
+
+
+def music_windows(tl: "Timeline", vs) -> list[tuple[float, float]]:
+    """Các đoạn có nhạc: thời gian của các clip có tick "Nhạc" (Intro / Outro giữ như cũ), gộp đoạn liền nhau.
+    Mọi clip đều có tick → một đoạn phủ cả video."""
+    total = tl.total
+    if tl.video is None or all(c.music for c in vs.clips):
+        return [(0.0, total)]
+    plan, out, pos = tl.video, [], 0
+    for j, (clip, _r) in enumerate(plan.plays):
+        f = plan.ends.get(j, tl.frames.get(clip, 0))
+        a, b = float(Fraction(pos) / tl.fps), float(Fraction(pos + f) / tl.fps)
+        on = clip < 0 or not (0 <= clip < len(vs.clips)) or vs.clips[clip].music
+        if on:
+            if out and a - out[-1][1] < 0.05:  # liền (hoặc chồng crossfade) với đoạn trước: gộp
+                out[-1] = (out[-1][0], max(out[-1][1], b))
+            else:
+                out.append((a, b))
+        if j < len(plan.overlaps):
+            pos += f - plan.overlaps[j]
+    if out:
+        out[-1] = (out[-1][0], min(total, out[-1][1]))
+    return out
 
 
 def _main_clip(vs, infos: dict[int, MediaInfo]) -> MediaInfo | None:
