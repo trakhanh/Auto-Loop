@@ -157,6 +157,7 @@ class MainWindow(QMainWindow):
         self.music_tab.mixer.changed.connect(self._preview_gains)
         self.video_tab.timeline.seekRequested.connect(self._preview_seek)
         self.video_tab.timeline.trackMoveRequested.connect(self._move_track_from_timeline)
+        self.video_tab.timeline.blockedMoveRequested.connect(self._blocked_timeline_move)
         self.video_tab.timeline.seek_enabled = True
         self.music_tab.mixer.playbackStopped.connect(self._mixer_stopped)
         self.music_tab.mixer.previewRequested.connect(self.preview_audio)
@@ -1313,6 +1314,29 @@ class MainWindow(QMainWindow):
         dest = self.music_tab.move_track_row(src, target, after)
         if dest is not None:
             self.video_tab.timeline.flash_track(dest)
+
+    def _blocked_timeline_move(self, lane: str, src: int, target: int, after: bool) -> None:
+        """Kéo khối khi đang phát ngẫu nhiên: hỏi có chuyển sang "Theo thứ tự trong bảng" rồi đổi chỗ không."""
+        from PySide6.QtWidgets import QMessageBox
+        music = lane == "m"
+        what, page = ("bài nhạc", "playlist ở trang Nhạc") if music else ("clip", "bảng clip ở trang Video")
+        ask = QMessageBox(QMessageBox.Icon.Question, "Đang phát ngẫu nhiên",
+                          f"{'Playlist' if music else 'Thứ tự clip'} đang để <b>Ngẫu nhiên</b> nên không đổi chỗ từng "
+                          f"{what} được.<br><br>Chuyển sang <b>Theo thứ tự trong bảng</b> rồi đổi chỗ {what} này? "
+                          f"{what.capitalize()} sẽ phát đúng thứ tự trong {page}.", parent=self)
+        go = ask.addButton("Chuyển và đổi chỗ", QMessageBox.ButtonRole.AcceptRole)
+        ask.addButton("Để nguyên", QMessageBox.ButtonRole.RejectRole)
+        ask.setDefaultButton(go)
+        ask.exec()
+        if ask.clickedButton() is not go:
+            return
+        combo = self.music_tab.order if music else self.video_tab.order
+        combo.setCurrentIndex(combo.findData("list"))
+        if music:
+            self.video_tab.timeline.music_reorder_block = ""
+            self._move_track_from_timeline(src, target, after)
+        else:
+            self.video_tab.move_clip_row(src, target, after)
 
     def _recompute_core(self) -> None:
         proj = self._recompute_proj or self.collect_project()

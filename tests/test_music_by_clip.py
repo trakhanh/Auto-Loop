@@ -291,12 +291,15 @@ def test_music_drag_blocked_when_shuffled(env):
     app = env[0]
     bar = _music_bar(env)
     bar.music_reorder_block = "Đang phát ngẫu nhiên"
-    moves = []
+    moves, asked = [], []
     bar.trackMoveRequested.connect(lambda *a: moves.append(a))
+    bar.blockedMoveRequested.connect(lambda *a: asked.append(a))
     y = bar.TOP_V + bar.LANE_V + 6 + bar.LANE_M / 2
     m0 = bar.music[0]
-    _drag(app, bar, (bar._x(m0.start) + bar._x(m0.end)) / 2, bar._x(bar.music[-1].end) - 2, y)
-    assert moves == []
+    m2 = next(b for b in bar.music if b.clip == 2)
+    _drag(app, bar, (bar._x(m0.start) + bar._x(m0.end)) / 2, (bar._x(m2.start) + bar._x(m2.end)) / 2, y)
+    assert moves == []  # không tự đổi khi đang ngẫu nhiên…
+    assert asked == [("m", 0, 2, True)]  # …mà báo để app hỏi người dùng có chuyển sang theo thứ tự không
 
 
 @need_media

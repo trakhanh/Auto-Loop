@@ -63,14 +63,17 @@ class TimelineBar(QWidget):
     seekRequested = Signal(float)  # bấm (không kéo) vào dòng thời gian khi cửa sổ Xem trước đang mở
     clipMoveRequested = Signal(int, int, bool)  # kéo khối clip: (dòng nguồn, dòng đích, đặt sau dòng đích)
     trackMoveRequested = Signal(int, int, bool)  # kéo khối bài nhạc: (bài nguồn, bài đích, đặt sau bài đích)
-    LANE_V, LANE_M = 28, 20
+    # kéo thả khi làn đang không cho đổi chỗ (phát ngẫu nhiên): (làn "v"/"m", nguồn, đích, sau) — nơi nhận hỏi người dùng
+    # có chuyển sang "Theo thứ tự trong bảng" rồi đổi chỗ không (gợi ý, người dùng quyết)
+    blockedMoveRequested = Signal(str, int, int, bool)
+    LANE_V, LANE_M = 40, 30  # làn CLIP / NHẠC cao hơn: khối to, dễ bấm và kéo
     PAD_L, PAD_R = 116, 12
     TOP_V = 10
 
     def __init__(self, parent=None):
         super().__init__(parent)
-        self.setMinimumHeight(90)
-        self.setMaximumHeight(94)
+        self.setMinimumHeight(112)
+        self.setMaximumHeight(118)
         self.setMouseTracking(True)
         self.total = 0.0
         self.video: list[Block] = []
@@ -412,6 +415,9 @@ class TimelineBar(QWidget):
         self._caret_x = None
         self.update()
         if slot is not None and slot.target is not None:
+            if self._block_reason(lane):
+                self.blockedMoveRequested.emit(lane, mv["clip"], slot.target, slot.after)
+                return
             sig = self.clipMoveRequested if lane == "v" else self.trackMoveRequested
             sig.emit(mv["clip"], slot.target, slot.after)
 
@@ -736,8 +742,7 @@ class TimelineBar(QWidget):
             return True
         if self.playhead is None or abs(self._x(self.playhead) - pos.x()) > 6:
             return False
-        mh = self._movable_at(pos)  # trên làn có khối kéo được: khối được ưu tiên (tua bằng thước giờ bên dưới)
-        return mh is None or bool(self._block_reason(mh[0]))
+        return self._movable_at(pos) is None  # trên khối kéo được: khối được ưu tiên (tua bằng thước giờ bên dưới)
 
     def mousePressEvent(self, e) -> None:  # noqa: N802
         if e.button() == Qt.MouseButton.LeftButton and self._on_scrub_zone(e.position()):
@@ -750,7 +755,7 @@ class TimelineBar(QWidget):
             self._press = e.position()
         shift = bool(e.modifiers() & Qt.KeyboardModifier.ShiftModifier)  # Shift + kéo = luôn là di chuyển khung nhìn
         hit = self._movable_at(e.position()) if e.button() == Qt.MouseButton.LeftButton and not shift else None
-        if hit is not None and not self._block_reason(hit[0]):  # bấm vào khối: kéo quá vài px là kéo đổi chỗ
+        if hit is not None:  # bấm vào khối: kéo quá vài px là kéo đổi chỗ (đang ngẫu nhiên thì thả xong sẽ hỏi)
             lane, k = hit
             x = e.position().x()
             self._mv = {"lane": lane, "block": k, "clip": self._blocks(lane)[k].clip, "x0": x, "x": x, "on": False,
@@ -804,7 +809,7 @@ class TimelineBar(QWidget):
             self.setCursor(Qt.CursorShape.SizeHorCursor)
         elif self._drag is None:
             mh = self._movable_at(e.position())
-            if mh is not None and not self._block_reason(mh[0]):
+            if mh is not None:
                 self.setCursor(Qt.CursorShape.OpenHandCursor)
             else:
                 self.unsetCursor()
