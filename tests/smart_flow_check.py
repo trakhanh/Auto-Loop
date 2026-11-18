@@ -118,6 +118,11 @@ vt.add_paths([one])
 check("thả 1 tập: tự áp mẫu (có dòng ×57)", wait_for(lambda: any(c.count == 57 for c in vt.collect().clips)))
 pump(2)
 check("báo đã tự áp mẫu", vt.suggest.isVisible() and "Đã tự áp mẫu" in vt.suggest_text.text(), vt.suggest_text.text())
+# xếp theo mẫu nhưng không tự chọn: người dùng bấm "Chọn tất cả" rồi mới có gì để xuất
+check("tự áp mẫu: chưa dòng nào được chọn", not any(c.enabled for c in vt.collect().clips))
+check("chưa chọn: chưa hiện dải Sẵn sàng", not wait_for(lambda: vt.ready.isVisible(), 1.5))
+vt.toolbar.check_all.click()
+check("bấm Chọn tất cả → mọi dòng được chọn", all(c.enabled for c in vt.collect().clips))
 check("dải Sẵn sàng hiện + tên Tập 36", wait_for(lambda: vt.ready.isVisible() and "Tập 36" in vt.ready_text.text(), 8),
       vt.ready_text.text())
 win.go_to(0)

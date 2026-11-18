@@ -96,7 +96,10 @@ def build(project: Project) -> Timeline:
             name = vs.clips[i].path
             tl.warnings.append(f"Bỏ qua clip lỗi: {name} ({info.error or 'không có hình'})")
     if not tl.clip_infos:
-        tl.errors.append("Chưa có clip video hợp lệ nào được bật.")
+        if vs.clips and not any(c.enabled for c in vs.clips):  # file mới thêm vào chưa tick: người dùng tự chọn
+            tl.errors.append("Chưa chọn clip nào — tick ô đầu dòng trong bảng clip hoặc bấm “Chọn tất cả”.")
+        else:
+            tl.errors.append("Chưa có clip video hợp lệ nào được bật.")
         return tl
     videos = [tl.clip_infos[k] for k in sorted(tl.clip_infos) if not tl.clip_infos[k].is_image]
     first = videos[0] if videos else None

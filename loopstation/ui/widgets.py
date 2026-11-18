@@ -899,6 +899,24 @@ class ListToolbar(QWidget):
         lay.setContentsMargins(0, 0, 0, 0)
         lay.setSpacing(8)
 
+        # ô "Chọn tất cả" 3 trạng thái (trống / một phần / đủ), thẳng cột với ô tick đầu dòng của bảng
+        self.check_all = QCheckBox("Chọn tất cả")
+        self.check_all.setObjectName("checkAll")
+        self.check_all.setTristate(True)
+        self.check_all.setSizePolicy(QSizePolicy.Policy.Fixed, QSizePolicy.Policy.Fixed)
+        self.check_all.setMinimumHeight(32)
+        self.check_all.clicked.connect(self._on_check_all)
+        lay.addWidget(self.check_all)
+        self._sync_timer = QTimer(self)  # gộp nhiều thay đổi liền nhau (thêm 100 file…) thành một lần đếm
+        self._sync_timer.setSingleShot(True)
+        self._sync_timer.setInterval(0)
+        self._sync_timer.timeout.connect(self.sync_check_all)
+        m = lst.model()
+        for sig in (m.dataChanged, m.rowsInserted, m.rowsRemoved, m.modelReset, m.layoutChanged):
+            sig.connect(self._queue_sync)  # phương thức (không phải lambda): tự ngắt khi thanh công cụ bị xoá
+        lst.filterChanged.connect(self._queue_sync)
+        self.sync_check_all()
+
         add_btn = QPushButton("Thêm file")
         add_btn.setObjectName("accentBtn")
         icons.bind(add_btn, "plus", 14, "accent_text")
@@ -989,6 +1007,34 @@ class ListToolbar(QWidget):
         esc.setContext(Qt.ShortcutContext.WidgetShortcut)
         esc.activated.connect(self.search.clear)
 
+    def _queue_sync(self, *_) -> None:
+        self._sync_timer.start()
+
+    def _on_check_all(self) -> None:
+        """Chưa chọn đủ → chọn tất cả; đã chọn đủ → bỏ chọn tất cả (đang tìm: chỉ các dòng đang hiện). Một bước Ctrl+Z."""
+        rows = self.lst.visible_items()
+        if not rows:
+            self.sync_check_all()
+            return
+        all_on = all(it.checkState(0) == Qt.CheckState.Checked for it in rows)
+        self.lst.set_all_checked("none" if all_on else "all")
+        self.sync_check_all()
+
+    def sync_check_all(self) -> None:
+        rows = self.lst.visible_items()
+        on = sum(1 for it in rows if it.checkState(0) == Qt.CheckState.Checked)
+        state = (Qt.CheckState.Unchecked if not on else
+                 Qt.CheckState.Checked if on == len(rows) else Qt.CheckState.PartiallyChecked)
+        box = self.check_all
+        box.blockSignals(True)
+        box.setCheckState(state)
+        box.blockSignals(False)
+        box.setEnabled(bool(rows))
+        scope = " đang hiện (khớp ô tìm)" if self.lst.filtering() else ""
+        box.setToolTip(f"Đã chọn {on}/{len(rows)} dòng{scope} — chỉ dòng có dấu tick mới được đưa vào video.\n"
+                       + ("Bấm để bỏ chọn tất cả." if rows and on == len(rows) else "Bấm để chọn tất cả.")
+                       + " Tick / bỏ từng dòng ở ô đầu dòng (Ctrl+Space). Ctrl+Z để hoàn tác.")
+
     def _clear_all(self) -> None:
         """Menu ⋯ → Xoá tất cả: hỏi lại trước (một cú bấm nhầm là mất cả danh sách). Đang tìm kiếm thì chỉ xoá các
         dòng đang hiện — đúng như các thao tác khác khi đang tìm."""
@@ -1020,6 +1066,7 @@ class ListToolbar(QWidget):
                 b.setMaximumWidth(16777215)
                 self._full_w[b] = b.sizeHint().width()
             self._full_w[self.recursive] = self.recursive.sizeHint().width()
+            self._full_w[self.check_all] = self.check_all.sizeHint().width()
             self._stage = 0
             self.recursive.setVisible(True)
             self._rec_sep.setVisible(False)
@@ -1027,6 +1074,7 @@ class ListToolbar(QWidget):
         sp = self.layout().spacing()
         fw = self._full_w
         tail = self.search.minimumWidth() + 64 + (self.match.sizeHint().width() if self.match.text() else 0)
+        tail += fw[self.check_all] + sp
         w0 = fw[self.add_btn] + fw[self.folder_btn] + fw[self.recursive] + tail + sp * 7 + 6  # dư chút: cỡ chữ lớn
         w1 = fw[self.add_btn] + 32 + tail + sp * 6 + 6                                        # không cắt chữ
         w2 = 32 + 32 + tail + sp * 5

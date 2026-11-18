@@ -233,13 +233,13 @@ topic("tungu", "Bắt đầu", "help", "Từ ngữ trong app", hero(
     ('Tiếng nền', 'mưa, sóng, lửa… phát lặp xuyên suốt dưới nhạc / video.'),
     ('Hàng đợi', 'danh sách việc chờ xuất; bấm <b>Chạy hàng đợi</b> để xuất lần lượt (ví dụ qua đêm).'),
     ('Xuất hàng loạt', 'mỗi <b>thư mục con</b> trong <b>thư mục cha</b> thành một video / file nhạc, cài đặt theo dự án đang mở.'),
-    ('Bật / Tắt', 'ô tick đầu dòng: dòng tắt thì không dùng (Ctrl+Space cho các dòng đang chọn).'),
+    ('Bật / Tắt', 'ô tick đầu dòng: chỉ dòng có tick mới dùng. File mới thêm vào chưa tick — tick dòng cần dùng hoặc bấm <b>Chọn tất cả</b> (Ctrl+Space cho các dòng đang chọn).'),
     ('Dự án (.lsproj)', 'file lưu mọi cài đặt để mở lại. Nút <b>Thử: …</b> mở dự án dùng thử có sẵn clip và nhạc.')], ("Từ", "Nghĩa là")))
 
 topic("video", "Làm video", "film", "Trang Video: clip & số lần loop", hero(
     "Trang Video", "Thêm clip / ảnh, đặt số lần phát, xếp thứ tự. Đây là nơi quyết định video dài bao lâu.",
     (("Mở trang Video", "app:video"),)) + img("video", "Trang Video với dự án mẫu “Loop 70 lần”.") + legend([
-    ("Thêm clip", "<b>Thêm file</b> / <b>Thư mục</b>, hoặc <b>kéo thả</b> video, ảnh, cả thư mục vào bảng (tick <i>Cả thư mục con</i> để lấy cả thư mục bên trong). "
+    ("Thêm clip", "<b>Thêm file</b> / <b>Thư mục</b>, hoặc <b>kéo thả</b> video, ảnh, cả thư mục vào bảng (tick <i>Cả thư mục con</i> để lấy cả thư mục bên trong). File mới vào bảng <b>chưa được chọn</b>: tick dòng cần dùng, hoặc ô <b>Chọn tất cả</b> đầu hàng công cụ (bấm lần nữa để bỏ chọn tất cả). "
                   "Nút <b>⋯</b> cạnh ô tìm: <b>Sắp xếp A–Z</b> (clip2 trước clip10), <b>Xáo ngẫu nhiên thứ tự</b>, <b>Bật / tắt nhanh</b> (bật / tắt / đảo ngược tất cả), <b>Xoá tất cả</b> (có hỏi lại). Ô tìm tên file (Ctrl+F) — gõ không dấu cũng được."),
     ("Bảng clip", "mỗi dòng một clip, kéo lên / xuống để đổi thứ tự. <b>Bấm đúp ô</b> để sửa: Số lần phát, Đoạn lấy, Nối loop, Sang clip."),
     ("Xen kẽ clip nền", "tự xếp kiểu <i>nền ×70 → cảnh 2 → nền ×70 → cảnh 3 …</i> theo tên file. Nhiều clip loop "
@@ -247,7 +247,7 @@ topic("video", "Làm video", "film", "Trang Video: clip & số lần loop", hero
     ("Đặt nhanh", "bôi đen nhiều dòng rồi đặt số lần phát một lượt (×1, ×10, ×70, 10p, 1h) → <b>Áp dụng</b>; <b>Bật tự giãn</b> / <b>Bỏ giãn</b>. "
                   "Hàng <i>Cắt đoạn &amp; hoà hình ▾</i>: <b>Áp dụng cắt</b> / <b>Lấy toàn bộ</b>, <b>Áp dụng nối</b> / <b>Bỏ nối</b>, <b>Nhân bản</b>, <b>Xem thử nối</b>."),
     ("3 thẻ cài đặt", "<b>Độ dài</b> (tổng thời lượng, thứ tự, Intro/Outro) · <b>Khung &amp; Tiếng</b> (clip khác tỉ lệ, ảnh tĩnh, mờ dần cuối, tiếng gốc) · <b>Màu &amp; Logo</b>."),
-    ("Dòng thời gian", "nhìn tổng thể: làn CLIP và làn NHẠC. Lăn chuột để phóng to, kéo để di chuyển, nhấp đúp để xem toàn bộ."),
+    ("Dòng thời gian", "nhìn tổng thể: làn CLIP và làn NHẠC. <b>Kéo một khối clip</b> sang trái / phải để đổi thứ tự trong bảng (Ctrl+Z để quay lại). Lăn chuột để phóng to, kéo làn dưới để di chuyển, nhấp đúp để xem toàn bộ."),
     ("Thanh hướng dẫn", "đang ở bước mấy + việc nên làm tiếp."),
     ("Tiếp theo", "sang bước Nhạc (hoặc Xuất nếu không dùng nhạc).")]) + """
 <h2>Ô “Số lần phát” — gõ gì?</h2>""" + examples([
@@ -259,7 +259,7 @@ topic("video", "Làm video", "film", "Trang Video: clip & số lần loop", hero
           "(Ctrl+D) rồi kéo bản sao xuống dưới B. Mỗi bản sao có số lần phát, đoạn cắt, crossfade riêng.") + """
 <h2>Những thao tác hay dùng</h2>
 <ul>
-<li><b>Ô tick</b> đầu dòng: bật / tắt clip (phím <span class="k">Ctrl+Space</span> cho các dòng đang chọn).</li>
+<li><b>Ô tick</b> đầu dòng: bật / tắt clip (phím <span class="k">Ctrl+Space</span> cho các dòng đang chọn). File mới thêm chưa tick; ô <b>Chọn tất cả</b> chọn / bỏ chọn cả bảng.</li>
 <li><b>Bấm đúp tên file</b> để xem clip. <b>Chuột phải</b> một dòng: Mở / Xem thử file, Hiện trong Explorer, Chọn đoạn lấy…,
 Nhân bản dòng, Xen kẽ clip nền…, Tạo bản lặp xuôi–ngược…, Bật / Tắt, Đưa lên / xuống, Xoá.</li>
 <li><b>Xem thử nối</b> (hàng <i>Cắt đoạn &amp; hoà hình ▾</i>): xuất nhanh clip đang chọn phát 2 lần rồi sang clip kế, để xem crossfade có mượt không.</li>

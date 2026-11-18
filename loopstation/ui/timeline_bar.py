@@ -4,6 +4,8 @@
 - Clip rất ngắn so với tổng thời lượng (ví dụ cảnh 10 giây giữa các đoạn loop 10 phút) vẫn được vẽ thành
   vạch có nhãn số, không bị mất.
 - Lăn chuột để phóng to / thu nhỏ quanh con trỏ, kéo để di chuyển, nhấp đúp để xem toàn bộ.
+- Kéo một khối ở làn CLIP sang chỗ khác: đổi thứ tự dòng trong bảng clip (bóng khối theo chuột, vạch chèn trượt mượt
+  giữa các khối, thả xong khối vừa chuyển nhấp sáng). Ctrl+Z ở trang Video để quay lại.
 """
 from __future__ import annotations
 
@@ -25,6 +27,7 @@ BOOKEND = theme.BOOKEND_COLOR
 MUSIC = theme.MUSIC_COLORS
 SOURCE = theme.SOURCE_COLOR
 MARK_W = 7.0  # bề rộng tối thiểu (px) của clip quá ngắn
+DRAG_PX = 5.0  # kéo quá ngần này (px) mới tính là kéo khối — ít hơn vẫn là bấm để tua
 NICE_STEPS = (1, 2, 5, 10, 15, 30, 60, 120, 300, 600, 900, 1800, 3600, 7200, 10800, 21600, 43200)
 
 
@@ -40,6 +43,15 @@ class Block:
     short: str = ""  # nhãn ngắn dùng khi khối quá hẹp (số đầu tên file, Intro…)
 
 
+@dataclass
+class Slot:
+    """Chỗ thả khối clip đang kéo: mép giữa hai khối (thời điểm `t`) = đặt dòng nguồn trước / sau dòng `target`.
+    `target` None = chỗ thả không đổi gì (ngay mép của chính khối đang kéo)."""
+    t: float
+    target: int | None
+    after: bool = False
+
+
 def short_label(name: str) -> str:
     m = re.match(r"\s*(\d+)", name)
     if m:
@@ -49,6 +61,7 @@ def short_label(name: str) -> str:
 
 class TimelineBar(QWidget):
     seekRequested = Signal(float)  # bấm (không kéo) vào dòng thời gian khi cửa sổ Xem trước đang mở
+    clipMoveRequested = Signal(int, int, bool)  # kéo khối clip: (dòng nguồn, dòng đích, đặt sau dòng đích)
     LANE_V, LANE_M = 28, 20
     PAD_L, PAD_R = 116, 12
     TOP_V = 10
@@ -73,12 +86,25 @@ class TimelineBar(QWidget):
         self.seek_enabled = False
         self._scrub = False  # đang kéo vạch phát
         self._hits: list[tuple[QRectF, str]] = []
+        # kéo khối clip để đổi thứ tự. reorder_block khác rỗng = đang không cho kéo (lý do, hiện khi rê chuột)
+        self.reorder_block = ""
+        self._mv: dict | None = None  # {"block", "clip", "x0", "x", "on", "slot"}
+        self._caret_x: float | None = None  # vạch chèn đang vẽ (trượt mượt tới chỗ thả)
+        self._land: tuple[QRectF, QRectF, str, str] | None = None  # bóng khối bay về chỗ thả sau khi nhả chuột
+        self._land_k = 1.0
+        self._flash_clip: int | None = None  # dòng vừa chuyển: khối nhấp sáng khi dòng thời gian vẽ lại
+        self._flash_now: int | None = None
+        self._flash_k = 0.0
         self.note = "Kéo thả video hoặc nhạc vào dự án để xem trước dòng thời gian trực quan"
 
     # ---------- dữ liệu ----------
     def set_timeline(self, tl, clip_names: list[str], track_names: list[str]) -> None:
         if self._zoom_running():  # dữ liệu mới: dừng hiệu ứng phóng to dở dang
             self._zoom_anim.stop()
+        if self._mv is not None:  # khối đang kéo không còn đúng chỗ nữa
+            self._mv = None
+            self._caret_x = None
+            self.unsetCursor()
         self.video, self.music, self.source = [], [], []
         self.music_only = False
         if tl is None or not tl.ok or not tl.total:
@@ -148,7 +174,195 @@ class TimelineBar(QWidget):
                 f"({self._len_txt(it.duration)})", 1, it.track, short_label(name)
             ))
         self.note = ""
+        if self._flash_clip is not None:
+            self._flash_now, self._flash_clip = self._flash_clip, None
+            if any(b.clip == self._flash_now for b in self.video):
+                self._anim("_flash_anim", 900, QEasingCurve.Type.OutQuad, 1.0, 0.0,
+                           lambda k: self._set_k("_flash_k", k))
         self.update()
+
+    # ---------- kéo khối clip đổi thứ tự ----------
+    def flash_clip(self, row: int) -> None:
+        """Dòng `row` vừa được chuyển chỗ: khi dòng thời gian tính lại xong thì cho khối của nó nhấp sáng."""
+        self._flash_clip = row
+
+    def _anim(self, name: str, ms: int, curve, v0: float, v1: float, step) -> QVariantAnimation:
+        a = getattr(self, name, None)
+        if a is None:
+            a = QVariantAnimation(self)
+            setattr(self, name, a)
+        else:
+            a.stop()
+            a.valueChanged.disconnect()
+        a.valueChanged.connect(lambda v: step(float(v)))
+        a.setEasingCurve(curve)
+        a.setDuration(ms)
+        a.setStartValue(float(v0))
+        a.setEndValue(float(v1))
+        a.start()
+        return a
+
+    def _set_k(self, name: str, k: float) -> None:
+        setattr(self, name, k)
+        self.update()
+
+    def _set_caret(self, x: float) -> None:
+        if self._mv is not None:
+            self._caret_x = x
+            self.update()
+
+    def _all_slots(self, block: int) -> list[Slot]:
+        """Mọi mép giữa các khối có thể thả khối `block` vào (kể cả mép của chính nó — thả đó không đổi gì).
+        Không thả trước Intro / sau Outro."""
+        vb = self.video
+        if not (0 <= block < len(vb)) or vb[block].clip < 0:
+            return []
+        src = vb[block].clip
+        out: list[Slot] = []
+        movable = [k for k, b in enumerate(vb) if b.clip >= 0]
+        for k in movable:
+            noop = k in (block, block + 1) or vb[k].clip == src
+            out.append(Slot(vb[k].start, None if noop else vb[k].clip, False))
+        last = movable[-1]
+        out.append(Slot(vb[last].end, None if last == block or vb[last].clip == src else vb[last].clip, True))
+        return out
+
+    def _drop_slots(self, block: int) -> list[Slot]:
+        """Các chỗ thả thực sự đổi thứ tự (mỗi cặp dòng đích / trước-sau một lần)."""
+        seen, out = set(), []
+        for s in self._all_slots(block):
+            if s.target is not None and (s.target, s.after) not in seen:
+                seen.add((s.target, s.after))
+                out.append(s)
+        return out
+
+    def _nearest_slot(self, block: int, x: float) -> Slot | None:
+        slots = self._all_slots(block)
+        if not slots:
+            return None
+        return min(slots, key=lambda s: abs(self._x(s.t) - x))
+
+    def _block_rect(self, b: Block) -> QRectF:
+        x0, x1 = self._x(b.start), self._x(b.end)
+        if x1 - x0 < MARK_W + 1:
+            return QRectF((x0 + x1) / 2 - MARK_W / 2 - 4, self.TOP_V, MARK_W + 8, self.LANE_V)
+        return QRectF(x0, self.TOP_V, x1 - x0 - 1.0, self.LANE_V)
+
+    def _block_at(self, pos) -> int | None:
+        """Khối ở làn CLIP dưới con trỏ (khối ngắn vẽ thành vạch được ưu tiên)."""
+        if not (self.TOP_V <= pos.y() <= self.TOP_V + self.LANE_V) or pos.x() < self.PAD_L:
+            return None
+        hits = [k for k, b in enumerate(self.video) if self._block_rect(b).contains(pos)]
+        if not hits:
+            return None
+        return min(hits, key=lambda k: self._block_rect(self.video[k]).width())
+
+    def _movable_at(self, pos) -> int | None:
+        k = self._block_at(pos)
+        return k if k is not None and self.video[k].clip >= 0 else None
+
+    def _ghost_rect(self, mv: dict) -> QRectF:
+        b = self.video[mv["block"]]
+        w = min(180.0, max(44.0, self._x(b.end) - self._x(b.start)))
+        return QRectF(mv["x"] - w / 2, self.TOP_V - 4, w, self.LANE_V + 2)
+
+    def _draw_drag(self, p: QPainter, small) -> None:
+        """Khối đang kéo: chỗ cũ mờ đi + viền chấm, vạch chèn có núm, bóng khối nổi theo chuột."""
+        mv = self._mv
+        if mv is not None and mv["on"] and 0 <= mv["block"] < len(self.video):
+            b = self.video[mv["block"]]
+            hole = QPainterPath()
+            hole.addRoundedRect(self._block_rect(b), 5, 5)
+            p.fillPath(hole, theme.qcolor("panel", 170))
+            p.setPen(QPen(theme.qcolor("line_strong"), 1.2, Qt.PenStyle.DashLine))
+            p.drawPath(hole)
+            if self._caret_x is not None:
+                x = self._caret_x
+                top, bot = self.TOP_V - 3, self.TOP_V + self.LANE_V + 3
+                p.fillRect(QRectF(x - 4, top, 8, bot - top), theme.qcolor("accent", 60))  # quầng sáng
+                p.setPen(QPen(theme.qcolor("accent"), 3, Qt.PenStyle.SolidLine, Qt.PenCapStyle.RoundCap))
+                p.drawLine(QPointF(x, top), QPointF(x, bot))
+                p.setPen(Qt.PenStyle.NoPen)
+                p.setBrush(theme.qcolor("accent"))
+                p.drawEllipse(QPointF(x, top), 4, 4)
+                p.drawEllipse(QPointF(x, bot), 4, 4)
+                p.setBrush(Qt.BrushStyle.NoBrush)
+            self._paint_ghost(p, self._ghost_rect(mv), b.color, b.label, small, 1.0)
+        if self._land is not None and self._land_k < 1.0:
+            r0, r1, color, label = self._land
+            k = self._land_k
+            r = QRectF(r0.x() + (r1.x() - r0.x()) * k, r0.y() + (r1.y() - r0.y()) * k,
+                       r0.width() + (r1.width() - r0.width()) * k, r0.height() + (r1.height() - r0.height()) * k)
+            self._paint_ghost(p, r, color, label, small, 1.0 - k)
+
+    def _paint_ghost(self, p: QPainter, r: QRectF, color: str, label: str, small, alpha: float) -> None:
+        p.save()
+        p.setOpacity(p.opacity() * max(0.0, min(1.0, alpha)))
+        shadow = QPainterPath()
+        shadow.addRoundedRect(r.translated(0, 3), 6, 6)
+        p.fillPath(shadow, theme.qcolor("black", 70))
+        path = QPainterPath()
+        path.addRoundedRect(r, 6, 6)
+        base = QColor(color)
+        grad = QLinearGradient(r.topLeft(), r.bottomLeft())
+        grad.setColorAt(0.0, base.lighter(125))
+        grad.setColorAt(1.0, base)
+        p.fillPath(path, grad)
+        p.setPen(QPen(theme.qcolor("white", 220), 1.5))
+        p.drawPath(path)
+        p.setFont(small)
+        p.setPen(theme.qcolor("white"))
+        fm = p.fontMetrics()
+        p.drawText(r.adjusted(8, 0, -6, 0), Qt.AlignmentFlag.AlignVCenter | Qt.AlignmentFlag.AlignLeft,
+                   fm.elidedText(label, Qt.TextElideMode.ElideRight, int(max(0.0, r.width() - 14))))
+        p.restore()
+
+    def _draw_flash(self, p: QPainter) -> None:
+        if self._flash_now is None or self._flash_k <= 0.0:
+            return
+        for b in self.video:
+            if b.clip == self._flash_now and not (b.end < self.view0 or b.start > self.view1):
+                path = QPainterPath()
+                path.addRoundedRect(self._block_rect(b).adjusted(-1, -2, 1, 2), 6, 6)
+                p.fillPath(path, theme.qcolor("white", int(110 * self._flash_k)))
+                p.setPen(QPen(theme.qcolor("accent", int(255 * self._flash_k)), 2))
+                p.drawPath(path)
+
+    def _move_drag(self, x: float) -> None:
+        mv = self._mv
+        mv["x"] = x
+        slot = self._nearest_slot(mv["block"], x)
+        mv["slot"] = slot
+        if slot is not None and slot.target is not None:
+            to = self._x(slot.t)
+            if self._caret_x is None:
+                self._caret_x = to
+            elif abs(to - self._caret_x) > 0.5:  # vạch chèn trượt tới chỗ thả mới
+                self._anim("_caret_anim", 120, QEasingCurve.Type.OutCubic, self._caret_x, to, self._set_caret)
+        else:
+            self._caret_x = None
+        self.update()
+
+    def _finish_drag(self) -> None:
+        mv, self._mv = self._mv, None
+        self.unsetCursor()
+        if mv is None or not mv["on"] or not (0 <= mv["block"] < len(self.video)):
+            return
+        slot = mv["slot"]
+        b = self.video[mv["block"]]
+        g = self._ghost_rect(mv)
+        if slot is not None and slot.target is not None:
+            x = self._x(slot.t)
+            dest = QRectF(x - g.width() / 2, self.TOP_V, g.width(), self.LANE_V)
+        else:
+            dest = self._block_rect(b)  # thả chỗ không đổi gì: bóng bay về chỗ cũ
+        self._land = (g, dest, b.color, b.label)
+        self._land_k = 0.0
+        self._anim("_land_anim", 240, QEasingCurve.Type.OutCubic, 0.0, 1.0, lambda k: self._set_k("_land_k", k))
+        self._caret_x = None
+        self.update()
+        if slot is not None and slot.target is not None:
+            self.clipMoveRequested.emit(mv["clip"], slot.target, slot.after)
 
     @staticmethod
     def _len_txt(sec: float) -> str:
@@ -258,6 +472,7 @@ class TimelineBar(QWidget):
                        "Chỉ có tiếng nền" if self.ambient else
                        "Chưa có nhạc · tiếng gốc của clip đang tắt (bật ở thẻ Khung & Tiếng, trang Video)" if self.source_off
                        else "Không có âm thanh (chưa có nhạc, clip không có tiếng gốc)")
+        self._draw_flash(p)
         if self.playhead is not None and self.view0 <= self.playhead <= self.view1:
             x = self._x(self.playhead)
             p.setPen(QPen(theme.qcolor("text"), 2))
@@ -268,6 +483,7 @@ class TimelineBar(QWidget):
             head.lineTo(x, top_v - 1)
             head.closeSubpath()
             p.fillPath(head, theme.qcolor("text"))
+        self._draw_drag(p, small)
         p.restore()
         self._draw_ruler(p, top_m + self.LANE_M + 4, small, bold)
         if self.playhead is not None and self.view0 <= self.playhead <= self.view1:
@@ -471,6 +687,11 @@ class TimelineBar(QWidget):
             return
         if e.button() == Qt.MouseButton.LeftButton:
             self._press = e.position()
+        k = self._movable_at(e.position()) if e.button() == Qt.MouseButton.LeftButton else None
+        if k is not None and not self.reorder_block:  # bấm vào khối clip: kéo quá vài px là kéo đổi chỗ
+            x = e.position().x()
+            self._mv = {"block": k, "clip": self.video[k].clip, "x0": x, "x": x, "on": False, "slot": None}
+            return
         if e.button() == Qt.MouseButton.LeftButton and self.total and not self._full_view(self.total):
             if self._zoom_running():
                 self._zoom_anim.stop()
@@ -482,6 +703,11 @@ class TimelineBar(QWidget):
             self._scrub = False
             self.unsetCursor()
             return
+        if self._mv is not None and self._mv["on"]:
+            self._press = None
+            self._finish_drag()
+            return
+        self._mv = None
         press, self._press = self._press, None
         self._drag = None
         self.unsetCursor()
@@ -501,10 +727,22 @@ class TimelineBar(QWidget):
             self.set_playhead(t)
             self.seekRequested.emit(t)
             return
+        if self._mv is not None:
+            x = e.position().x()
+            if not self._mv["on"] and abs(x - self._mv["x0"]) >= DRAG_PX:
+                self._mv["on"] = True
+                QToolTip.hideText()
+                self.setCursor(Qt.CursorShape.ClosedHandCursor)
+            if self._mv["on"]:
+                self._move_drag(x)
+            return
         if self._on_scrub_zone(e.position()):
             self.setCursor(Qt.CursorShape.SizeHorCursor)
         elif self._drag is None:
-            self.unsetCursor()
+            if self._movable_at(e.position()) is not None and not self.reorder_block:
+                self.setCursor(Qt.CursorShape.OpenHandCursor)
+            else:
+                self.unsetCursor()
         if self._drag is not None:
             x0, v0 = self._drag
             vs = self.view1 - self.view0
@@ -520,11 +758,15 @@ class TimelineBar(QWidget):
                 hit = tip
                 break
         if hit:
+            if self._movable_at(pos) is not None:
+                hit += ("\n" + self.reorder_block if self.reorder_block
+                        else "\nKéo sang trái / phải để đổi thứ tự trong bảng clip (Ctrl+Z để quay lại)")
             QToolTip.showText(e.globalPosition().toPoint(), hit, self)
         elif pos.x() >= self.PAD_L:
             QToolTip.showText(e.globalPosition().toPoint(),
                               f"{fmt_dur(self._t(pos.x()))}\n"
                               + ("Bấm để xem trước từ chỗ này · " if self.seek_enabled else "")
-                              + "Lăn chuột để phóng to · kéo để di chuyển · nhấp đúp để xem toàn bộ", self)
+                              + "Lăn chuột để phóng to · kéo khối clip để đổi thứ tự · kéo làn dưới để di chuyển "
+                              "· nhấp đúp để xem toàn bộ", self)
         else:  # rê vào tên làn: giải thích làn đó
             QToolTip.showText(e.globalPosition().toPoint(), self._lane_tip(pos.y()), self)

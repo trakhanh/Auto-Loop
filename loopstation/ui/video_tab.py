@@ -809,6 +809,7 @@ class VideoTab(QWidget):
         # người dùng tự kéo vạch chia: từ đó chỉ giữ bề rộng tối thiểu, không tự cân lại nữa
         split.splitterMoved.connect(lambda *_: getattr(self, "_balancing", False) or setattr(self, "_user_split", True))
         self.timeline = TimelineBar()
+        self.timeline.clipMoveRequested.connect(self.move_clip_row)  # kéo khối clip = đổi chỗ dòng
 
         # thông báo khi ở kiểu "Chỉ nhạc": trang này không dùng
         self.mode_banner = QWidget()
@@ -1591,6 +1592,29 @@ class VideoTab(QWidget):
             self._emit(step=True)
         return new
 
+    def move_clip_row(self, src: int, target: int, after: bool) -> None:
+        """Kéo khối clip trên dòng thời gian: đặt dòng `src` ngay trước / sau dòng `target` (một bước Hoàn tác)."""
+        n = self.list.topLevelItemCount()
+        if not (0 <= src < n and 0 <= target < n) or src == target:
+            return
+        dest = target + (1 if after else 0)
+        if src < dest:
+            dest -= 1  # sau khi rút dòng nguồn ra, các dòng phía sau lùi lên một
+        if dest == src:
+            return
+        self._flush_pending()
+        self.list.blockSignals(True)
+        it = self.list.takeTopLevelItem(src)
+        self.list.insertTopLevelItem(dest, it)
+        self._refresh_rows()
+        self.list.blockSignals(False)
+        self.list.clearSelection()
+        it.setSelected(True)
+        self.list.scrollToItem(it)
+        self.timeline.flash_clip(dest)
+        self.status.setText(f"Đã chuyển {it.text(COL_NAME)} tới dòng {dest + 1} — Ctrl+Z để hoàn tác.")
+        self._emit(step=True)
+
     def _on_image_dur(self, *_) -> None:
         self.list.blockSignals(True)
         self._refresh_rows()
@@ -1701,10 +1725,11 @@ class VideoTab(QWidget):
         self.list.blockSignals(True)
         for info in infos:
             if info.ok and info.has_video:
-                self.list.addTopLevelItem(self._make_item(ClipItem(path=info.path), info))
+                # chưa tick: người dùng tự chọn clip nào đưa vào video (ô đầu dòng hoặc “Chọn tất cả”)
+                self.list.addTopLevelItem(self._make_item(ClipItem(path=info.path, enabled=False), info))
         self._refresh_rows()
         self.list.blockSignals(False)
-        msg = f"Đã thêm {len(infos) - len(bad)} clip/ảnh."
+        msg = f"Đã thêm {len(infos) - len(bad)} clip/ảnh — tick dòng cần dùng hoặc bấm “Chọn tất cả”."
         if bad:
             msg += f" Bỏ qua {len(bad)} file lỗi."
             QMessageBox.warning(self, "Có file không đọc được",
@@ -1760,6 +1785,8 @@ class VideoTab(QWidget):
         built, missing = tp.build(preset["rows"], paths)
         if not built:
             return False
+        for c in built:  # xếp theo mẫu nhưng không tự chọn: người dùng tick (hoặc “Chọn tất cả”) rồi mới xuất
+            c.enabled = False
         _clips, infos, _d = self._table_media()
         self._apply_arranged(built, infos, "Đã tự áp mẫu")
         self.settings.setValue("table/last", preset["name"])
@@ -1779,14 +1806,14 @@ class VideoTab(QWidget):
             warn = f" <span style='color:{theme.css_color('warn_text')}'>({'; '.join(bits)})</span>"
         self._suggest_kind = "table"
         self.suggest_go.setText("Đổi mẫu…")
-        self.suggest_text.setText(f"Đã tự áp mẫu <b>{preset['name']}</b>: {what}{len(built)} dòng.{warn} "
-                                  "Không đúng ý: bấm <b>Đổi mẫu…</b> hoặc Ctrl+Z.")
+        self.suggest_text.setText(f"Đã tự áp mẫu <b>{preset['name']}</b>: {what}{len(built)} dòng, chưa chọn — bấm <b>Chọn tất cả</b>.{warn} "
+                                  "Không đúng ý: <b>Đổi mẫu…</b> hoặc Ctrl+Z.")
         motion.slide_visible(self.suggest, True)
         return True
 
     # ---------- xen kẽ clip nền ----------
     def _maybe_suggest_interleave(self) -> None:
-        clips = [it.data(0, w.ROLE_DATA) for it in self.list.items()]
+        clips = self._arrange_pool([self._clip_from_item(it) for it in self.list.items()])
         unique = {os.path.normcase(c.path): c.path for c in clips}
         from ..core import interleave as il
         if len(clips) == len(unique) and il.looks_like_sequence(list(unique.values())):
@@ -1834,10 +1861,18 @@ class VideoTab(QWidget):
         if result:
             self._apply_arranged(result, infos, "Đã xen kẽ")
 
+    @staticmethod
+    def _arrange_pool(clips: list[ClipItem]) -> list[ClipItem]:
+        """Clip đưa vào các hộp thoại xếp (xen kẽ, lần lượt, mẫu bảng). File mới thêm vào chưa tick dòng nào: coi như
+        xếp từ tất cả các file — kết quả xếp do người dùng bấm áp dụng nên được bật như cũ."""
+        if clips and not any(c.enabled for c in clips):
+            return [replace(c, enabled=True) for c in clips]
+        return clips
+
     def _table_media(self):
         """(clip của bảng, MediaInfo theo file, thời lượng một lần phát theo file) cho các hộp thoại xếp kịch bản."""
         items = self.list.items()
-        clips = [self._clip_from_item(it) for it in items]
+        clips = self._arrange_pool([self._clip_from_item(it) for it in items])
         infos: dict[str, MediaInfo] = {}
         durations: dict[str, float] = {}
         for it, c in zip(items, clips):
@@ -1960,6 +1995,9 @@ class VideoTab(QWidget):
         need_seed = self.order.currentData() == "shuffle" or has_rand_plays
         self.lbl_seed.setVisible(need_seed)
         self.seed_wrap.setVisible(need_seed)
+
+        self.timeline.reorder_block = ("Đang phát ngẫu nhiên — chọn Thứ tự clip “Theo thứ tự trong bảng” để kéo đổi chỗ"
+                                       if self.order.currentData() == "shuffle" else "")
 
         has_bookend = bool(self.intro.value() or self.outro.value())
         self.bookend_audio.setEnabled(has_bookend)
