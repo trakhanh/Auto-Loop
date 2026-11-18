@@ -199,3 +199,34 @@ def test_timeline_menu_offers_start_song(env):
     bar.musicStartRequested.emit(bar.video[k].clip, 0)
     pump(env[0])
     assert tab.collect().clips[1].music_start == str(MUSIC[0])
+
+
+# ---------------- tắt hết bài nhạc khi độ dài "Theo độ dài nhạc" ----------------
+@need_media
+def test_all_tracks_off_with_music_length_keeps_clip_lane(env):
+    """Bỏ tick hết bài ở trang Nhạc khi Độ dài = Theo độ dài nhạc: trước đây báo lỗi, cả dòng thời gian (kể cả làn CLIP)
+    biến mất. Giờ video tạm dài theo số lần phát clip, có cảnh báo nói rõ cách sửa."""
+    from loopstation.core import timeline
+    from loopstation.ui.timeline_bar import TimelineBar
+    p = _proj([dict()] * 3)
+    p.video.length_mode = "music"
+    for t in p.music.tracks:
+        t.enabled = False
+    tl = timeline.build(p)
+    assert tl.ok, tl.errors
+    assert any("chưa bật bài nhạc nào" in w for w in tl.warnings), tl.warnings
+    bar = TimelineBar()
+    _KEEP.append(bar)
+    bar.set_timeline(tl, [Path(c.path).stem for c in p.video.clips], [])
+    assert bar.video, "làn CLIP phải còn"
+
+
+def test_timeline_note_shows_the_real_reason(env):
+    from loopstation.core.timeline import Timeline
+    from loopstation.ui.timeline_bar import TimelineBar
+    tl = Timeline()
+    tl.errors.append("Thời lượng mục tiêu phải lớn hơn 0.")
+    bar = TimelineBar()
+    _KEEP.append(bar)
+    bar.set_timeline(tl, [], [])
+    assert "Thời lượng mục tiêu phải lớn hơn 0" in bar.note

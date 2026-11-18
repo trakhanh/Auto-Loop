@@ -123,7 +123,7 @@ class TimelineBar(QWidget):
         self.music_only = False
         if tl is None or not tl.ok or not tl.total:
             self.total = 0.0
-            self.note = ("Chưa tính được dòng thời gian — kiểm tra lại cài đặt"
+            self.note = ((tl.errors[0] if tl.errors else "Chưa tính được dòng thời gian — kiểm tra lại cài đặt")
                          if tl is not None else "Kéo thả video hoặc nhạc vào dự án để xem trước dòng thời gian trực quan")
             self.update()
             return

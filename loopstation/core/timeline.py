@@ -170,9 +170,12 @@ def build(project: Project) -> Timeline:
     elif vs.length_mode == "music" and project.output_kind != "video_only":
         # (kiểu Chỉ video không có nhạc: độ dài theo số lần phát của clip, như "Thủ công")
         if not tl.use_music:
-            tl.errors.append("Cách “Theo độ dài nhạc” cần ít nhất một bài nhạc được bật.")
-            return tl
-        target = planner.first_round_seconds(ms, tl.track_durations)
+            # tắt hết bài (dễ gặp khi bấm "Chọn tất cả" ở playlist): không báo lỗi làm mất cả dòng thời gian — tạm tính
+            # độ dài theo số lần phát của clip như "Thủ công", và nói rõ cách sửa
+            tl.warnings.append("Độ dài “Theo độ dài nhạc” nhưng chưa bật bài nhạc nào — video tạm dài theo số lần phát "
+                               "của clip. Bật lại bài ở trang Nhạc, hoặc đổi Độ dài ở thẻ Độ dài.")
+        else:
+            target = planner.first_round_seconds(ms, tl.track_durations)
 
     if target is not None and target > MAX_DURATION:
         tl.errors.append(f"Thời lượng {_hours(target)} quá dài — tối đa {MAX_DURATION // 3600} giờ.")
