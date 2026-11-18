@@ -1379,6 +1379,7 @@ class MainWindow(QMainWindow):
         self._cached_tl = (self._preview_signature(proj) + "|v0", tl)
         self.music_tab.mixer.set_timeline(tl.total if tl.ok else 0.0, [it.start for it in tl.music_items[1:]])
         clip_names = [Path(c.path).stem for c in proj.video.clips]
+        self.video_tab.set_tracks([(t.path, Path(t.path).stem) for t in proj.music.tracks])
         from ..core.clip_ranges import ranges_text
         self.music_tab.set_clip_music(ranges_text([c.music for c in proj.video.clips])
                                       if proj.video.clips and self.mode == "video_music" else "")

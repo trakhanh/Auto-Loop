@@ -17,7 +17,7 @@ from .project import ClipItem
 NUMS_RE = re.compile(r"^\s*(\d+)\s*[_\-.\s]+(?:(\d+)\s*[_\-.\s]+)?")  # "5_", "12 - " (STT) hoặc "33_4_" (tập + STT)
 SEP_RE = re.compile(r"[\s_\-.]+")
 MEDIA_EXTS = {".mp4", ".mov", ".mkv", ".avi", ".webm", ".m4v", ".mts", ".m2ts", ".ts", ".wmv", ".flv"} | IMAGE_EXTS
-_ROW_FIELDS = [f.name for f in fields(ClipItem) if f.name != "path"]
+_ROW_FIELDS = [f.name for f in fields(ClipItem) if f.name not in ("path", "music_start")]  # bài nhạc là của dự án
 
 
 def _parts(path: str) -> tuple[int | None, int | None, str]:

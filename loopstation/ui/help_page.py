@@ -242,8 +242,9 @@ topic("video", "Làm video", "film", "Trang Video: clip & số lần loop", hero
     ("Thêm clip", "<b>Thêm file</b> / <b>Thư mục</b>, hoặc <b>kéo thả</b> video, ảnh, cả thư mục vào bảng (tick <i>Cả thư mục con</i> để lấy cả thư mục bên trong). File mới vào bảng <b>chưa được chọn</b>: tick dòng cần dùng, hoặc ô <b>Chọn tất cả</b> đầu hàng công cụ (bấm lần nữa để bỏ chọn tất cả). "
                   "Nút <b>⋯</b> cạnh ô tìm: <b>Sắp xếp A–Z</b> (clip2 trước clip10), <b>Xáo ngẫu nhiên thứ tự</b>, <b>Bật / tắt nhanh</b> (bật / tắt / đảo ngược tất cả), <b>Xoá tất cả</b> (có hỏi lại). Ô tìm tên file (Ctrl+F) — gõ không dấu cũng được."),
     ("Bảng clip", "mỗi dòng một clip, kéo lên / xuống để đổi thứ tự. <b>Bấm đúp ô</b> để sửa: Số lần phát, Đoạn lấy, Nối loop, Sang clip. "
-                  "Cột <b>Nhạc</b>: bỏ tick clip nào thì lúc đó không có nhạc nền; tới clip có tick nhạc sang bài kế, phát từ đầu "
-                  "(ví dụ chỉ có nhạc từ clip 5, hoặc clip 2–3 và 7–8). Nhiều dòng một lúc: bôi đen → chuột phải → <i>Nhạc: bật / tắt</i>."),
+                  "Cột <b>Nhạc</b>: bấm ô để chọn <b>Tiếp tục</b> (nhạc chạy tiếp playlist), <b>Không nhạc</b>, hoặc "
+                  "<b>Bắt đầu bằng bài X</b> (tới clip này phát bài X từ đầu, rồi tiếp bài sau). Ví dụ bài 1 vào clip 5: clip 1–4 "
+                  "chọn Không nhạc, clip 5 chọn Bắt đầu bằng bài 1. Bôi đen nhiều dòng rồi bấm ô: áp cho cả các dòng."),
     ("Xếp clip ▾", "tự xếp bảng: <b>Xen kẽ clip nền</b> (<i>nền ×70 → cảnh 2 → nền ×70 → cảnh 3 …</i> theo tên file), "
                    "<b>Xếp lần lượt từng loop</b> (Loop1, Loop2…), <b>Thư viện mẫu</b> (xem chủ đề Xen kẽ)."),
     ("Đặt nhanh", "bôi đen nhiều dòng rồi đặt số lần phát một lượt (gõ số, hoặc chọn ×1, ×10, ×70, 10p, 1h ở mũi tên ▾ cuối ô) → <b>Áp dụng</b>; <b>Bật tự giãn</b> / <b>Bỏ giãn</b>. "

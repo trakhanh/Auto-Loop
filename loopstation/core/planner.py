@@ -318,6 +318,7 @@ class MusicItem:
     track: int  # chỉ số trong project.music.tracks
     start: float  # giây trên timeline
     duration: float  # độ dài dùng (có thể bị cắt ở bài cuối)
+    cut: bool = False  # bị cắt giữa chừng vì tới đoạn khác (nhạc theo clip): dựng âm thanh cho nhỏ dần ở cuối
 
 
 def music_round(ms: MusicSettings, rng: random.Random, prev_last: int | None) -> list[int]:
@@ -523,34 +524,38 @@ def plan_music(ms: MusicSettings, durations: dict[int, float], total: float) -> 
     return items
 
 
-def plan_music_windows(ms: MusicSettings, durations: dict[int, float], windows: list[tuple[float, float]],
+def plan_music_windows(ms: MusicSettings, durations: dict[int, float], windows: list[tuple],
                        total: float) -> list[MusicItem]:
-    """Nhạc chỉ phát trong các đoạn `windows` [(bắt đầu, kết thúc)…] (các clip có tick "Nhạc"). Mỗi đoạn mở đầu bằng
-    bài kế tiếp trong playlist, phát từ đầu bài; bài cuối của đoạn bị cắt ở cuối đoạn (dựng âm thanh cho nhỏ dần).
-    Một đoạn phủ cả video = y hệt `plan_music` (không đổi gì khi không dùng cột Nhạc)."""
-    wins = [(max(0.0, a), min(total, b)) for a, b in windows if min(total, b) - max(0.0, a) > 0.05]
+    """Nhạc chỉ phát trong các đoạn `windows` [(bắt đầu, kết thúc[, bài mở đầu])…] (cột Nhạc của bảng clip). Mỗi đoạn
+    mở đầu bằng bài kế tiếp trong playlist — hoặc đúng bài đã chọn cho clip đó — phát từ đầu bài, rồi tiếp playlist;
+    bài cuối của đoạn bị cắt ở cuối đoạn (dựng âm thanh cho nhỏ dần).
+    Một đoạn phủ cả video, không chọn bài = y hệt `plan_music` (không đổi gì khi không dùng cột Nhạc)."""
+    wins = [(max(0.0, w[0]), min(total, w[1]), w[2] if len(w) > 2 else None) for w in windows
+            if min(total, w[1]) - max(0.0, w[0]) > 0.05]
     if not wins:
         return []
-    if len(wins) == 1 and wins[0][0] <= 1e-6 and wins[0][1] >= total - 1e-6:
+    if len(wins) == 1 and wins[0][0] <= 1e-6 and wins[0][1] >= total - 1e-6 and wins[0][2] is None:
         return plan_music(ms, durations, total)
     longest = max(durations.values(), default=0.0)
     if longest <= 0:
         return []
-    need = sum(b - a for a, b in wins) + (len(wins) + 1) * longest  # đủ bài cho mọi đoạn (kể cả phần bị cắt)
+    need = sum(w[1] - w[0] for w in wins) + (len(wins) + 1) * longest  # đủ bài cho mọi đoạn (kể cả phần bị cắt)
     order = [it.track for it in plan_music(ms, durations, need)]
     if not order:
         return []
     step = _step(ms)
     items: list[MusicItem] = []
     k = 0
-    for a, b in wins:
+    for a, b, first in wins:
+        if first is not None and first in order:  # clip chọn bài mở đầu: nhảy tới lần phát kế tiếp của bài đó
+            k = next(j for j in range(k, k + len(order)) if order[j % len(order)] == first)
         pos = a
         while pos < b - 0.05:
             i = order[k % len(order)]
             k += 1
             d = durations[i]
             if pos + d >= b - 1e-3:
-                items.append(MusicItem(i, pos, max(0.0, b - pos)))
+                items.append(MusicItem(i, pos, max(0.0, b - pos), cut=b < total - 0.05 and pos + d > b + 1e-3))
                 break
             items.append(MusicItem(i, pos, d))
             pos = pos + d - step

@@ -194,30 +194,44 @@ def build(project: Project) -> Timeline:
         return tl
     tl.warnings += tl.video.warnings
     if tl.use_music and not tl.errors:
-        tl.music_items = planner.plan_music_windows(ms, tl.track_durations, music_windows(tl, vs), tl.total)
+        tl.music_items = planner.plan_music_windows(ms, tl.track_durations, music_windows(tl, vs, ms.tracks),
+                                                    tl.total)
     return tl
 
 
-def music_windows(tl: "Timeline", vs) -> list[tuple[float, float]]:
-    """Các đoạn có nhạc: thời gian của các clip có tick "Nhạc" (Intro / Outro giữ như cũ), gộp đoạn liền nhau.
-    Mọi clip đều có tick → một đoạn phủ cả video."""
+def music_windows(tl: "Timeline", vs, tracks: list | None = None) -> list[tuple]:
+    """Các đoạn có nhạc [(bắt đầu, kết thúc, bài mở đầu hoặc None)]: thời gian của các clip có nhạc (Intro / Outro
+    giữ như cũ), gộp đoạn liền nhau; clip chọn "bắt đầu bằng bài X" mở một đoạn mới bằng đúng bài đó.
+    Mọi clip để mặc định → một đoạn phủ cả video."""
     total = tl.total
-    if tl.video is None or all(c.music for c in vs.clips):
-        return [(0.0, total)]
-    plan, out, pos = tl.video, [], 0
+    starts: dict[int, int] = {}
+    if tracks:
+        key = {os.path.normcase(os.path.abspath(t.path)): i for i, t in enumerate(tracks)}
+        for r, c in enumerate(vs.clips):
+            if c.music and c.music_start:
+                i = key.get(os.path.normcase(os.path.abspath(c.music_start)))
+                if i is not None and i in tl.track_durations:
+                    starts[r] = i
+    if tl.video is None or (all(c.music for c in vs.clips) and not starts):
+        return [(0.0, total, None)]
+    plan, out, pos, prev = tl.video, [], 0, None
     for j, (clip, _r) in enumerate(plan.plays):
         f = plan.ends.get(j, tl.frames.get(clip, 0))
         a, b = float(Fraction(pos) / tl.fps), float(Fraction(pos + f) / tl.fps)
         on = clip < 0 or not (0 <= clip < len(vs.clips)) or vs.clips[clip].music
+        first = starts.get(clip) if clip != prev else None  # lần lặp kế tiếp của cùng dòng: không mở lại bài
         if on:
-            if out and a - out[-1][1] < 0.05:  # liền (hoặc chồng crossfade) với đoạn trước: gộp
-                out[-1] = (out[-1][0], max(out[-1][1], b))
+            if out and a - out[-1][1] < 0.05 and first is None:  # liền (hoặc chồng crossfade) đoạn trước: gộp
+                out[-1] = (out[-1][0], max(out[-1][1], b), out[-1][2])
             else:
-                out.append((a, b))
+                if out and out[-1][1] > a:
+                    out[-1] = (out[-1][0], a, out[-1][2])
+                out.append((a, b, first))
+        prev = clip
         if j < len(plan.overlaps):
             pos += f - plan.overlaps[j]
     if out:
-        out[-1] = (out[-1][0], min(total, out[-1][1]))
+        out[-1] = (out[-1][0], min(total, out[-1][1]), out[-1][2])
     return out
 
 

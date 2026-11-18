@@ -68,6 +68,7 @@ class TimelineBar(QWidget):
     blockedMoveRequested = Signal(str, int, int, bool)
     # nhạc theo clip: trạng thái nhạc bật / tắt mới của mọi dòng bảng clip (kéo mép đoạn nhạc, chuột phải, Alt + quét)
     musicFlagsRequested = Signal(list)
+    musicStartRequested = Signal(int, int)  # chuột phải khối clip → bắt đầu nhạc bằng bài: (dòng clip, bài)
     LANE_V, LANE_M = 40, 30  # làn CLIP / NHẠC cao hơn: khối to, dễ bấm và kéo
     PAD_L, PAD_R = 116, 12
     TOP_V = 10
@@ -96,6 +97,7 @@ class TimelineBar(QWidget):
         self.reorder_block = ""
         self.music_reorder_block = ""  # như trên, cho làn NHẠC (playlist đang xáo ngẫu nhiên…)
         self.music_rows: list[bool] = []  # dòng nào của bảng clip có nhạc nền (trang Video cập nhật)
+        self.track_names: list[str] = []  # tên các bài trong playlist (menu "Bắt đầu nhạc bằng bài")
         self.use_music = False  # video này có playlist nhạc (mới cho kéo mép đoạn nhạc / bật tắt nhạc theo clip)
         self._edge: dict | None = None  # đang kéo mép đoạn nhạc: {"t0", "kind": start|end, "t"}
         self._edge_hover: int | None = None
@@ -127,6 +129,7 @@ class TimelineBar(QWidget):
             return
         old_total = self.total
         self.total = tl.total
+        self.track_names = list(track_names)
         self.use_music = bool(getattr(tl, "use_music", False))
         self._edge = self._sweep = None
         if not old_total or self.view1 <= self.view0 or abs(old_total - self.total) > 1e-6 and self._full_view(old_total):
@@ -506,6 +509,9 @@ class TimelineBar(QWidget):
             ("Bật nhạc cho mọi clip", [True] * n),
         ]
 
+    def _start_song_choices(self) -> list[tuple[int, str]]:
+        return list(enumerate(self.track_names))
+
     def _sweep_rows(self) -> set[int]:
         return self._sweep_rows_of(self._sweep)
 
@@ -522,6 +528,12 @@ class TimelineBar(QWidget):
         title = menu.addAction(icons.icon("music", 14), f"Nhạc nền — {b.label}")
         title.setEnabled(False)
         menu.addSeparator()
+        songs = self._start_song_choices()
+        if songs:
+            sub = menu.addMenu(icons.icon("play", 14), "Bắt đầu nhạc bằng bài")
+            for i, name in songs:
+                sub.addAction(f"{i + 1} · {name}", lambda r=b.clip, t=i: self.musicStartRequested.emit(r, t))
+            menu.addSeparator()
         for label, flags in self._music_choices(hit[1]):
             menu.addAction(label, lambda f=flags: self.musicFlagsRequested.emit(f))
         menu.exec(e.globalPos())

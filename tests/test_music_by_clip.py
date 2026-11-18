@@ -199,14 +199,14 @@ def _tab(env, flags):
 
 @need_media
 def test_music_column_reads_and_writes(env):
-    from PySide6.QtCore import Qt
     from loopstation.ui import video_tab as vt
     app = env[0]
     tab = _tab(env, [True, False, True])
     assert tab.list.headerItem().text(vt.COL_MUSIC) == "Nhạc"
     assert [c.music for c in tab.collect().clips] == [True, False, True]
-    tab.list.topLevelItem(0).setCheckState(vt.COL_MUSIC, Qt.CheckState.Unchecked)
+    tab.set_music_choice([0], False)  # bấm ô Nhạc → Không nhạc
     pump(app)
+    assert tab.list.topLevelItem(0).text(vt.COL_MUSIC) == "Không nhạc"
     assert [c.music for c in tab.collect().clips] == [False, False, True]
     tab.undo()
     pump(app)

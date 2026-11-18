@@ -439,12 +439,13 @@ def music_edges(items: list[MusicItem], ms: MusicSettings, total: float):
     xf = ms.crossfade if ms.crossfade > 0 else 0.0
     step = xf if xf > 0 else -ms.gap
     n = len(items)
-    brk = [k < n - 1 and items[k + 1].start > items[k].start + items[k].duration - step + 0.05 for k in range(n)]
+    brk = [k < n - 1 and (items[k + 1].start > items[k].start + items[k].duration - step + 0.05
+                          or getattr(items[k], "cut", False)) for k in range(n)]
     lead = items[0].start if n and items[0].start > 1e-4 else 0.0
     fi, fo, pad = [], [], []
     for k, it in enumerate(items):
         before = (k == 0 and lead > 0) or (k > 0 and brk[k - 1])
-        cut_tail = k == n - 1 and it.start + it.duration < total - 0.05  # nhạc ngừng trước khi hết video
+        cut_tail = k == n - 1 and (it.start + it.duration < total - 0.05 or getattr(it, "cut", False))
         fi.append(min(EDGE_IN, it.duration * 0.3) if before else (xf if (xf > 0 and k > 0) else 0.0))
         fo.append(min(EDGE_OUT, it.duration * 0.4) if (brk[k] or cut_tail) else (xf if (xf > 0 and k < n - 1) else 0.0))
         if k < n - 1 and brk[k]:

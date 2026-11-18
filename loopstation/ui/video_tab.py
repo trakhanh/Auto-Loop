@@ -26,6 +26,7 @@ from .interleave_dialog import InterleaveDialog, has_base_candidate
 from .trim_dialog import MIN_KEEP, TrimDialog, clamp_trim, trim_text
 
 COL_NAME, COL_INFO, COL_TRIM, COL_PLAYS, COL_STRETCH, COL_LOOPXF, COL_NEXTXF, COL_DUR, COL_MUSIC = range(9)
+ROLE_MUSIC = Qt.ItemDataRole.UserRole + 40  # ô Nhạc: (có nhạc, đường dẫn bài mở đầu hoặc "")
 
 ORDER = [("list", "Theo thứ tự trong bảng"), ("shuffle", "Ngẫu nhiên — xem thứ tự ngay trên bảng clip")]
 LENGTH = [("manual", "Thủ công — đúng số lần phát trong bảng"),
@@ -241,8 +242,8 @@ class VideoTab(QWidget):
         head.setToolTip(COL_NAME, "Tên file và thông số của clip (độ phân giải · fps · thời lượng gốc)")
         head.setToolTip(COL_LOOPXF, "Crossfade giữa các lần loop của clip này. Cắt = nối thẳng")
         head.setToolTip(COL_NEXTXF, "Crossfade khi chuyển sang clip kế tiếp. Cắt = nối thẳng")
-        head.setToolTip(COL_MUSIC, "Có nhạc nền trong lúc clip này chạy. Bỏ tick: nhạc ngừng ở clip đó, tới clip có tick "
-                                   "thì sang bài kế (phát từ đầu). Chuột phải → Nhạc: bật / tắt cho nhiều dòng")
+        head.setToolTip(COL_MUSIC, "Bấm ô để chọn nhạc cho clip: Tiếp tục playlist · Không nhạc · Bắt đầu bằng bài X "
+                                   "(phát bài đó từ đầu rồi tiếp playlist). Bôi đen nhiều dòng rồi bấm: áp cho cả các dòng")
         head.setTextAlignment(COL_NAME, Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignVCenter)
         head.setTextAlignment(COL_TRIM, Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignVCenter)
         for col in (COL_PLAYS, COL_LOOPXF, COL_NEXTXF, COL_DUR):  # cột số: tiêu đề và giá trị cùng căn phải
@@ -813,6 +814,8 @@ class VideoTab(QWidget):
         self.timeline = TimelineBar()
         self.timeline.clipMoveRequested.connect(self.move_clip_row)  # kéo khối clip = đổi chỗ dòng
         self.timeline.musicFlagsRequested.connect(self.set_music_flags)  # kéo mép đoạn nhạc / chuột phải / Alt + quét
+        self.timeline.musicStartRequested.connect(self._on_music_start_from_timeline)
+        self.list.itemClicked.connect(lambda it, col: col == COL_MUSIC and self._music_cell_menu(it))
 
         # thông báo khi ở kiểu "Chỉ nhạc": trang này không dùng
         self.mode_banner = QWidget()
@@ -1042,7 +1045,8 @@ class VideoTab(QWidget):
                                  "", "—" if single_play else w.xf_text(c.loop_xfade),
                                  w.xf_text(c.next_xfade), "", ""], c.enabled)
         it.setCheckState(COL_STRETCH, Qt.CheckState.Checked if c.stretch else Qt.CheckState.Unchecked)
-        it.setCheckState(COL_MUSIC, Qt.CheckState.Checked if c.music else Qt.CheckState.Unchecked)
+        it.setData(COL_MUSIC, ROLE_MUSIC, (bool(c.music), c.music_start or ""))
+        self._show_music_cell(it)
         it.setData(0, w.ROLE_DATA, c)
         it.setData(0, w.ROLE_INFO, info)
         it.setToolTip(COL_NAME, c.path)
@@ -1074,7 +1078,7 @@ class VideoTab(QWidget):
                         loop_xfade=loop_xf,
                         next_xfade=w.parse_xf(it.text(COL_NEXTXF)),
                         trim_start=old.trim_start, trim_end=old.trim_end,
-                        music=it.checkState(COL_MUSIC) == Qt.CheckState.Checked)
+                        music=self._music_of(it)[0], music_start=self._music_of(it)[1])
 
     def _estimate_loops(self, it: QTreeWidgetItem, seconds: float, c: ClipItem, loop_xf: float) -> int:
         info: MediaInfo = it.data(0, w.ROLE_INFO)
@@ -1101,7 +1105,9 @@ class VideoTab(QWidget):
         total = len(items)
         self.count_label.setText(f"{active}/{total} clip bật" if total else "0 clip")
         if hasattr(self, "timeline"):  # dòng thời gian cần biết dòng nào có nhạc (kéo mép đoạn nhạc, chuột phải khối)
-            self.timeline.music_rows = [it.checkState(COL_MUSIC) == Qt.CheckState.Checked for it in items]
+            self.timeline.music_rows = [self._music_of(it)[0] for it in items]
+        for it in items:
+            self._show_music_cell(it)
         if hasattr(self, "seam_bar"):
             self._mark_seams()
             self._seam_timer.start()  # clip lặp mới / đổi đoạn lấy: đo chỗ nối ở luồng nền
@@ -1638,26 +1644,116 @@ class VideoTab(QWidget):
         self.set_music_flags(flags)
 
     def set_music_flags(self, flags: list[bool]) -> None:
-        """Đặt nhạc nền bật / tắt cho từng dòng (dòng thời gian, hộp Chọn clip… ở trang Nhạc) — một bước Hoàn tác."""
+        """Đặt nhạc nền bật / tắt cho từng dòng (dòng thời gian, hộp Chọn clip… ở trang Nhạc) — một bước Hoàn tác.
+        Giữ bài mở đầu đã chọn của các dòng vẫn có nhạc."""
         from ..core.clip_ranges import ranges_text
         items = self.list.items()
-        if [it.checkState(COL_MUSIC) == Qt.CheckState.Checked for it in items] == list(flags[:len(items)]):
+        if [self._music_of(it)[0] for it in items] == [bool(f) for f in flags[:len(items)]]:
             return
-        self._flush_pending()
-        self.list.blockSignals(True)
-        for it, on in zip(items, flags):
-            it.setCheckState(COL_MUSIC, Qt.CheckState.Checked if on else Qt.CheckState.Unchecked)
-        self._refresh_rows()
-        self.list.blockSignals(False)
+        self._apply_music(items, [(bool(on), self._music_of(it)[1]) for it, on in zip(items, flags)])
         self.status.setText(f"Nhạc ở: {ranges_text([bool(f) for f in flags[:len(items)]])} — Ctrl+Z để hoàn tác.")
         self._emit(step=True)
+
+    # ---------- ô Nhạc: Tiếp tục / Không nhạc / Bắt đầu bằng bài X ----------
+    def set_tracks(self, tracks: list[tuple[str, str]]) -> None:
+        """Danh sách bài của playlist [(đường dẫn, tên)] — để ô Nhạc hiện "Bài 2" và menu chọn bài."""
+        if tracks == getattr(self, "_tracks", None):
+            return
+        self._tracks = list(tracks)
+        self.list.blockSignals(True)
+        for it in self.list.items():
+            self._show_music_cell(it)
+        self.list.blockSignals(False)
+
+    @staticmethod
+    def _music_of(it: QTreeWidgetItem) -> tuple[bool, str]:
+        v = it.data(COL_MUSIC, ROLE_MUSIC)
+        return (bool(v[0]), str(v[1] or "")) if v else (True, "")
+
+    def _track_no(self, path: str) -> int | None:
+        if not path:
+            return None
+        key = os.path.normcase(os.path.abspath(path))
+        return next((i for i, (p, _n) in enumerate(getattr(self, "_tracks", []))
+                     if os.path.normcase(os.path.abspath(p)) == key), None)
+
+    def _show_music_cell(self, it: QTreeWidgetItem) -> None:
+        on, start = self._music_of(it)
+        i = self._track_no(start) if on else None
+        if not on:
+            text, tip, col = "Không nhạc", "Clip này không có nhạc nền (nhạc ngừng, tới clip có nhạc thì sang bài kế)", "text_disabled"
+        elif i is not None:
+            name = self._tracks[i][1]
+            text, tip, col = f"▶ Bài {i + 1}", f"Tới clip này phát bài {i + 1} · {name} từ đầu, rồi tiếp playlist", "accent_text"
+        else:
+            text = "Tiếp tục"
+            tip = ("Nhạc tiếp tục theo playlist" if not start else
+                   "Bài đã chọn không còn trong playlist — nhạc tiếp tục theo playlist")
+            col = "text_2"
+        it.setText(COL_MUSIC, text)
+        it.setToolTip(COL_MUSIC, tip + "\nBấm để đổi")
+        it.setForeground(COL_MUSIC, theme.qcolor(col))
+        it.setTextAlignment(COL_MUSIC, Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignVCenter)
+
+    def music_choices(self) -> list[tuple[str, bool, str]]:
+        """Các lựa chọn của ô Nhạc: (nhãn, có nhạc, bài mở đầu)."""
+        out = [("Tiếp tục playlist", True, ""), ("Không nhạc", False, "")]
+        for i, (path, name) in enumerate(getattr(self, "_tracks", [])):
+            out.append((f"Bắt đầu bằng bài {i + 1} · {name}", True, path))
+        return out
+
+    def _apply_music(self, items: list[QTreeWidgetItem], values: list[tuple[bool, str]]) -> None:
+        self._flush_pending()
+        self.list.blockSignals(True)
+        for it, v in zip(items, values):
+            it.setData(COL_MUSIC, ROLE_MUSIC, v)
+        self._refresh_rows()
+        self.list.blockSignals(False)
+
+    def set_music_choice(self, rows: list[int], on: bool, start: str = "") -> None:
+        """Ô Nhạc của các dòng `rows`: Tiếp tục (on, ""), Không nhạc (False), Bắt đầu bằng bài (on, đường dẫn)."""
+        items = [self.list.topLevelItem(r) for r in rows if 0 <= r < self.list.topLevelItemCount()]
+        if not items:
+            return
+        self._apply_music(items, [(bool(on), start if on else "")] * len(items))
+        i = self._track_no(start)
+        what = ("không nhạc" if not on else f"bắt đầu bằng bài {i + 1}" if i is not None else "tiếp tục playlist")
+        self.status.setText(f"{len(items)} clip: {what} — Ctrl+Z để hoàn tác.")
+        self._emit(step=True)
+
+    def _on_music_start_from_timeline(self, row: int, track: int) -> None:
+        tracks = getattr(self, "_tracks", [])
+        if 0 <= track < len(tracks):
+            self.set_music_choice([row], True, tracks[track][0])
+
+    def _music_cell_menu(self, it: QTreeWidgetItem) -> None:
+        """Bấm ô Nhạc: menu chọn (áp cho cả các dòng đang bôi đen nếu dòng bấm nằm trong đó)."""
+        rows = sorted(self.list.indexOfTopLevelItem(x) for x in self.list.selectedItems()) if it.isSelected() else []
+        if len(rows) < 2:
+            rows = [self.list.indexOfTopLevelItem(it)]
+        cur = self._music_of(it)
+        menu = QMenu(self.list)
+        if len(rows) > 1:
+            head = menu.addAction(icons.icon("music", 14), f"Nhạc cho {len(rows)} dòng đang chọn")
+            head.setEnabled(False)
+            menu.addSeparator()
+        for k, (label, on, start) in enumerate(self.music_choices()):
+            if k == 2:
+                menu.addSeparator()
+            act = menu.addAction(label, lambda o=on, s=start: self.set_music_choice(rows, o, s))
+            act.setCheckable(True)
+            same = cur[0] == on and (os.path.normcase(cur[1]) == os.path.normcase(start) if on else True)
+            act.setChecked(len(rows) == 1 and same)
+        rect = self.list.visualItemRect(it)
+        x = self.list.header().sectionViewportPosition(COL_MUSIC)
+        menu.exec(self.list.viewport().mapToGlobal(rect.bottomLeft().__class__(x, rect.bottom())))
 
     def _toggle_music_rows(self, it: QTreeWidgetItem) -> None:
         """Chuột phải → Nhạc: dòng bấm vào đang có nhạc thì tắt cho cả các dòng đang chọn, và ngược lại."""
         if not it.isSelected():
             self.list.clearSelection()
             it.setSelected(True)
-        self.set_music_selected(it.checkState(COL_MUSIC) != Qt.CheckState.Checked)
+        self.set_music_selected(not self._music_of(it)[0])
 
     def _on_image_dur(self, *_) -> None:
         self.list.blockSignals(True)
