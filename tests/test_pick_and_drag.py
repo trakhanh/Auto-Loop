@@ -257,5 +257,28 @@ def test_drop_slots_skip_own_edges(env):
     tab = make_tab(env, VIDEO[:3])
     bar = _timeline_for(tab)
     slots = bar._drop_slots(0)
-    # kéo khối đầu: chỉ còn 2 chỗ thả có nghĩa (trước khối 3, sau khối 3)
-    assert [(s.target, s.after) for s in slots] == [(2, False), (2, True)]
+    # kéo khối đầu: thả lên khối 2 hay khối 3 thì lấy chỗ của khối đó (đứng sau nó)
+    assert [(s.target, s.after) for s in slots] == [(1, True), (2, True)]
+
+
+@need_media
+def test_dense_repeated_sequence_drag_always_changes_order(env):
+    """Lặp cả chuỗi nhiều vòng (01 02 03 01 02 03…): khối chỉ vài px, thả đâu cũng phải đổi thứ tự thấy được."""
+    from PySide6.QtCore import QPointF
+    from loopstation.ui.video_tab import set_combo
+    app = env[0]
+    tab = make_tab(env, VIDEO[:3])
+    set_combo(tab.length_mode, "target")
+    set_combo(tab.fill, "repeat_sequence")
+    tab.target.set_seconds(1800)
+    pump(app, 0.1)
+    bar = _timeline_for(tab)
+    assert len(bar.video) > 100
+    bar.playhead, bar.seek_enabled = bar.video[40].start, True  # vạch phát nằm ngay trên khối đang kéo
+    before = names(tab)
+    src = bar.video[40]
+    x0 = (bar._x(src.start) + bar._x(src.end)) / 2
+    assert not bar._on_scrub_zone(QPointF(x0, bar.TOP_V + 5))  # khối được ưu tiên hơn vạch phát
+    tgt = next(b for b in bar.video[60:] if b.clip != src.clip)
+    _drag(app, bar, x0, (bar._x(tgt.start) + bar._x(tgt.end)) / 2)
+    assert names(tab) != before

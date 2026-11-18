@@ -227,43 +227,46 @@ class TimelineBar(QWidget):
     def _block_reason(self, lane: str) -> str:
         return self.reorder_block if lane == "v" else self.music_reorder_block
 
-    def _all_slots(self, block: int, lane: str = "v") -> list[Slot]:
-        """Mọi mép giữa các khối có thể thả khối `block` vào (kể cả mép của chính nó — thả đó không đổi gì).
-        Không thả trước Intro / sau Outro."""
+    def _target_block(self, x: float, lane: str) -> int | None:
+        """Khối (không phải Intro / Outro) ở vị trí x: khối chứa x, không thì khối gần nhất."""
+        vb = self._blocks(lane)
+        movable = [k for k, b in enumerate(vb) if b.clip >= 0]
+        if not movable:
+            return None
+        t = self._t(x)
+        inside = [k for k in movable if vb[k].start <= t <= vb[k].end]
+        if inside:
+            return inside[0]
+        return min(movable, key=lambda k: min(abs(self._x(vb[k].start) - x), abs(self._x(vb[k].end) - x)))
+
+    def _nearest_slot(self, block: int, x: float, lane: str = "v") -> Slot | None:
+        """Thả khối `block` ở x: lấy chỗ của khối đang chỉ vào (như kéo trong danh sách) — dòng nguồn đứng sau dòng đích
+        nếu đang ở trên nó trong bảng, đứng trước nếu ở dưới. Cùng một dòng (kể cả lần phát lặp lại của nó) = không đổi.
+        Chuỗi lặp nhiều vòng (01 02 03 01 02 03…) vẫn luôn ra một thay đổi thấy được."""
         vb = self._blocks(lane)
         if not (0 <= block < len(vb)) or vb[block].clip < 0:
-            return []
-        src = vb[block].clip
-        out: list[Slot] = []
-        movable = [k for k, b in enumerate(vb) if b.clip >= 0]
-        for k in movable:
-            if k in (block, block + 1):  # ngay mép của chính khối đang kéo
-                out.append(Slot(vb[k].start, None, False))
-            elif vb[k].clip != src:
-                out.append(Slot(vb[k].start, vb[k].clip, False))
-            elif k > 0 and vb[k - 1].clip >= 0 and vb[k - 1].clip != src:
-                # mép trước một lần phát khác của chính dòng này (playlist lặp vòng): = đặt sau khối bên trái
-                out.append(Slot(vb[k].start, vb[k - 1].clip, True))
-            else:
-                out.append(Slot(vb[k].start, None, False))
-        last = movable[-1]
-        out.append(Slot(vb[last].end, None if last == block or vb[last].clip == src else vb[last].clip, True))
-        return out
+            return None
+        k = self._target_block(x, lane)
+        if k is None:
+            return None
+        src, tgt = vb[block].clip, vb[k].clip
+        if tgt == src:
+            return Slot(vb[k].start, None, False)
+        after = src < tgt
+        return Slot(vb[k].end if after else vb[k].start, tgt, after)
 
     def _drop_slots(self, block: int, lane: str = "v") -> list[Slot]:
-        """Các chỗ thả thực sự đổi thứ tự (mỗi cặp dòng đích / trước-sau một lần)."""
+        """Các kết quả thả khác nhau (mỗi cặp dòng đích / trước-sau một lần), theo thứ tự trên dòng thời gian."""
+        vb = self._blocks(lane)
         seen, out = set(), []
-        for s in self._all_slots(block, lane):
-            if s.target is not None and (s.target, s.after) not in seen:
+        for k, b in enumerate(vb):
+            if b.clip < 0:
+                continue
+            s = self._nearest_slot(block, (self._x(b.start) + self._x(b.end)) / 2, lane)
+            if s is not None and s.target is not None and (s.target, s.after) not in seen:
                 seen.add((s.target, s.after))
                 out.append(s)
         return out
-
-    def _nearest_slot(self, block: int, x: float, lane: str = "v") -> Slot | None:
-        slots = self._all_slots(block, lane)
-        if not slots:
-            return None
-        return min(slots, key=lambda s: abs(self._x(s.t) - x))
 
     def _block_rect(self, b: Block, lane: str = "v") -> QRectF:
         top, h = self._lane_y(lane)
@@ -282,7 +285,8 @@ class TimelineBar(QWidget):
                 blocks = self._blocks(lane)
                 hits = [k for k, b in enumerate(blocks) if self._block_rect(b, lane).contains(pos)]
                 if hits:
-                    return lane, min(hits, key=lambda k: self._block_rect(blocks[k], lane).width())
+                    return lane, min(hits, key=lambda k: (self._block_rect(blocks[k], lane).width(),
+                                                          abs(self._block_rect(blocks[k], lane).center().x() - pos.x())))
         return None
 
     def _movable_at(self, pos) -> tuple[str, int] | None:
@@ -320,7 +324,18 @@ class TimelineBar(QWidget):
                 p.drawEllipse(QPointF(x, top), 4, 4)
                 p.drawEllipse(QPointF(x, bot), 4, 4)
                 p.setBrush(Qt.BrushStyle.NoBrush)
-            self._paint_ghost(p, self._ghost_rect(mv), b.color, b.label, small, 1.0)
+            slot = mv["slot"]
+            label = b.label
+            if slot is not None and slot.target is not None:
+                names = {x.clip: x.label for x in self._blocks(lane)}
+                label = f"{b.label}  →  {'sau' if slot.after else 'trước'} {names.get(slot.target, '')}"
+            elif slot is not None:
+                label = f"{b.label}  ·  giữ nguyên"
+            g = self._ghost_rect(mv)
+            if slot is not None and slot.target is not None:
+                g.setWidth(max(g.width(), min(320.0, p.fontMetrics().horizontalAdvance(label) + 24)))
+                g.moveLeft(min(max(self.PAD_L, mv["x"] - g.width() / 2), self.width() - self.PAD_R - g.width()))
+            self._paint_ghost(p, g, b.color, label, small, 1.0)
         if self._land is not None and self._land_k < 1.0:
             r0, r1, color, label = self._land
             k = self._land_k
@@ -719,7 +734,10 @@ class TimelineBar(QWidget):
             return False
         if pos.y() >= self._ruler_y() - 2:
             return True
-        return self.playhead is not None and abs(self._x(self.playhead) - pos.x()) <= 6
+        if self.playhead is None or abs(self._x(self.playhead) - pos.x()) > 6:
+            return False
+        mh = self._movable_at(pos)  # trên làn có khối kéo được: khối được ưu tiên (tua bằng thước giờ bên dưới)
+        return mh is None or bool(self._block_reason(mh[0]))
 
     def mousePressEvent(self, e) -> None:  # noqa: N802
         if e.button() == Qt.MouseButton.LeftButton and self._on_scrub_zone(e.position()):
