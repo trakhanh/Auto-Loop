@@ -35,6 +35,7 @@ class MusicTab(QWidget):
     changed = Signal()
     switchModeRequested = Signal(str)
     nextStepRequested = Signal()
+    clipMusicRequested = Signal()  # bấm "Chọn clip…": chọn clip nào có nhạc nền (cửa sổ chính mở hộp chọn)
 
     def __init__(self, settings: QSettings, parent=None):
         super().__init__(parent)
@@ -211,6 +212,22 @@ class MusicTab(QWidget):
         f.setVerticalSpacing(8)
         f.setRowWrapPolicy(QFormLayout.RowWrapPolicy.WrapLongRows)  # cột hẹp / chữ to: nhãn lên trên, không đẩy cột
         f.addRow("Chế độ phát", self.order)
+        # nhạc chỉ phát ở một số clip (vd từ clip 5, hoặc clip 2–3 và 7–8) — cùng dữ liệu với cột "Nhạc" ở trang Video
+        self.clip_music_label = QLabel("Tất cả clip")
+        self.clip_music_label.setToolTip("Clip nào có nhạc nền. Clip không có nhạc: nhạc ngừng, tới clip có nhạc thì sang "
+                                         "bài kế (phát từ đầu). Chỉnh cả ở cột Nhạc trang Video và trên dòng thời gian.")
+        self.clip_music_btn = QPushButton("Chọn clip…")
+        self.clip_music_btn.setObjectName("pill")
+        self.clip_music_btn.setIcon(icons.icon("music", 13))
+        self.clip_music_btn.clicked.connect(lambda: self.clipMusicRequested.emit())
+        self.clip_music_row = QWidget()
+        cm = QHBoxLayout(self.clip_music_row)
+        cm.setContentsMargins(0, 0, 0, 0)
+        cm.setSpacing(8)
+        cm.addWidget(self.clip_music_label, 1)
+        cm.addWidget(self.clip_music_btn)
+        self.lbl_clip_music = QLabel("Nhạc ở clip")
+        f.addRow(self.lbl_clip_music, self.clip_music_row)
         f.addRow(self.lbl_seed, self.seed_wrap)
         self.pin_info = QLabel("")
         self.pin_info.setObjectName("muted")
@@ -884,6 +901,12 @@ class MusicTab(QWidget):
         self.lbl_lufs.setVisible(loud)
         self.lufs.setVisible(loud)
         self.lufs.setEnabled(loud)
+
+    def set_clip_music(self, text: str) -> None:
+        """Dòng "Nhạc ở clip": "Tất cả clip", "Clip 5–10"… Rỗng = ẩn (Chỉ nhạc / chưa có clip)."""
+        self.clip_music_label.setText(f"<b>{text}</b>" if text else "")
+        for wdg in (self.clip_music_row, self.lbl_clip_music):
+            wdg.setVisible(bool(text))
 
     def move_track_row(self, src: int, target: int, after: bool) -> int | None:
         """Kéo khối bài nhạc trên dòng thời gian: đặt bài `src` ngay trước / sau bài `target`. Trả về vị trí mới."""

@@ -158,6 +158,7 @@ class MainWindow(QMainWindow):
         self.video_tab.timeline.seekRequested.connect(self._preview_seek)
         self.video_tab.timeline.trackMoveRequested.connect(self._move_track_from_timeline)
         self.video_tab.timeline.blockedMoveRequested.connect(self._blocked_timeline_move)
+        self.music_tab.clipMusicRequested.connect(self._choose_clip_music)
         self.video_tab.timeline.seek_enabled = True
         self.music_tab.mixer.playbackStopped.connect(self._mixer_stopped)
         self.music_tab.mixer.previewRequested.connect(self.preview_audio)
@@ -1315,6 +1316,19 @@ class MainWindow(QMainWindow):
         if dest is not None:
             self.video_tab.timeline.flash_track(dest)
 
+    def _choose_clip_music(self) -> None:
+        """Trang Nhạc → Chọn clip…: chọn clip nào có nhạc nền (cùng dữ liệu cột Nhạc ở trang Video)."""
+        from .clip_music_dialog import ClipMusicDialog
+        clips = self.video_tab.collect().clips
+        if not clips:
+            self.notify("Chưa có clip — thêm clip ở trang Video trước.", "info")
+            return
+        dlg = ClipMusicDialog([Path(c.path).stem for c in clips], [c.music for c in clips], self)
+        flags = dlg.flags() if dlg.exec() else None
+        w.dispose(dlg)
+        if flags is not None:
+            self.video_tab.set_music_flags(flags)
+
     def _blocked_timeline_move(self, lane: str, src: int, target: int, after: bool) -> None:
         """Kéo khối khi đang phát ngẫu nhiên: hỏi có chuyển sang "Theo thứ tự trong bảng" rồi đổi chỗ không."""
         from PySide6.QtWidgets import QMessageBox
@@ -1365,6 +1379,9 @@ class MainWindow(QMainWindow):
         self._cached_tl = (self._preview_signature(proj) + "|v0", tl)
         self.music_tab.mixer.set_timeline(tl.total if tl.ok else 0.0, [it.start for it in tl.music_items[1:]])
         clip_names = [Path(c.path).stem for c in proj.video.clips]
+        from ..core.clip_ranges import ranges_text
+        self.music_tab.set_clip_music(ranges_text([c.music for c in proj.video.clips])
+                                      if proj.video.clips and self.mode == "video_music" else "")
         track_paths = [t.path for t in proj.music.tracks]
         self.video_tab.timeline.set_timeline(tl if proj.video.clips else None, clip_names,
                                              [Path(t).stem for t in track_paths])

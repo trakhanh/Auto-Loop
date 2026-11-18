@@ -249,7 +249,10 @@ topic("video", "Làm video", "film", "Trang Video: clip & số lần loop", hero
     ("Đặt nhanh", "bôi đen nhiều dòng rồi đặt số lần phát một lượt (gõ số, hoặc chọn ×1, ×10, ×70, 10p, 1h ở mũi tên ▾ cuối ô) → <b>Áp dụng</b>; <b>Bật tự giãn</b> / <b>Bỏ giãn</b>. "
                   "Hàng <i>Cắt đoạn &amp; hoà hình ▾</i>: <b>Áp dụng cắt</b> / <b>Lấy toàn bộ</b>, <b>Áp dụng nối</b> / <b>Bỏ nối</b>, <b>Nhân bản</b>, <b>Xem thử nối</b>."),
     ("3 thẻ cài đặt", "<b>Độ dài</b> (tổng thời lượng, thứ tự, Intro/Outro) · <b>Khung &amp; Tiếng</b> (clip khác tỉ lệ, ảnh tĩnh, mờ dần cuối, tiếng gốc) · <b>Màu &amp; Logo</b>."),
-    ("Dòng thời gian", "nhìn tổng thể: làn CLIP và làn NHẠC. <b>Kéo một khối clip</b> sang trái / phải để đổi thứ tự trong bảng (Ctrl+Z để quay lại); <b>kéo một khối bài nhạc</b> để đổi thứ tự playlist. Lăn chuột để phóng to, Shift + kéo (hoặc Shift + lăn) để di chuyển, nhấp đúp để xem toàn bộ."),
+    ("Dòng thời gian", "nhìn tổng thể: làn CLIP và làn NHẠC. <b>Kéo một khối clip</b> sang trái / phải để đổi thứ tự trong bảng (Ctrl+Z để quay lại); <b>kéo một khối bài nhạc</b> để đổi thứ tự playlist (đang ngẫu nhiên thì app hỏi chuyển sang theo thứ tự). "
+                       "<b>Nhạc theo clip</b>: kéo <b>mép đoạn nhạc</b> trên làn NHẠC để nhạc bắt đầu / kết thúc ở clip khác; "
+                       "<b>chuột phải</b> khối clip → Tắt nhạc ở clip này / Chỉ có nhạc từ clip này trở đi…; <b>Alt + quét</b> "
+                       "qua nhiều khối để bật / tắt nhạc một lượt. Lăn chuột để phóng to, Shift + kéo (hoặc Shift + lăn) để di chuyển, nhấp đúp để xem toàn bộ."),
     ("Thanh hướng dẫn", "đang ở bước mấy + việc nên làm tiếp."),
     ("Tiếp theo", "sang bước Nhạc (hoặc Xuất nếu không dùng nhạc).")]) + """
 <h2>Ô “Số lần phát” — gõ gì?</h2>""" + examples([
@@ -440,6 +443,8 @@ topic("nhac", "Âm thanh", "music", "Trang Nhạc: playlist", hero(
     "Trang Nhạc", "Thêm bài nhạc — nhạc tự lặp cho đủ độ dài video, bài cuối nhỏ dần đúng lúc video kết thúc.",
     (("Mở trang Nhạc", "app:music"),)) + img("music") + legend([
     ("Playlist", "kéo thả bài hoặc cả thư mục nhạc. Bỏ tick bài không dùng. <b>Số lần/lượt</b> = bài đó phát mấy lần mỗi lượt playlist. Bấm đúp tên bài để nghe."),
+    ("Nhạc ở clip", "thẻ Thứ tự phát → <b>Chọn clip…</b>: gõ <code>5-10</code> (nhạc từ clip 5 tới 10), <code>2-3, 7-8</code>, "
+                    "<code>5-</code> (từ clip 5 tới hết) hoặc tick từng clip. Clip không có nhạc: nhạc ngừng, tới clip có nhạc thì sang bài kế."),
     ("Âm lượng %", "to / nhỏ <b>riêng từng bài</b>: bấm đúp để sửa, hoặc bôi đen nhiều bài → chuột phải → <i>Đặt âm lượng bài đang chọn…</i>. "
                    "Cột <b>Độ to gốc</b> cho biết bài nào vốn to / nhỏ hơn."),
     ("Lịch phát dự kiến", "bài nào phát lúc mấy giờ — chính là YouTube Chapters."),

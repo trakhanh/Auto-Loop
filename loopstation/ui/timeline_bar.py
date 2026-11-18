@@ -16,7 +16,7 @@ from fractions import Fraction
 
 from PySide6.QtCore import QEasingCurve, QPointF, QRectF, Qt, QVariantAnimation, Signal
 from PySide6.QtGui import QBrush, QColor, QFont, QLinearGradient, QPainter, QPainterPath, QPen
-from PySide6.QtWidgets import QToolTip, QWidget
+from PySide6.QtWidgets import QMenu, QToolTip, QWidget
 
 from ..core import planner
 from . import icons, theme
@@ -66,6 +66,8 @@ class TimelineBar(QWidget):
     # kéo thả khi làn đang không cho đổi chỗ (phát ngẫu nhiên): (làn "v"/"m", nguồn, đích, sau) — nơi nhận hỏi người dùng
     # có chuyển sang "Theo thứ tự trong bảng" rồi đổi chỗ không (gợi ý, người dùng quyết)
     blockedMoveRequested = Signal(str, int, int, bool)
+    # nhạc theo clip: trạng thái nhạc bật / tắt mới của mọi dòng bảng clip (kéo mép đoạn nhạc, chuột phải, Alt + quét)
+    musicFlagsRequested = Signal(list)
     LANE_V, LANE_M = 40, 30  # làn CLIP / NHẠC cao hơn: khối to, dễ bấm và kéo
     PAD_L, PAD_R = 116, 12
     TOP_V = 10
@@ -93,6 +95,11 @@ class TimelineBar(QWidget):
         # kéo khối clip để đổi thứ tự. reorder_block khác rỗng = đang không cho kéo (lý do, hiện khi rê chuột)
         self.reorder_block = ""
         self.music_reorder_block = ""  # như trên, cho làn NHẠC (playlist đang xáo ngẫu nhiên…)
+        self.music_rows: list[bool] = []  # dòng nào của bảng clip có nhạc nền (trang Video cập nhật)
+        self.use_music = False  # video này có playlist nhạc (mới cho kéo mép đoạn nhạc / bật tắt nhạc theo clip)
+        self._edge: dict | None = None  # đang kéo mép đoạn nhạc: {"t0", "kind": start|end, "t"}
+        self._edge_hover: int | None = None
+        self._sweep: dict | None = None  # Alt + quét khối clip: {"on", "rows", "x0", "x"}
         self._mv: dict | None = None  # {"lane", "block", "clip", "x0", "x", "on", "slot"}
         self._caret_x: float | None = None  # vạch chèn đang vẽ (trượt mượt tới chỗ thả)
         self._land: tuple[QRectF, QRectF, str, str] | None = None  # bóng khối bay về chỗ thả sau khi nhả chuột
@@ -120,6 +127,8 @@ class TimelineBar(QWidget):
             return
         old_total = self.total
         self.total = tl.total
+        self.use_music = bool(getattr(tl, "use_music", False))
+        self._edge = self._sweep = None
         if not old_total or self.view1 <= self.view0 or abs(old_total - self.total) > 1e-6 and self._full_view(old_total):
             self.view0, self.view1 = 0.0, self.total
         self.view1 = min(self.view1, self.total)
@@ -421,6 +430,172 @@ class TimelineBar(QWidget):
             sig = self.clipMoveRequested if lane == "v" else self.trackMoveRequested
             sig.emit(mv["clip"], slot.target, slot.after)
 
+    # ---------- nhạc theo clip: kéo mép đoạn nhạc, chuột phải / Alt + quét khối clip ----------
+    def _rows_count(self) -> int:
+        return max(len(self.music_rows), max((b.clip for b in self.video), default=-1) + 1)
+
+    def _flags(self) -> list[bool]:
+        n = self._rows_count()
+        return [self.music_rows[k] if k < len(self.music_rows) else True for k in range(n)]
+
+    def _music_sections(self) -> list[tuple[float, float]]:
+        """Các đoạn có nhạc trên làn NHẠC (gộp các bài liền / chồng crossfade)."""
+        out: list[tuple[float, float]] = []
+        for b in sorted(self.music, key=lambda b: b.start):
+            if out and b.start <= out[-1][1] + 0.1:
+                out[-1] = (out[-1][0], max(out[-1][1], b.end))
+            else:
+                out.append((b.start, b.end))
+        return out
+
+    def _music_edges(self) -> list[tuple[float, str]]:
+        """Mép kéo được: đầu (start) và cuối (end) của từng đoạn nhạc."""
+        if not (self.use_music and self.video):
+            return []
+        out = []
+        for a, b in self._music_sections():
+            out += [(a, "start"), (b, "end")]
+        return out
+
+    def _edge_at(self, pos) -> int | None:
+        top, h = self._lane_y("m")
+        if not (top - 2 <= pos.y() <= top + h + 2) or pos.x() < self.PAD_L - 2:
+            return None
+        best, bd = None, 7.0
+        for k, (t, _kind) in enumerate(self._music_edges()):
+            d = abs(self._x(t) - pos.x())
+            if d <= bd:
+                best, bd = k, d
+        return best
+
+    def _snap(self, x: float) -> float:
+        """Bắt vào ranh giới clip gần nhất (đầu / cuối mỗi khối ở làn CLIP)."""
+        pts = {0.0, self.total}
+        for b in self.video:
+            pts.add(b.start)
+            pts.add(b.end)
+        return min(pts, key=lambda t: abs(self._x(t) - x))
+
+    def _edge_result(self) -> list[bool] | None:
+        ed = self._edge
+        if ed is None or abs(ed["t"] - ed["t0"]) < 1e-6:
+            return None
+        lo, hi = sorted((ed["t0"], ed["t"]))
+        on = (ed["kind"] == "start" and ed["t"] < ed["t0"]) or (ed["kind"] == "end" and ed["t"] > ed["t0"])
+        rows = {b.clip for b in self.video if b.clip >= 0 and lo - 1e-6 <= (b.start + b.end) / 2 <= hi + 1e-6}
+        if not rows:
+            return None
+        flags = self._flags()
+        for r in rows:
+            flags[r] = on
+        return flags
+
+    def _music_choices(self, block: int) -> list[tuple[str, list[bool]]]:
+        """Chuột phải vào khối clip: (nhãn, trạng thái nhạc của mọi dòng sau khi chọn)."""
+        if not (0 <= block < len(self.video)) or self.video[block].clip < 0:
+            return []
+        row, flags = self.video[block].clip, self._flags()
+        n = len(flags)
+        one = list(flags)
+        one[row] = not flags[row]
+        return [
+            ("Tắt nhạc ở clip này" if flags[row] else "Bật nhạc ở clip này", one),
+            ("Chỉ có nhạc ở clip này", [k == row for k in range(n)]),
+            ("Chỉ có nhạc từ clip này trở đi", [k >= row for k in range(n)]),
+            ("Tắt nhạc từ clip này trở đi", [flags[k] if k < row else False for k in range(n)]),
+            ("Bật nhạc cho mọi clip", [True] * n),
+        ]
+
+    def _sweep_rows(self) -> set[int]:
+        return self._sweep_rows_of(self._sweep)
+
+    def _sweep_rows_of(self, sw: dict) -> set[int]:
+        lo, hi = sorted((self._t(sw["x0"]), self._t(sw["x"])))
+        return {b.clip for b in self.video if b.clip >= 0 and b.end >= lo and b.start <= hi}
+
+    def contextMenuEvent(self, e) -> None:  # noqa: N802
+        hit = self._movable_at(e.pos())
+        if hit is None or hit[0] != "v" or not self.use_music:
+            return super().contextMenuEvent(e)
+        menu = QMenu(self)
+        b = self.video[hit[1]]
+        title = menu.addAction(icons.icon("music", 14), f"Nhạc nền — {b.label}")
+        title.setEnabled(False)
+        menu.addSeparator()
+        for label, flags in self._music_choices(hit[1]):
+            menu.addAction(label, lambda f=flags: self.musicFlagsRequested.emit(f))
+        menu.exec(e.globalPos())
+
+    def _draw_music_edit(self, p: QPainter, small) -> None:
+        """Khoảng không nhạc (gạch chéo mờ), tay nắm ở mép đoạn nhạc, phần sắp bật / tắt khi kéo mép hoặc quét."""
+        if not (self.use_music and self.video and self.music):
+            return
+        top, h = self._lane_y("m")
+        secs = self._music_sections()
+        gaps, pos = [], 0.0
+        for a, b in secs:
+            if a - pos > 0.05:
+                gaps.append((pos, a))
+            pos = max(pos, b)
+        if self.total - pos > 0.05:
+            gaps.append((pos, self.total))
+        p.setFont(small)
+        for a, b in gaps:
+            r = QRectF(self._x(a), top, max(1.0, self._x(b) - self._x(a) - 1.0), h)
+            path = QPainterPath()
+            path.addRoundedRect(r, 4, 4)
+            p.fillPath(path, QBrush(theme.qcolor("text_muted", 40), Qt.BrushStyle.BDiagPattern))
+            if r.width() > 70:
+                p.setPen(theme.qcolor("text_muted"))
+                p.drawText(r, Qt.AlignmentFlag.AlignCenter, "không nhạc")
+        edges = self._music_edges()
+        for k, (t, _kind) in enumerate(edges):
+            x = self._x(t)
+            hot = k == self._edge_hover or (self._edge is not None and abs(self._edge["t0"] - t) < 1e-6)
+            pill = QRectF(x - (3 if hot else 2), top + 3, 6 if hot else 4, h - 6)
+            path = QPainterPath()
+            path.addRoundedRect(pill, 2, 2)
+            p.fillPath(path, theme.qcolor("accent" if hot else "white", 255 if hot else 150))
+        ed = self._edge
+        if ed is not None and abs(ed["t"] - ed["t0"]) > 1e-6:
+            lo, hi = sorted((ed["t0"], ed["t"]))
+            r = QRectF(self._x(lo), top, self._x(hi) - self._x(lo), h)
+            grow = (ed["kind"] == "start") == (ed["t"] < ed["t0"])
+            path = QPainterPath()
+            path.addRoundedRect(r, 4, 4)
+            if grow:
+                p.fillPath(path, theme.qcolor("accent", 90))
+            else:
+                p.fillPath(path, QBrush(theme.qcolor("danger_text", 120), Qt.BrushStyle.BDiagPattern))
+            x = self._x(ed["t"])
+            p.setPen(QPen(theme.qcolor("accent"), 2))
+            p.drawLine(QPointF(x, self.TOP_V - 3), QPointF(x, top + h + 3))
+            flags = self._edge_result()
+            if flags is not None:
+                from ..core.clip_ranges import ranges_text
+                self._bubble(p, x, f"Nhạc ở: {ranges_text(flags)}", small)
+        sw = self._sweep
+        if sw is not None and sw.get("moved"):
+            rows = self._sweep_rows()
+            for b in self.video:
+                if b.clip in rows:
+                    path = QPainterPath()
+                    path.addRoundedRect(self._block_rect(b), 5, 5)
+                    p.fillPath(path, theme.qcolor("accent", 80) if sw["on"] else
+                               QBrush(theme.qcolor("black", 140), Qt.BrushStyle.BDiagPattern))
+            self._bubble(p, sw["x"], f"{'Bật' if sw['on'] else 'Tắt'} nhạc: {len(rows)} clip", small)
+
+    def _bubble(self, p: QPainter, x: float, text: str, small) -> None:
+        p.setFont(small)
+        fm = p.fontMetrics()
+        w = fm.horizontalAdvance(text) + 16
+        r = QRectF(min(max(self.PAD_L, x - w / 2), self.width() - self.PAD_R - w), 1, w, 16)
+        path = QPainterPath()
+        path.addRoundedRect(r, 8, 8)
+        p.fillPath(path, theme.qcolor("accent"))
+        p.setPen(theme.qcolor("text_on_accent"))
+        p.drawText(r, Qt.AlignmentFlag.AlignCenter, text)
+
     @staticmethod
     def _len_txt(sec: float) -> str:
         return f"{sec:.1f} giây" if sec < 60 else fmt_dur(sec)
@@ -530,6 +705,7 @@ class TimelineBar(QWidget):
                        "Chưa có nhạc · tiếng gốc của clip đang tắt (bật ở thẻ Khung & Tiếng, trang Video)" if self.source_off
                        else "Không có âm thanh (chưa có nhạc, clip không có tiếng gốc)")
         self._draw_flash(p)
+        self._draw_music_edit(p, small)
         if self.playhead is not None and self.view0 <= self.playhead <= self.view1:
             x = self._x(self.playhead)
             p.setPen(QPen(theme.qcolor("text"), 2))
@@ -754,7 +930,23 @@ class TimelineBar(QWidget):
         if e.button() == Qt.MouseButton.LeftButton:
             self._press = e.position()
         shift = bool(e.modifiers() & Qt.KeyboardModifier.ShiftModifier)  # Shift + kéo = luôn là di chuyển khung nhìn
-        hit = self._movable_at(e.position()) if e.button() == Qt.MouseButton.LeftButton and not shift else None
+        left = e.button() == Qt.MouseButton.LeftButton
+        ek = self._edge_at(e.position()) if left and not shift else None
+        if ek is not None:  # mép đoạn nhạc: kéo để nhạc bắt đầu / kết thúc ở clip khác
+            t, kind = self._music_edges()[ek]
+            self._edge = {"t0": t, "kind": kind, "t": t}
+            self._press = None
+            self.setCursor(Qt.CursorShape.SizeHorCursor)
+            return
+        if left and e.modifiers() & Qt.KeyboardModifier.AltModifier and self.use_music:
+            hv = self._movable_at(e.position())
+            if hv is not None and hv[0] == "v":  # Alt + quét qua các khối clip: bật / tắt nhạc một lượt
+                row = self.video[hv[1]].clip
+                x = e.position().x()
+                self._sweep = {"on": not self._flags()[row], "x0": x, "x": x, "moved": False}
+                self._press = None
+                return
+        hit = self._movable_at(e.position()) if left and not shift else None
         if hit is not None:  # bấm vào khối: kéo quá vài px là kéo đổi chỗ (đang ngẫu nhiên thì thả xong sẽ hỏi)
             lane, k = hit
             x = e.position().x()
@@ -771,6 +963,24 @@ class TimelineBar(QWidget):
         if self._scrub:
             self._scrub = False
             self.unsetCursor()
+            return
+        if self._edge is not None:
+            flags = self._edge_result()
+            self._edge = None
+            self.unsetCursor()
+            self.update()
+            if flags is not None:
+                self.musicFlagsRequested.emit(flags)
+            return
+        if self._sweep is not None:
+            sw, self._sweep = self._sweep, None
+            self.update()
+            rows = self._sweep_rows_of(sw)
+            if rows:
+                flags = self._flags()
+                for r in rows:
+                    flags[r] = sw["on"]
+                self.musicFlagsRequested.emit(flags)
             return
         if self._mv is not None and self._mv["on"]:
             self._press = None
@@ -795,6 +1005,24 @@ class TimelineBar(QWidget):
             t = max(0.0, min(self.total, self._t(e.position().x())))
             self.set_playhead(t)
             self.seekRequested.emit(t)
+            return
+        if self._edge is not None:
+            self._edge["t"] = self._snap(e.position().x())
+            self.update()
+            return
+        if self._sweep is not None:
+            self._sweep["x"] = e.position().x()
+            self._sweep["moved"] = True
+            self.update()
+            return
+        hov = self._edge_at(e.position())
+        if hov != self._edge_hover:
+            self._edge_hover = hov
+            self.update()
+        if hov is not None:
+            self.setCursor(Qt.CursorShape.SizeHorCursor)
+            QToolTip.showText(e.globalPosition().toPoint(), "Kéo mép đoạn nhạc sang trái / phải để nhạc bắt đầu / kết "
+                              "thúc ở clip khác (Ctrl+Z để quay lại)", self)
             return
         if self._mv is not None:
             x = e.position().x()
@@ -833,6 +1061,8 @@ class TimelineBar(QWidget):
                 why = self._block_reason(mh[0])
                 hit += ("\n" + why if why else "\nKéo sang trái / phải để đổi thứ tự trong bảng clip (Ctrl+Z để quay lại)"
                         if mh[0] == "v" else "\nKéo sang trái / phải để đổi thứ tự bài trong playlist")
+                if mh[0] == "v" and self.use_music:
+                    hit += "\nChuột phải: bật / tắt nhạc ở clip này · Alt + quét: nhiều clip một lượt"
             QToolTip.showText(e.globalPosition().toPoint(), hit, self)
         elif pos.x() >= self.PAD_L:
             QToolTip.showText(e.globalPosition().toPoint(),

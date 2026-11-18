@@ -812,6 +812,7 @@ class VideoTab(QWidget):
         split.splitterMoved.connect(lambda *_: getattr(self, "_balancing", False) or setattr(self, "_user_split", True))
         self.timeline = TimelineBar()
         self.timeline.clipMoveRequested.connect(self.move_clip_row)  # kéo khối clip = đổi chỗ dòng
+        self.timeline.musicFlagsRequested.connect(self.set_music_flags)  # kéo mép đoạn nhạc / chuột phải / Alt + quét
 
         # thông báo khi ở kiểu "Chỉ nhạc": trang này không dùng
         self.mode_banner = QWidget()
@@ -1099,6 +1100,8 @@ class VideoTab(QWidget):
                 active += 1
         total = len(items)
         self.count_label.setText(f"{active}/{total} clip bật" if total else "0 clip")
+        if hasattr(self, "timeline"):  # dòng thời gian cần biết dòng nào có nhạc (kéo mép đoạn nhạc, chuột phải khối)
+            self.timeline.music_rows = [it.checkState(COL_MUSIC) == Qt.CheckState.Checked for it in items]
         if hasattr(self, "seam_bar"):
             self._mark_seams()
             self._seam_timer.start()  # clip lặp mới / đổi đoạn lấy: đo chỗ nối ở luồng nền
@@ -1624,13 +1627,29 @@ class VideoTab(QWidget):
     def set_music_selected(self, on: bool) -> None:
         """Bật / tắt nhạc nền cho các dòng đang chọn (một bước Hoàn tác)."""
         sel = self._selected_or_warn()
-        if not sel:
+        if sel:
+            self.set_music_rows([self.list.indexOfTopLevelItem(it) for it in sel], on)
+
+    def set_music_rows(self, rows: list[int], on: bool) -> None:
+        flags = [c.music for c in self._snapshot()]
+        for r in rows:
+            if 0 <= r < len(flags):
+                flags[r] = on
+        self.set_music_flags(flags)
+
+    def set_music_flags(self, flags: list[bool]) -> None:
+        """Đặt nhạc nền bật / tắt cho từng dòng (dòng thời gian, hộp Chọn clip… ở trang Nhạc) — một bước Hoàn tác."""
+        from ..core.clip_ranges import ranges_text
+        items = self.list.items()
+        if [it.checkState(COL_MUSIC) == Qt.CheckState.Checked for it in items] == list(flags[:len(items)]):
             return
+        self._flush_pending()
         self.list.blockSignals(True)
-        for it in sel:
+        for it, on in zip(items, flags):
             it.setCheckState(COL_MUSIC, Qt.CheckState.Checked if on else Qt.CheckState.Unchecked)
+        self._refresh_rows()
         self.list.blockSignals(False)
-        self.status.setText(f"{'Bật' if on else 'Tắt'} nhạc cho {len(sel)} dòng — Ctrl+Z để hoàn tác.")
+        self.status.setText(f"Nhạc ở: {ranges_text([bool(f) for f in flags[:len(items)]])} — Ctrl+Z để hoàn tác.")
         self._emit(step=True)
 
     def _toggle_music_rows(self, it: QTreeWidgetItem) -> None:
