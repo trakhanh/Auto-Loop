@@ -432,6 +432,11 @@ def escape_filter_value(value: str) -> str:
 EDGE_OUT, EDGE_IN = 2.0, 0.8  # nhạc theo clip: bài bị cắt ở cuối đoạn nhỏ dần, đoạn mới to dần (giây, tối đa)
 
 
+def _trim_start(ms: MusicSettings, track: int) -> float:
+    t = ms.tracks[track] if 0 <= track < len(ms.tracks) else None
+    return float(getattr(t, "trim_start", 0.0) or 0.0)
+
+
 def music_edges(items: list[MusicItem], ms: MusicSettings, total: float):
     """(fade_in, fade_out, pad, lead) cho từng lượt bài. Lịch liền mạch (không dùng cột Nhạc) → y như trước: crossfade
     giữa hai bài, khoảng lặng `gap`. Có chỗ ngắt (nhạc ngừng ở các clip bỏ tick) → bài trước chỗ ngắt nhỏ dần, bài sau
@@ -460,14 +465,13 @@ MUSIC_BLK_VERSION = "mb1"
 
 
 def _music_block(runner: ft.Runner, path: str, gain_db: float, duration: float,
-                 fade_in: float, fade_out: float, pad_gap: float) -> Path:
+                 fade_in: float, fade_out: float, pad_gap: float, trim_start: float = 0.0) -> Path:
     """Một lượt phát bài nhạc đã áp sẵn âm lượng, fade đầu/cuối, đệm lặng (FLAC 48 kHz stereo s16 trong bộ nhớ đệm)."""
     import hashlib
     fid = _file_id(path)
-    key = hashlib.sha1(
-        f"{MUSIC_BLK_VERSION}|{fid}|{gain_db:.2f}|{duration:.6f}|{fade_in:.3f}|{fade_out:.3f}|{pad_gap:.3f}"
-        .encode("utf-8")
-    ).hexdigest()[:24]
+    raw = (f"{MUSIC_BLK_VERSION}|{fid}|{gain_db:.2f}|{duration:.6f}|{fade_in:.3f}|{fade_out:.3f}|{pad_gap:.3f}"
+           + (f"|ts{trim_start:.3f}" if trim_start > 0 else ""))  # bỏ đầu bài: khối khác (không đổi khoá cũ)
+    key = hashlib.sha1(raw.encode("utf-8")).hexdigest()[:24]
     out = ft.cache_dir("musicblk") / f"{key}.flac"
     if out.is_file() and out.stat().st_size > 0:
         try:
@@ -476,7 +480,9 @@ def _music_block(runner: ft.Runner, path: str, gain_db: float, duration: float,
             pass
         return out
     src = escape_filter_value(path.replace("\\", "/"))
-    chain = (f"amovie=filename={src},asetpts=PTS-STARTPTS,aresample=48000,"
+    chain = (f"amovie=filename={src},"
+             + (f"asetpts=PTS-STARTPTS,atrim=start={trim_start:.3f}," if trim_start > 0 else "")
+             + "asetpts=PTS-STARTPTS,aresample=48000,"
              f"aformat=sample_fmts=fltp:channel_layouts=stereo,"
              f"volume={gain_db:.2f}dB,"
              f"apad=whole_dur={duration:.6f},atrim=end={duration:.6f}")
@@ -551,7 +557,8 @@ def music_concat_graph(
     for k, it in enumerate(items):
         pad = 0.0 if (xf > 0 and n > 1) else pads[k]  # làn crossfade tự chèn khoảng lặng theo mốc bắt đầu
         gdb = round(gains_db.get(it.track, 0.0), 2)
-        specs.append((paths[it.track], gdb, round(it.duration, 6), round(fis[k], 3), round(fos[k], 3), round(pad, 3)))
+        specs.append((paths[it.track], gdb, round(it.duration, 6), round(fis[k], 3), round(fos[k], 3), round(pad, 3),
+                      round(_trim_start(ms, it.track), 3)))
     uniq_specs = list(dict.fromkeys(specs))
     if len(uniq_specs) >= 2:
         with ThreadPoolExecutor(max_workers=min(4, len(uniq_specs))) as pool:
@@ -626,7 +633,10 @@ def music_graph(
     fis, fos, pads, lead = music_edges(items, ms, total)
     for k, it in enumerate(items):
         src = escape_filter_value(paths[it.track].replace("\\", "/"))
-        chain = (f"amovie=filename={src},asetpts=PTS-STARTPTS,aresample=48000,"
+        ts = _trim_start(ms, it.track)
+        chain = (f"amovie=filename={src},"
+                 + (f"asetpts=PTS-STARTPTS,atrim=start={ts:.3f}," if ts > 0 else "")  # "Đoạn nghe": bỏ đầu bài
+                 + "asetpts=PTS-STARTPTS,aresample=48000,"
                  f"aformat=sample_fmts=fltp:channel_layouts=stereo,"
                  f"volume={gains_db.get(it.track, 0.0):.2f}dB,"
                  # MP3 VBR thiếu header / AAC thô: ffprobe đoán dài hơn thực tế → đệm im lặng cho đúng độ dài

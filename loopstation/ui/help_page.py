@@ -444,6 +444,9 @@ topic("nhac", "Âm thanh", "music", "Trang Nhạc: playlist", hero(
     "Trang Nhạc", "Thêm bài nhạc — nhạc tự lặp cho đủ độ dài video, bài cuối nhỏ dần đúng lúc video kết thúc.",
     (("Mở trang Nhạc", "app:music"),)) + img("music") + legend([
     ("Playlist", "kéo thả bài hoặc cả thư mục nhạc. Bỏ tick bài không dùng. <b>Số lần/lượt</b> = bài đó phát mấy lần mỗi lượt playlist. Bấm đúp tên bài để nghe."),
+    ("Đoạn nghe", "bài hát không phát từ đầu bài: <b>bấm đúp ô Thời lượng</b> (hoặc chuột phải bài → <i>Chọn đoạn nghe</i>) → "
+                  "<b>Bỏ đầu</b> (vd 0:30 intro) / <b>Bỏ cuối</b>. Bài có đoạn nghe hiện ✂ trước thời lượng."),
+    ("Nhạc vào lúc", "thẻ Thứ tự phát: nhạc bắt đầu ở mốc này của video (vd 0 giờ 3 phút 0 giây). 0 = ngay đầu video."),
     ("Nhạc ở clip", "thẻ Thứ tự phát → <b>Chọn clip…</b>: gõ <code>5-10</code> (nhạc từ clip 5 tới 10), <code>2-3, 7-8</code>, "
                     "<code>5-</code> (từ clip 5 tới hết) hoặc tick từng clip. Clip không có nhạc: nhạc ngừng, tới clip có nhạc thì sang bài kế."),
     ("Âm lượng %", "to / nhỏ <b>riêng từng bài</b>: bấm đúp để sửa, hoặc bôi đen nhiều bài → chuột phải → <i>Đặt âm lượng bài đang chọn…</i>. "

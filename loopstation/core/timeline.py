@@ -197,8 +197,11 @@ def build(project: Project) -> Timeline:
         return tl
     tl.warnings += tl.video.warnings
     if tl.use_music and not tl.errors:
-        tl.music_items = planner.plan_music_windows(ms, tl.track_durations, music_windows(tl, vs, ms.tracks),
-                                                    tl.total)
+        wins = music_windows(tl, vs, ms.tracks)
+        if ms.start_at > 0:  # "Nhạc vào lúc": trước mốc này không có nhạc
+            wins = [(max(w[0], ms.start_at), w[1], w[2] if w[0] >= ms.start_at - 1e-6 else None)
+                    for w in wins if w[1] > ms.start_at + 0.05]
+        tl.music_items = planner.plan_music_windows(ms, tl.track_durations, wins, tl.total)
     return tl
 
 
@@ -290,7 +293,8 @@ def _probe_audio(tl: Timeline, ms, want_music: bool) -> None:
         for i, info in zip(t_used, probe_many([ms.tracks[i].path for i in t_used])):
             if info.ok and info.has_audio:
                 tl.track_infos[i] = info
-                tl.track_durations[i] = info.duration
+                t = ms.tracks[i]  # "Đoạn nghe": bỏ đầu / bỏ cuối bài (giữ tối thiểu 1 giây)
+                tl.track_durations[i] = max(1.0, info.duration - t.trim_start - t.trim_end)
             else:
                 tl.warnings.append(f"Bỏ qua bài lỗi: {ms.tracks[i].path} ({info.error or 'không có tiếng'})")
         tl.use_music = bool(tl.track_durations)

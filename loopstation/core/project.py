@@ -84,6 +84,8 @@ class MusicTrack:
     plays: int = 1
     pinned: bool = False  # bài ghim: luôn có trong file (mọi bản), đặt theo MusicSettings.pin_pos
     volume: int = 100  # % âm lượng riêng của bài (sau khi chuẩn hoá LUFS); 100 = giữ nguyên
+    trim_start: float = 0.0  # bỏ bao nhiêu giây ở đầu bài (vd bỏ intro) — "Đoạn nghe"
+    trim_end: float = 0.0  # bỏ bao nhiêu giây ở cuối bài
 
 
 @dataclass
@@ -105,6 +107,7 @@ class MusicSettings:
     export_format: str = "mp3_320"
     versions: int = 1  # kiểu Chỉ nhạc: xuất bao nhiêu bản, mỗi bản một thứ tự phát khác nhau
     pin_pos: str = "first"  # bài ghim: first (mở đầu file) | random (vị trí ngẫu nhiên nhưng chắc chắn có)
+    start_at: float = 0.0  # video có nhạc: nhạc vào lúc giây thứ mấy của video (0 = ngay đầu)
 
 
 @dataclass
@@ -215,9 +218,11 @@ class Project:
                 "tracks": [
                     {"path": p(t.path), "enabled": t.enabled, "plays": t.plays,
                      **({"pinned": True} if t.pinned else {}),
-                     **({"volume": t.volume} if t.volume != 100 else {})}
+                     **({"volume": t.volume} if t.volume != 100 else {}),
+                     **({"trim": {"start": t.trim_start, "end": t.trim_end}} if t.trim_start or t.trim_end else {})}
                     for t in m.tracks
                 ],
+                "start_at": m.start_at,
                 "audio_export": {"mode": m.export_mode, "target": format_hms(m.export_target),
                                  "rounds": m.export_rounds, "format": m.export_format},
                 "ambient": [
@@ -330,7 +335,10 @@ class Project:
         for td in md.get("tracks", []):
             m.tracks.append(MusicTrack(path=p(td["path"]), enabled=bool(td.get("enabled", True)),
                                        plays=int(td.get("plays", 1)), pinned=bool(td.get("pinned", False)),
-                                       volume=max(0, min(200, int(td.get("volume", 100))))))
+                                       volume=max(0, min(200, int(td.get("volume", 100)))),
+                                       trim_start=max(0.0, float((td.get("trim") or {}).get("start", 0.0))),
+                                       trim_end=max(0.0, float((td.get("trim") or {}).get("end", 0.0)))))
+        m.start_at = max(0.0, float(md.get("start_at", 0.0)))
         ae = md.get("audio_export", {})
         m.export_mode = ae.get("mode", m.export_mode)
         m.export_target = parse_hms(str(ae.get("target", format_hms(m.export_target))))

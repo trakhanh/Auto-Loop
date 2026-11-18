@@ -83,8 +83,10 @@ class MusicTab(QWidget):
         self.list.filesDropped.connect(self.add_paths)
         self.list.emptyClicked.connect(self._add_files)
         self.list.openRequested.connect(w.open_with_default_app)
+        self.list.itemDoubleClicked.connect(lambda it, col: col == COL_DUR and self._ask_track_trim(it))  # đoạn nghe
         self.list.menu_extras = [("pin", "Ghim / bỏ ghim: luôn có trong file (mọi bản)", self._toggle_pin),
                                  ("volume", "Đặt âm lượng bài đang chọn…", self._ask_track_volume),
+                                 ("scissors", "Chọn đoạn nghe (bỏ đầu / bỏ cuối bài)…", self._ask_track_trim),
                                  ("copy", "Nhân bản bài (Ctrl+D) — phát lại bài này ở chỗ khác", lambda _it: self._duplicate()),
                                  ("copy", "Chép các bài đang chọn (Ctrl+C)", lambda _it: self._copy_rows()),
                                  ("file_plus", "Dán bên dưới (Ctrl+V)", lambda _it: self._paste_rows())]
@@ -228,6 +230,14 @@ class MusicTab(QWidget):
         cm.addWidget(self.clip_music_btn)
         self.lbl_clip_music = QLabel("Nhạc ở clip")
         f.addRow(self.lbl_clip_music, self.clip_music_row)
+        # nhạc vào lúc nào trong video (không phải ngay đầu): mốc tuỳ ý, không gò theo ranh giới clip
+        self.start_at = w.DurationEdit(0.0, allow_zero=True)
+        self.start_at.setToolTip("Nhạc bắt đầu ở mốc này của video (0 = ngay đầu video). Trước mốc này chỉ có tiếng gốc / "
+                                 "tiếng nền. " + w.DurationEdit.HELP)
+        self.start_at.valueChanged.connect(self._emit)
+        self.start_at_row = self.start_at
+        self.lbl_start_at = QLabel("Nhạc vào lúc")
+        f.addRow(self.lbl_start_at, self.start_at)
         f.addRow(self.lbl_seed, self.seed_wrap)
         self.pin_info = QLabel("")
         self.pin_info.setObjectName("muted")
@@ -472,6 +482,89 @@ class MusicTab(QWidget):
                            it.checkState(0) == Qt.CheckState.Checked))
         self.mixer.set_ambient(layers)
 
+    def _show_trim(self, it) -> None:
+        """Ô Thời lượng: bài có đoạn nghe thì hiện "✂ 2:40" (độ dài phần giữ lại), rê chuột xem từ đâu tới đâu."""
+        t: MusicTrack = it.data(0, w.ROLE_DATA)
+        info: MediaInfo = it.data(0, w.ROLE_INFO)
+        if info is None or not info.ok:
+            return
+        if t.trim_start or t.trim_end:
+            end = max(t.trim_start + 1.0, info.duration - t.trim_end)
+            it.setText(COL_DUR, f"✂ {w.fmt_dur(end - t.trim_start)}")
+            it.setToolTip(COL_DUR, f"Đoạn nghe: {w.fmt_dur(t.trim_start)} → {w.fmt_dur(end)} (bài dài "
+                                   f"{w.fmt_dur(info.duration)}). Bấm đúp để đổi.")
+        else:
+            it.setText(COL_DUR, w.fmt_dur(info.duration))
+            it.setToolTip(COL_DUR, "Phát cả bài. Bấm đúp để chọn đoạn nghe (bỏ đầu / bỏ cuối bài).")
+
+    def set_track_trim(self, rows: list[int], start: float, end: float) -> None:
+        """Đoạn nghe cho các bài `rows`: bỏ `start` giây đầu và `end` giây cuối (0, 0 = cả bài)."""
+        from dataclasses import replace
+        items = [self.list.topLevelItem(r) for r in rows if 0 <= r < self.list.topLevelItemCount()]
+        if not items:
+            return
+        self.list.blockSignals(True)
+        for it in items:
+            t: MusicTrack = it.data(0, w.ROLE_DATA)
+            info: MediaInfo = it.data(0, w.ROLE_INFO)
+            dur = info.duration if info is not None and info.ok else 0.0
+            ts = max(0.0, min(float(start), max(0.0, dur - 1.0))) if dur else max(0.0, float(start))
+            te = max(0.0, min(float(end), max(0.0, dur - ts - 1.0))) if dur else max(0.0, float(end))
+            it.setData(0, w.ROLE_DATA, replace(t, trim_start=ts, trim_end=te))
+            self._show_trim(it)
+        self.list.blockSignals(False)
+        self.status.setText(f"Đã đặt đoạn nghe cho {len(items)} bài." if (start or end)
+                            else f"{len(items)} bài: phát cả bài.")
+        self.list._step_done()
+
+    def _ask_track_trim(self, item) -> None:
+        """Hộp chọn đoạn nghe: Bỏ đầu / Bỏ cuối (giờ · phút · giây), áp cho các bài đang chọn."""
+        from PySide6.QtWidgets import QDialog, QDialogButtonBox
+        sel = self.list.selectedItems() if item.isSelected() else [item]
+        sel = sel or [item]
+        t: MusicTrack = item.data(0, w.ROLE_DATA)
+        info: MediaInfo = item.data(0, w.ROLE_INFO)
+        dur = info.duration if info is not None and info.ok else 0.0
+        dlg = QDialog(self)
+        dlg.setWindowTitle("Đoạn nghe")
+        lay = QVBoxLayout(dlg)
+        head = QLabel(f"<b>{Path(t.path).stem}</b>" + (f" — dài {w.fmt_dur(dur)}" if dur else "")
+                      + (f"<br>Áp cho {len(sel)} bài đang chọn" if len(sel) > 1 else ""))
+        head.setWordWrap(True)
+        lay.addWidget(head)
+        form = QFormLayout()
+        a = w.DurationEdit(t.trim_start, allow_zero=True, max_seconds=max(1.0, dur or 3600.0))
+        b = w.DurationEdit(t.trim_end, allow_zero=True, max_seconds=max(1.0, dur or 3600.0))
+        form.addRow("Bỏ đầu", a)
+        form.addRow("Bỏ cuối", b)
+        lay.addLayout(form)
+        result = QLabel("")
+        result.setObjectName("muted")
+        lay.addWidget(result)
+
+        def show(*_):
+            if dur:
+                s0, s1 = a.seconds(), max(a.seconds() + 1.0, dur - b.seconds())
+                result.setText(f"Nghe từ <b>{w.fmt_dur(s0)}</b> tới <b>{w.fmt_dur(s1)}</b> (dài {w.fmt_dur(s1 - s0)})")
+        a.valueChanged.connect(show)
+        b.valueChanged.connect(show)
+        show()
+        box = QDialogButtonBox(QDialogButtonBox.StandardButton.Ok | QDialogButtonBox.StandardButton.Cancel
+                               | QDialogButtonBox.StandardButton.Reset)
+        box.button(QDialogButtonBox.StandardButton.Ok).setText("Áp dụng")
+        box.button(QDialogButtonBox.StandardButton.Cancel).setText("Huỷ")
+        box.button(QDialogButtonBox.StandardButton.Reset).setText("Cả bài")
+        box.button(QDialogButtonBox.StandardButton.Reset).clicked.connect(
+            lambda: (a.set_seconds(0.0), b.set_seconds(0.0)))
+        box.accepted.connect(dlg.accept)
+        box.rejected.connect(dlg.reject)
+        lay.addWidget(box)
+        ok = dlg.exec()
+        vals = (a.seconds(), b.seconds())
+        w.dispose(dlg)
+        if ok:
+            self.set_track_trim([self.list.indexOfTopLevelItem(x) for x in sel], *vals)
+
     def _ask_track_volume(self, item) -> None:
         from PySide6.QtWidgets import QInputDialog
         sel = self.list.selectedItems() or [item]
@@ -534,6 +627,7 @@ class MusicTab(QWidget):
         lufs_map = audio_build.cached_loudnesses([t.path for t, inf in zip(ms.tracks, infos) if inf.ok])
         for t, info in zip(ms.tracks, infos):
             self.list.addTopLevelItem(self._make_item(t, info, lufs_map))
+        self.start_at.set_seconds(ms.start_at, emit=False)
         self.list.blockSignals(False)
         self._refresh_track_styles()
         self.ambient.blockSignals(True)
@@ -572,7 +666,8 @@ class MusicTab(QWidget):
             except ValueError:
                 vol = 100
             ms.tracks.append(MusicTrack(path=t.path, plays=plays, pinned=t.pinned, volume=vol,
-                                        enabled=it.checkState(0) == Qt.CheckState.Checked))
+                                        enabled=it.checkState(0) == Qt.CheckState.Checked,
+                                        trim_start=t.trim_start, trim_end=t.trim_end))
         for it in self.ambient.items():
             a: AmbientLayer = it.data(0, w.ROLE_DATA)
             try:
@@ -594,6 +689,7 @@ class MusicTab(QWidget):
         ms.export_rounds = self.len_rounds.value()
         ms.versions = self.versions.value()
         ms.pin_pos = self.pin_pos.currentData()
+        ms.start_at = self.start_at.seconds()
         return ms
 
     # ---------- ghim bài / nhiều bản ----------
@@ -700,6 +796,8 @@ class MusicTab(QWidget):
     def set_mode(self, mode: str) -> None:
         """Kiểu 'Chỉ video': playlist không dùng (khoá thao tác)."""
         self.set_playlist_enabled(mode != "video_only")
+        for wdg in (self.start_at_row, self.lbl_start_at):  # "Nhạc vào lúc" chỉ có nghĩa khi nhạc đi cùng video
+            wdg.setVisible(mode == "video_music")
         self.g_exp.setVisible(mode == "video_music")
         self.g_length.setVisible(mode == "music_only")
 
@@ -762,6 +860,7 @@ class MusicTab(QWidget):
                                 t.enabled)
         it.setData(0, w.ROLE_DATA, t)
         it.setData(0, w.ROLE_INFO, info)
+        self._show_trim(it)
         it.setToolTip(COL_NAME, t.path)
         it.setToolTip(COL_LUFS, "Đo khi xuất lần đầu, sau đó được nhớ lại")
         it.setTextAlignment(COL_PLAYS, Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter)
