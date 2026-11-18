@@ -6,7 +6,7 @@
 
 **Ghép và loop clip + nhạc thành video YouTube dài hàng giờ — xem trước ngay trong app, xuất nhanh bằng card đồ hoạ.**
 
-<sub>By Khánh Trà · Ứng dụng Windows · Giao diện tiếng Việt · Bản mới nhất: <b>1.9.5</b></sub>
+<sub>By Khánh Trà · Ứng dụng Windows · Giao diện tiếng Việt · Bản mới nhất: <b>1.9.6</b></sub>
 
 <br>
 
@@ -34,6 +34,8 @@
 <br>
 
 ## Có gì mới ở 1.9
+
+> **1.9.6** · <b>Nhạc theo clip</b>: cột <b>Nhạc</b> trong bảng clip — <i>Tiếp tục</i> · <i>Không nhạc</i> · <i>Bắt đầu bằng bài X</i> (ví dụ bài 1 vào clip 5); trang Nhạc có <b>Nhạc vào lúc</b> (mốc bất kỳ của video) và <b>Đoạn nghe</b> từng bài (bỏ đầu / bỏ cuối bài). <b>Dòng thời gian kéo thả được</b>: kéo khối clip / bài nhạc để đổi thứ tự, kéo mép đoạn nhạc, chuột phải khối clip để bật / tắt nhạc. File mới thêm vào bảng <b>không tự tick</b>, có ô <b>Chọn tất cả</b>. Giao diện gọn hơn (nút <b>Xếp clip ▾</b>, ít chữ lặp). Đo chỗ nối khi lặp, đề xuất hoà / bản <b>xuôi–ngược</b>.
 
 > **1.9.5** · Bảng <b>Các clip khác fps</b> có thêm dòng <b>Đề xuất</b> nói rõ cái giá của từng lựa chọn: muốn giữ fps cao (vd content 30 fps) thì <b>buộc phải nâng tất cả clip còn lại</b> lên fps đó — app lặp khung, không clip nào mất khung nhưng loop cũng không mượt hơn; giữ nguyên clip fps thấp thì clip fps cao bị hạ xuống, mất bớt khung.
 
