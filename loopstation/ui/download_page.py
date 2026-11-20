@@ -26,7 +26,7 @@ from PySide6.QtWidgets import (
     QAbstractItemView, QBoxLayout, QButtonGroup, QCheckBox, QComboBox, QDialog, QDialogButtonBox, QFileDialog,
     QFormLayout, QFrame, QGridLayout, QGroupBox, QHBoxLayout, QHeaderView, QLabel, QLineEdit, QMenu, QPlainTextEdit, QProgressBar,
     QPushButton, QScrollArea, QSizePolicy, QStackedWidget, QStyle, QStyledItemDelegate, QStyleOptionViewItem,
-    QTreeWidget, QTreeWidgetItem, QVBoxLayout, QWidget,
+    QMessageBox, QTreeWidget, QTreeWidgetItem, QVBoxLayout, QWidget,
 )
 
 from ..core import dl_tools, douyin, downloader, ffmpeg_tools, updater, webcookies
@@ -439,6 +439,7 @@ class DownloadPage(QWidget):
         self.list_stack.addWidget(self.loading_view)
         self.list_stack.addWidget(self.tree)
         self.list_stack.setMinimumHeight(theme.px(160))
+        left.addLayout(self._build_list_tools())
         left.addWidget(self.list_stack, 1)
         self.body.addWidget(left_w, 1)
 
@@ -502,6 +503,153 @@ class DownloadPage(QWidget):
         sc = QShortcut(QKeySequence(QKeySequence.StandardKey.Paste), self)
         sc.setContext(Qt.ShortcutContext.WidgetWithChildrenShortcut)
         sc.activated.connect(self._paste)
+
+    def _build_list_tools(self) -> QHBoxLayout:
+        """Thanh trên danh sách: Chọn tất cả · Chọn nhanh ▾ · ô lọc · nền tảng · trạng thái · Xoá đã chọn."""
+        row = QHBoxLayout()
+        row.setSpacing(theme.SP['sm'])
+        self.all_chk = QCheckBox("Chọn tất cả")
+        self.all_chk.setTristate(True)
+        self.all_chk.setToolTip("Tick / bỏ tick mọi video đang hiện (theo bộ lọc)")
+        self.all_chk.checkStateChanged.connect(self._all_toggled)
+        self.quick_btn = QPushButton("Chọn nhanh")
+        theme.tag(self.quick_btn, variant="ghost")
+        qm = QMenu(self.quick_btn)
+        for key, label in (("all", "Tất cả"), ("none", "Bỏ chọn tất cả"), ("invert", "Đảo lựa chọn"),
+                           ("pending", "Chỉ video chưa tải"), ("errors", "Chỉ video lỗi"), ("done", "Chỉ video đã tải")):
+            qm.addAction(label, lambda k=key: self.quick_select(k))
+        self.quick_btn.setMenu(qm)
+        self.filter_edit = QLineEdit()
+        self.filter_edit.setPlaceholderText("Lọc theo tên, kênh…")
+        self.filter_edit.setClearButtonEnabled(True)
+        self.filter_edit.textChanged.connect(lambda _t: self.apply_filter())
+        self.platform_filter = combo((("", "Mọi nền tảng"),), "")
+        self.platform_filter.setSizeAdjustPolicy(QComboBox.SizeAdjustPolicy.AdjustToContents)
+        self.platform_filter.currentIndexChanged.connect(lambda _i: self.apply_filter())
+        self.status_filter = combo((("", "Mọi trạng thái"), ("pending", "Chờ"), ("running", "Đang tải"),
+                                    ("done", "Đã tải"), ("error", "Lỗi")), "")
+        self.status_filter.setSizeAdjustPolicy(QComboBox.SizeAdjustPolicy.AdjustToContents)
+        self.status_filter.currentIndexChanged.connect(lambda _i: self.apply_filter())
+        self.filter_count = w.muted("")
+        self.filter_count.setWordWrap(False)
+        self.remove_btn = QPushButton("Xoá đã chọn")
+        theme.tag(self.remove_btn, variant="ghost")
+        self.remove_btn.setIcon(icons.icon("trash", 14))
+        self.remove_btn.setToolTip("Bỏ các video đang tick (và đang hiện) khỏi danh sách — không xoá file đã tải")
+        self.remove_btn.clicked.connect(self.remove_checked)
+        row.addWidget(self.all_chk)
+        row.addWidget(self.quick_btn)
+        row.addWidget(self.filter_edit, 1)
+        row.addWidget(self.platform_filter)
+        row.addWidget(self.status_filter)
+        row.addWidget(self.filter_count)
+        row.addWidget(self.remove_btn)
+        return row
+
+    # ---------- lọc / chọn ----------
+    def _match(self, e: dq.Entry) -> bool:
+        q = w.fold(self.filter_edit.text().strip())
+        if q and q not in w.fold(" ".join((e.title, e.uploader, e.platform, e.url))):
+            return False
+        pf = self.platform_filter.currentData() or ""
+        if pf and e.platform != pf:
+            return False
+        sf = self.status_filter.currentData() or ""
+        if sf == "done":
+            return e.status in ("done", "exists")
+        return not sf or e.status == sf
+
+    def visible_entries(self) -> list[dq.Entry]:
+        return [e for e in self.queue.entries if self._row(e) is not None and not self._row(e).isHidden()]
+
+    def apply_filter(self) -> None:
+        """Ẩn dòng không khớp bộ lọc; nhóm ẩn khi không còn dòng nào hiện; cập nhật Chọn tất cả."""
+        active = bool(self.filter_edit.text().strip() or self.platform_filter.currentData()
+                      or self.status_filter.currentData())
+        shown = 0
+        for e in self.queue.entries:
+            row = self._row(e)
+            if row is None:
+                continue
+            ok = self._match(e)
+            row.setHidden(not ok)
+            shown += ok
+        for url, grow in self._group_rows.items():
+            kids = [grow.child(i) for i in range(grow.childCount())]
+            vis = any(not k.isHidden() for k in kids if k.data(0, ROLE) != MORE)
+            grow.setHidden(not vis)
+            for k in kids:
+                if k.data(0, ROLE) == MORE:
+                    k.setHidden(active)
+        self.filter_count.setText(f"Hiện {shown} / {len(self.queue.entries)}" if active else "")
+        self._sync_all_chk()
+
+    def _refresh_platform_filter(self) -> None:
+        present = sorted({e.platform for e in self.queue.entries if e.platform})
+        have = [self.platform_filter.itemData(i) for i in range(1, self.platform_filter.count())]
+        if present == have:
+            return
+        cur = self.platform_filter.currentData() or ""
+        self.platform_filter.blockSignals(True)
+        while self.platform_filter.count() > 1:
+            self.platform_filter.removeItem(1)
+        for name in present:
+            self.platform_filter.addItem(brand.icon(name, 14), name, name)
+        i = self.platform_filter.findData(cur)
+        self.platform_filter.setCurrentIndex(max(i, 0))
+        self.platform_filter.blockSignals(False)
+
+    def _sync_all_chk(self) -> None:
+        vis = [e for e in self.visible_entries() if not e.unread]
+        n = sum(e.checked for e in vis)
+        state = (Qt.CheckState.Checked if vis and n == len(vis) else
+                 Qt.CheckState.Unchecked if n == 0 else Qt.CheckState.PartiallyChecked)
+        self._syncing_all = True
+        self.all_chk.setCheckState(state)
+        self._syncing_all = False
+
+    def _all_toggled(self, state) -> None:
+        if getattr(self, "_syncing_all", False):
+            return
+        on = state != Qt.CheckState.Unchecked  # bấm từ "một phần" → chọn hết
+        self._set_checked([e for e in self.visible_entries() if not e.unread], on)
+
+    def _set_checked(self, entries: list[dq.Entry], on: bool) -> None:
+        for e in entries:
+            e.checked = on
+            self._paint(e)
+        self._changed()
+
+    def quick_select(self, kind: str) -> None:
+        """Chọn nhanh trong các video đang hiện: all · none · invert · pending · errors · done."""
+        vis = [e for e in self.visible_entries() if not e.unread]
+        for e in vis:
+            if kind == "all":
+                e.checked = True
+            elif kind == "none":
+                e.checked = False
+            elif kind == "invert":
+                e.checked = not e.checked
+            elif kind == "pending":
+                e.checked = e.status == "pending"
+            elif kind == "errors":
+                e.checked = e.status == "error"
+            elif kind == "done":
+                e.checked = e.status in ("done", "exists")
+            self._paint(e)
+        self._changed()
+
+    def remove_checked(self) -> None:
+        """Bỏ video đang tick + đang hiện khỏi danh sách (không xoá file; video đang tải giữ lại)."""
+        targets = [e for e in self.visible_entries() if e.checked and e.status != "running"]
+        if not targets:
+            self.notice.emit("Chưa tick video nào để xoá khỏi danh sách", "info")
+            return
+        if QMessageBox.question(self, "Xoá khỏi danh sách",
+                                f"Bỏ {len(targets)} video khỏi danh sách?\nFile đã tải trong thư mục vẫn giữ nguyên.") \
+                != QMessageBox.StandardButton.Yes:
+            return
+        self._remove(targets)
 
     def _build_empty(self) -> QWidget:
         box = QGroupBox()
@@ -1415,6 +1563,8 @@ class DownloadPage(QWidget):
         else:
             self.start_btn.setText(f"Tải {n} video" if n else "Tải video")
         has = bool(self.queue.entries)
+        self._refresh_platform_filter()
+        self.apply_filter()
         self.selected_label.setText((f"Đã chọn {n} video" if n else "Chưa chọn video nào") if has else "")
         self.list_stack.setCurrentWidget(self.tree if has else (self.loading_view if self._reading
                                                                   else self.empty_view))

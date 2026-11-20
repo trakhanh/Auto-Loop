@@ -618,3 +618,67 @@ def test_login_done_selects_app_and_shows_sites(page):
     assert page.settings.value("download/app_logins") == "Bilibili, Instagram"
     page._on_login_done([])
     assert "Chưa đăng nhập" in page.login_status.text()
+
+
+# ---------- lọc + chọn tất cả / chọn nhanh / xoá đã chọn ----------
+def _rows_visible(page):
+    return [e.vid for e in page.queue.entries if page._row(e) is not None and not page._row(e).isHidden()]
+
+
+def test_filter_text_and_status(page):
+    read(page, "https://y/fa1\nhttps://y/fb2\nhttps://y/fc3")
+    page.queue.entries[1].status, page.queue.entries[1].message = "error", "Lỗi"
+    page._paint(page.queue.entries[1])
+    page.filter_edit.setText("fb2")
+    assert _rows_visible(page) == ["fb2"] and "1 / 3" in page.filter_count.text()
+    page.filter_edit.setText("")
+    page.status_filter.setCurrentIndex(page.status_filter.findData("error"))
+    assert _rows_visible(page) == ["fb2"]
+    page.status_filter.setCurrentIndex(page.status_filter.findData(""))
+    assert _rows_visible(page) == ["fa1", "fb2", "fc3"] and page.filter_count.text() == ""
+
+
+def test_platform_filter_lists_present(page):
+    read(page, "https://y/pa1")
+    keys = [page.platform_filter.itemData(i) for i in range(page.platform_filter.count())]
+    assert keys == ["", "YouTube"]
+
+
+def test_select_all_only_visible(page):
+    from PySide6.QtCore import Qt
+    read(page, "https://y/sa1\nhttps://y/sb2\nhttps://y/sc3")
+    page.all_chk.setCheckState(Qt.CheckState.Unchecked)
+    assert not any(e.checked for e in page.queue.entries)
+    page.filter_edit.setText("sb2")
+    page.all_chk.setCheckState(Qt.CheckState.Checked)
+    assert [e.vid for e in page.queue.entries if e.checked] == ["sb2"]
+    page.filter_edit.setText("")
+    assert page.all_chk.checkState() == Qt.CheckState.PartiallyChecked
+
+
+def test_quick_select(page):
+    read(page, "https://y/qa1\nhttps://y/qb2\nhttps://y/qc3")
+    es = page.queue.entries
+    es[0].status, es[2].status = "error", "done"
+    page.quick_select("none")
+    assert not any(e.checked for e in es)
+    page.quick_select("errors")
+    assert [e.vid for e in es if e.checked] == ["qa1"]
+    page.quick_select("invert")
+    assert [e.vid for e in es if e.checked] == ["qb2", "qc3"]
+    page.quick_select("pending")
+    assert [e.vid for e in es if e.checked] == ["qb2"]
+    page.quick_select("all")
+    assert all(e.checked for e in es)
+
+
+def test_remove_checked(page, monkeypatch):
+    from PySide6.QtWidgets import QMessageBox
+    monkeypatch.setattr(QMessageBox, "question", staticmethod(lambda *a, **k: QMessageBox.StandardButton.Yes))
+    read(page, "https://y/ra1\nhttps://y/rb2\nhttps://y/rc3")
+    es = page.queue.entries
+    es[2].checked = False
+    es[1].status = "running"
+    page.remove_checked()
+    assert [e.vid for e in page.queue.entries] == ["rb2", "rc3"]  # đang tải: không bỏ
+    assert page.tree.topLevelItemCount() == 2
