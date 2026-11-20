@@ -558,3 +558,38 @@ def test_platform_column_has_logo(page):
     opt.font = page.tree.font()
     idx = page.tree.indexFromItem(row, 1)
     assert d.sizeHint(opt, idx).width() >= page.tree.fontMetrics().horizontalAdvance("YouTube") + 16 + 20
+
+
+def test_douyin_reuses_read_src(page, monkeypatch):
+    """Đọc link đã có link file video còn mới → lúc tải không mở trang Douyin lần nữa (nhanh, ít bị hỏi xác minh)."""
+    fg = _fake_grabber()
+    made = []
+    page.grabber_factory = lambda parent: made.append(fg(parent)) or made[-1]
+    _fake_dy_download(monkeypatch)
+    read(page, DY)
+    page.start()
+    assert wait(lambda: not page.is_busy(), 20)
+    assert page.queue.entries[0].status == "done" and len(made[0].calls) == 1
+
+
+def test_douyin_stale_src_regrabs(page, monkeypatch):
+    """Link file cũ hết hạn (403) → mở lại trang lấy link mới rồi tải tiếp, không báo lỗi."""
+    import urllib.error
+    from loopstation.core import douyin
+    fg = _fake_grabber()
+    made = []
+    page.grabber_factory = lambda parent: made.append(fg(parent)) or made[-1]
+    _fake_dy_download(monkeypatch)
+    real = douyin.download
+    n = [0]
+
+    def flaky(url, out, ua, prog, cancel, **k):
+        n[0] += 1
+        if n[0] == 1:
+            raise urllib.error.HTTPError(url, 403, "Forbidden", {}, None)
+        return real(url, out, ua, prog, cancel)
+    monkeypatch.setattr(douyin, "download", flaky)
+    read(page, DY)
+    page.start()
+    assert wait(lambda: not page.is_busy(), 20)
+    assert page.queue.entries[0].status == "done" and len(made[0].calls) == 2

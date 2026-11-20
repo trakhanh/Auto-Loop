@@ -9,6 +9,7 @@ import html
 import re
 import threading
 import time
+import urllib.error
 import urllib.request
 from datetime import date
 from pathlib import Path
@@ -54,6 +55,7 @@ class _Bridge(QObject):
     installed = Signal(str)  # lỗi ("" = xong)
     updated = Signal(object)  # list[str]
     thumb = Signal(str, str)  # (url ảnh, file đã lưu)
+    regrab = Signal(object)  # (Entry) — link file Douyin cũ hết hạn: mở lại trang lấy link mới
 
 
 def default_folder() -> str:
@@ -320,6 +322,7 @@ class DownloadPage(QWidget):
         self.b.installed.connect(self._on_installed)
         self.b.updated.connect(self._on_updated)
         self.b.thumb.connect(self._on_thumb)
+        self.b.regrab.connect(self._dy_regrab)
         self._build()
         self._anim.timeout.connect(lambda: self.tree.viewport().update())
         for e in self.queue.entries:
@@ -994,6 +997,9 @@ class DownloadPage(QWidget):
                                    duration=float(data.get("duration") or 0), thumbnail=data.get("poster") or "",
                                    uploader=data.get("author") or "")
             self._on_info(link, item, "")
+            e = next((x for x in self.queue.entries if x.url == item.url and x.platform == "Douyin"), None)
+            if e is not None and data.get("srcs"):
+                e.media_url, e.media_ua, e.media_at = data["srcs"][0], data.get("ua", ""), time.time()
             self._job_done()
         elif isinstance(who, dq.Entry):
             self._dy_start(who, data)
@@ -1434,7 +1440,19 @@ class DownloadPage(QWidget):
         """Douyin: mở lại trang (link file có hạn) rồi tải trực tiếp."""
         self._cancels[id(e)] = threading.Event()
         self._dy_folder = folder
+        if e.media_url and douyin.media_fresh(e.media_at):  # link lấy lúc Đọc link còn mới: tải luôn
+            self._dy_start(e, {"srcs": [e.media_url], "ua": e.media_ua, "poster": e.thumbnail, "title": e.title,
+                               "cached": True})
+            return
         self._on_stage(e, "Đang mở trang Douyin…")
+        self._dy_wait[e.url] = e
+        self.grabber().grab(e.url)
+
+    def _dy_regrab(self, e: dq.Entry) -> None:
+        if e.status != "running" or id(e) not in self._cancels or self._cancels[id(e)].is_set():
+            return
+        e.media_url, e.media_at = "", 0.0
+        self._on_stage(e, "Đang mở lại trang Douyin…")
         self._dy_wait[e.url] = e
         self.grabber().grab(e.url)
 
@@ -1458,6 +1476,11 @@ class DownloadPage(QWidget):
                 self.b.finished.emit(e, res, "", "")
             except downloader.CancelledError:
                 self.b.finished.emit(e, None, CANCELLED, "")
+            except urllib.error.HTTPError as err:
+                if data.get("cached"):  # link cũ hết hạn: lấy link mới, không báo lỗi
+                    self.b.regrab.emit(e)
+                else:
+                    self.b.finished.emit(e, None, f"Douyin từ chối tải (HTTP {err.code}) — thử lại sau", str(err))
             except Exception as err:  # noqa: BLE001
                 msg = str(err) if isinstance(err, ValueError) else "Lỗi tải Douyin (rê chuột vào ⓘ xem chi tiết)"
                 self.b.finished.emit(e, None, msg, str(err))

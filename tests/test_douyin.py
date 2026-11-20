@@ -96,3 +96,57 @@ def test_download_cancel_cleans(tmp_path, monkeypatch):
 def test_download_rejects_non_http(tmp_path):
     with pytest.raises(ValueError):
         douyin.download("file:///C:/Windows/win.ini", tmp_path / "v.mp4", "UA", None, threading.Event())
+
+
+def test_parse_grab_verify_flag():
+    """Trang hiện khung xác minh (captcha) → báo để mở cửa sổ ngay, khỏi chờ."""
+    assert douyin.parse_grab({"title": "x", "srcs": [], "verify": True}, "https://www.douyin.com/video/1")["verify"]
+    assert not douyin.parse_grab({"title": "x", "srcs": []}, "https://www.douyin.com/video/1")["verify"]
+    assert "captcha" in douyin.JS_GRAB and "verify" in douyin.JS_GRAB
+
+
+def test_media_fresh():
+    """Link video lấy lúc Đọc link dùng lại khi tải nếu còn mới (đỡ mở trang Douyin lần nữa)."""
+    assert douyin.media_fresh(1000.0, now=1000.0 + 29 * 60)
+    assert not douyin.media_fresh(1000.0, now=1000.0 + 31 * 60)
+    assert not douyin.media_fresh(0.0, now=5.0)
+
+
+class RangeResp(Resp):
+    def __init__(self, data, url, status):
+        super().__init__(data, url)
+        self.status = status
+
+
+def _range_server(monkeypatch, data: bytes, ranges: bool = True):
+    calls = []
+
+    def fake(req, timeout=None):
+        h = dict(req.header_items())
+        rng = h.get("Range")
+        calls.append(rng)
+        if ranges and rng:
+            a, b = rng.split("=")[1].split("-")
+            a, b = int(a), (int(b) if b else len(data) - 1)
+            r = RangeResp(data[a:b + 1], req.full_url, 206)
+            r.headers["Content-Range"] = f"bytes {a}-{b}/{len(data)}"
+            return r
+        return RangeResp(data, req.full_url, 200)
+    monkeypatch.setattr(urllib.request, "urlopen", fake)
+    return calls
+
+
+def test_download_parallel_ranges(tmp_path, monkeypatch):
+    data = bytes(range(256)) * (48 << 10)  # 12 MB
+    calls = _range_server(monkeypatch, data)
+    out = douyin.download("https://v/a", tmp_path / "v.mp4", "UA", None, threading.Event(), parts=4)
+    assert out.read_bytes() == data
+    assert sum(1 for c in calls if c and c != "bytes=0-0") >= 4
+    assert sorted(p.name for p in tmp_path.iterdir()) == ["v.mp4"]
+
+
+def test_download_no_range_support_falls_back(tmp_path, monkeypatch):
+    data = b"y" * (10 << 20)
+    _range_server(monkeypatch, data, ranges=False)
+    out = douyin.download("https://v/a", tmp_path / "v.mp4", "UA", None, threading.Event(), parts=4)
+    assert out.read_bytes() == data

@@ -33,6 +33,9 @@ class Entry:
     upload_date: str = ""
     views: int = 0
     index: int = 0  # vị trí trong nhóm (1, 2, 3…; 0 = video lẻ) — cho tên file "Số thứ tự – Tiêu đề"
+    media_url: str = ""  # Douyin: link file video lấy lúc Đọc link (dùng lại khi tải nếu còn mới)
+    media_ua: str = ""
+    media_at: float = 0.0
     unread: bool = False  # dòng "đọc link lỗi": url là link gốc (có thể cả kênh) — chỉ được đọc lại, không tải
 
 

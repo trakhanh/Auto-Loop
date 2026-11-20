@@ -12,9 +12,9 @@ PROBE = ROOT / "tests" / "web_grab_probe.py"
 pytest.importorskip("PySide6.QtWebEngineWidgets")
 
 
-def run_probe(html_file: Path, verify_after="15", give_up="20"):
+def run_probe(html_file: Path, verify_after="15", give_up="20", mode=""):
     env = dict(os.environ, QT_QPA_PLATFORM="offscreen", PYTHONIOENCODING="utf-8")
-    r = subprocess.run([sys.executable, str(PROBE), str(html_file), verify_after, give_up], capture_output=True,
+    r = subprocess.run([sys.executable, str(PROBE), str(html_file), verify_after, give_up, mode], capture_output=True,
                        text=True, encoding="utf-8", errors="replace", env=env, timeout=120)
     lines = [ln for ln in r.stdout.splitlines() if ln.startswith("{")]
     assert lines, r.stderr[-800:]
@@ -50,3 +50,18 @@ def test_waits_for_late_title_and_duration(tmp_path):
                     '</body></html>', encoding="utf-8")
     out = run_probe(page, "20", "30")
     assert out["grabbed"]["title"] == "Tiêu đề muộn"
+
+
+def test_verify_page_opens_window_and_continues_there(tmp_path):
+    """Douyin hỏi xác minh: mở cửa sổ NGAY (không chờ hết giờ), trang được mở lại trong cửa sổ đó; người dùng xác minh
+    xong (ở đây: video hiện ra sau 2,5 giây) thì lấy được video và đóng cửa sổ."""
+    page = tmp_path / "video" / "7000000000000000003.html"
+    page.parent.mkdir()
+    page.write_text('<html><head><meta charset="utf-8"><title>Xác minh - 抖音</title></head><body>'
+                    '<div id="captcha_container">kéo thanh</div><script>setTimeout(() => {'
+                    'document.getElementById("captcha_container").remove(); document.title = "Đã qua - 抖音";'
+                    'const v = document.createElement("video"); v.src = "https://v.zjcdn.com/ok.mp4";'
+                    'document.body.appendChild(v); }, 2500);</script></body></html>', encoding="utf-8")
+    out = run_probe(page, "30", "40", "verify")
+    assert out.get("verifying") and out["grabbed"]["srcs"] == ["https://v.zjcdn.com/ok.mp4"]
+    assert out["grabbed"]["title"] == "Đã qua"
