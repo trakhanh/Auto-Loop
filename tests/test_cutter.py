@@ -155,8 +155,10 @@ def vf(args):
 def test_frame_args_modes():
     p = Path("x_%04d.jpg")
     a = c.frame_args("a.mp4", INFO, c.FrameSettings(mode="count", count=4), p)
-    assert a[a.index("-ss") + 1] == "12.500" and a.index("-ss") < a.index("-i")
-    assert vf(a) == "fps=4/100" and a[a.index("-frames:v") + 1] == "4"
+    # ảnh thứ k ở khung đầu tiên từ (k + 0,5) × 100/4 giây: 12,5 s, 37,5 s… (chọn theo mốc tuyệt đối, không trôi)
+    assert vf(a) == (r"select=gte(t\,12.5)*(isnan(prev_selected_t)"
+                     r"+gt(floor((t-12.5)/25)\,floor((prev_selected_t-12.5)/25)))")
+    assert a[a.index("-frames:v") + 1] == "4" and "vfr" in a and "-ss" not in a
     assert vf(c.frame_args("a.mp4", INFO, c.FrameSettings(mode="every_sec", every_sec=5), p)) == "fps=1/5"
     assert vf(c.frame_args("a.mp4", INFO, c.FrameSettings(mode="every_sec", every_sec=0.5), p)) == "fps=1/0.5"
     every_n = c.frame_args("a.mp4", INFO, c.FrameSettings(mode="every_n"), p)

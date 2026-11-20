@@ -11,7 +11,7 @@ import time
 from dataclasses import fields
 from pathlib import Path
 
-from PySide6.QtCore import QObject, QPropertyAnimation, QSettings, QSize, Qt, QTimer, Signal
+from PySide6.QtCore import QObject, QPropertyAnimation, QSettings, Qt, QTimer, Signal
 from PySide6.QtWidgets import (
     QAbstractItemView, QBoxLayout, QButtonGroup, QCheckBox, QDoubleSpinBox, QFileDialog, QFrame, QGridLayout,
     QGroupBox, QHBoxLayout, QHeaderView, QLabel, QLineEdit, QMenu, QPlainTextEdit, QProgressBar, QPushButton,
@@ -52,6 +52,7 @@ FMT_LABELS = (("jpg", "JPG"), ("png", "PNG"))
 STATUS_TONE = {"wait": "text_muted", "run": "accent_text", "done": "success_text", "warn": "warn_text",
                "error": "danger_text", "stopped": "warn_text"}
 LOG_MAX = 500
+MIN_FREE = 500 * 1024 * 1024  # dưới 500 MB trống: dừng trước video tiếp
 
 
 class _Bridge(QObject):
@@ -118,6 +119,10 @@ class CutPage(QWidget):
         self._loading = True
         self.b = _Bridge()
         self.b.probed.connect(self._on_probed)
+        self.b.progress.connect(self._on_progress)
+        self.b.video_done.connect(self._on_video_done)
+        self.b.all_done.connect(self._on_all_done)
+        self._run: dict = {}
         self._anim = QTimer(self)  # vẽ lại thanh tiến độ trong danh sách (vệt sáng chạy) khi đang chạy
         self._anim.setInterval(40)
         self._build()
@@ -762,11 +767,192 @@ class CutPage(QWidget):
         from ..core import encoders
         self._encoder = encoders.pick("h264", "auto", available)
 
+    def _set_busy(self, on: bool) -> None:
+        if on == self._busy:
+            return
+        self._busy = on
+        theme.tag(self.start_btn, variant="stop" if on else "primary")
+        self.start_btn.setIcon(icons.icon("stop" if on else "scissors", 16, "danger_text" if on else "white"))
+        for wd in (self.add_btn, self.add_dir_btn, self.side_stack, self.tabs, self.more_btn):
+            wd.setEnabled(not on)
+        if on:
+            self.run_bar.setValue(0)
+            self.run_bar.show()
+            self._anim.start()
+        else:
+            self._anim.stop()
+            self.run_bar.hide()
+        self._refresh()
+        self.busyChanged.emit(on)
+
     def start(self) -> None:
-        raise NotImplementedError
+        """Chạy các video đang tick chưa xong ở thẻ này (tất cả đã xong → chạy lại tất cả, ra thư mục mới)."""
+        if self._busy:
+            return
+        self._refresh()
+        if not self.start_btn.isEnabled():
+            return
+        tab = self.tab()
+        ready = self._ready_files()
+        todo = [p for p in ready if self.status[tab].get(p) != "done"] or ready
+        folder = self.folder(tab)
+        if not ffmpeg_tools.usable_dir(folder):
+            self.notice.emit("Thư mục lưu không ghi được — chọn thư mục khác", "warn")
+            if not self.pick_folder(tab) or not ffmpeg_tools.usable_dir(self.folder(tab)):
+                return
+            folder = self.folder(tab)
+        self._read_settings()
+        job = SplitSettings(**vars(self.split)) if tab == "split" else FrameSettings(**vars(self.frames))
+        reuse = {p: self._stopped.pop((tab, p)) for p in todo if (tab, p) in self._stopped}
+        for p in todo:
+            self.status[tab][p] = "wait"
+            self.status_text[tab][p] = "Chờ"
+            self._paint(p)
+        self._run = {"tab": tab, "todo": todo, "done": 0, "outputs": 0, "user_stop": False, "t0": {},
+                     "folder": folder}
+        self._runner = ffmpeg_tools.Runner()
+        self._set_busy(True)
+        self.counterChanged.emit(f"1/{len(todo)}")
+        self._log(f"Bắt đầu {'chia' if tab == 'split' else 'xuất ảnh'} {len(todo)} video → {folder}")
+        args = (self._runner, tab, todo, job, Path(folder), self._encoder, {p: self.infos[p] for p in todo}, reuse)
+        threading.Thread(target=self._work, args=args, daemon=True).start()
+
+    def _work(self, runner, tab, todo, job, folder, encoder, infos, reuse) -> None:
+        """Luồng nền: lần lượt từng video. Không đụng giao diện — chỉ phát tín hiệu."""
+        for p in todo:
+            if runner.cancelled:
+                break
+            if 0 <= ffmpeg_tools.disk_free(folder) < MIN_FREE:
+                self.b.all_done.emit("disk")
+                return
+            self.b.progress.emit(p, -1.0, "")
+            old = reuse.get(p)
+            if old is not None:  # lượt trước bị Dừng: dọn file chính lượt đó tạo, chạy lại đúng chỗ cũ
+                for f in old[2]:
+                    Path(f).unlink(missing_ok=True)
+            spot = (old[0], old[1]) if old is not None else None
+
+            def prog(frac, text, p=p):
+                self.b.progress.emit(p, frac, text)
+            try:
+                if tab == "split":
+                    segs, _note = cutter.plan_segments(infos[p].duration, job)
+                    res = cutter.split_video(runner, p, infos[p], job, folder, encoder, segs, on_progress=prog,
+                                             reuse=spot)
+                else:
+                    res = cutter.extract_frames(runner, p, infos[p], job, folder, on_progress=prog, reuse=spot)
+                self.b.video_done.emit(p, res, "", None)
+            except ffmpeg_tools.CancelledError as e:
+                self.b.video_done.emit(p, None, "stop", (getattr(e, "folder", folder), getattr(e, "stem", ""),
+                                                         list(getattr(e, "files", [])), getattr(e, "total", None)))
+                break
+            except ValueError as e:
+                self.b.video_done.emit(p, None, str(e), None)
+            except Exception as e:  # noqa: BLE001 — lỗi lạ của một video không làm hỏng cả lượt
+                self.b.video_done.emit(p, None, f"Lỗi: {e}", None)
+        self.b.all_done.emit("")
 
     def stop(self) -> None:
-        raise NotImplementedError
+        if self._busy and self._runner is not None:
+            self._run["user_stop"] = True
+            self._runner.cancel()
+
+    def _log(self, text: str) -> None:
+        self.log.appendPlainText(f"{time.strftime('%H:%M')}  {text}")
+
+    @staticmethod
+    def _unit(tab: str) -> str:
+        return "đoạn" if tab == "split" else "ảnh"
+
+    def _on_progress(self, path: str, frac: float, text: str) -> None:
+        if not self._busy:
+            return
+        tab = self._run["tab"]
+        if self.status[tab].get(path) != "run":
+            self._run["t0"][path] = time.monotonic()
+            i = self._run["todo"].index(path) + 1 if path in self._run["todo"] else 1
+            self.counterChanged.emit(f"{i}/{len(self._run['todo'])}")
+        self.status[tab][path] = "run"
+        if frac < 0:
+            self.status_text[tab][path] = "Đang bắt đầu…"
+        else:
+            self.status_text[tab][path] = f"{int(frac * 100)}%" + (f" · {text}" if text else "")
+        if tab == self.tab():
+            self._paint(path, frac)
+        total = len(self._run["todo"]) or 1
+        val = int(1000 * (self._run["done"] + max(0.0, frac)) / total)
+        if abs(val - self.run_bar.value()) >= 3:
+            self._run_anim.stop()
+            self._run_anim.setStartValue(self.run_bar.value())
+            self._run_anim.setEndValue(max(0, min(1000, val)))
+            self._run_anim.start()
+
+    def _on_video_done(self, path: str, res, err: str, stopped) -> None:
+        if not self._run:
+            return
+        tab = self._run["tab"]
+        name = Path(path).name
+        unit = self._unit(tab)
+        self._run["done"] += 1
+        spent = time.monotonic() - self._run["t0"].get(path, time.monotonic())
+        if res is not None:
+            n = len(res.files)
+            self._run["outputs"] += n
+            if res.errors and (n == 0 or res.total is None):
+                self.status[tab][path] = "error"
+                self.status_text[tab][path] = res.errors[0][:120]
+                self._log(f"{name}: lỗi — {res.errors[0]}")
+            elif res.errors:
+                self.status[tab][path] = "warn"
+                self.status_text[tab][path] = f"✓ {n}/{res.total} {unit} · {len(res.errors)} lỗi"
+                self._log(f"{name} → {n}/{res.total} {unit} ({fmt_secs(spent)}) · {len(res.errors)} lỗi")
+                for e in res.errors[:5]:
+                    self._log(f"   {e}")
+            else:
+                self.status[tab][path] = "done"
+                self.status_text[tab][path] = f"✓ {n} {unit}"
+                self._log(f"{name} → {n} {unit} ({fmt_secs(spent)})")
+        elif err == "stop":
+            folder, stem, files, total = stopped
+            self._stopped[(tab, path)] = (Path(folder), stem, [Path(f) for f in files])
+            self.status[tab][path] = "stopped"
+            of = f"/{total}" if total else ""
+            self.status_text[tab][path] = f"Đã dừng ({len(files)}{of} {unit})"
+            self._log(f"{name}: Đã dừng ({len(files)}{of} {unit} xong — chạy lại sẽ làm lại từ đầu)")
+        else:
+            self.status[tab][path] = "error"
+            self.status_text[tab][path] = err[:120]
+            self._log(f"{name}: {err}")
+        if tab == self.tab():
+            self._paint(path)
+
+    def _on_all_done(self, reason: str) -> None:
+        if not self._busy:
+            return
+        run = self._run
+        tab = run["tab"]
+        for p in run["todo"]:  # dòng chưa tới lượt (dừng sớm) về "Chờ"
+            if self.status[tab].get(p) in ("wait", "run"):
+                self.status[tab].pop(p, None)
+                self.status_text[tab].pop(p, None)
+        self._runner = None
+        self._set_busy(False)
+        self._paint_all()
+        self.counterChanged.emit("")
+        unit = self._unit(tab)
+        if reason == "disk":
+            self._log("Ổ đĩa sắp đầy (dưới 500 MB) — đã dừng")
+            self.notice.emit("Ổ đĩa lưu sắp đầy — đã dừng. Dọn bớt rồi bấm Bắt đầu để chạy tiếp", "warn")
+        elif run["user_stop"]:
+            self.notice.emit("Đã dừng", "info")
+        else:
+            ok = sum(1 for p in run["todo"] if self.status[tab].get(p) == "done")
+            self._log(f"Xong: {ok}/{len(run['todo'])} video → {run['outputs']} {unit}")
+            self.notice.emit(f"Xong: {len(run['todo'])} video → {run['outputs']} {unit}",
+                             "ok" if ok == len(run["todo"]) else "warn")
+            after = self.split.open_after if tab == "split" else self.frames.open_after
+            if after:
+                self._open_dir(run["folder"])
 
     # ---------- cửa sổ chính ----------
     def shown(self) -> None:
@@ -789,6 +975,3 @@ class CutPage(QWidget):
             self.side_scroll.setMinimumHeight(0)
             self.side_scroll.setFixedWidth(self._side_need())
         self.tree.setColumnHidden(2, width < theme.px(760))
-
-
-_unused = (QSize, time)  # giữ import cho phần chạy

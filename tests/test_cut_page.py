@@ -173,3 +173,112 @@ def test_settings_persist(settings):
 
 def test_empty_list_cannot_start(page):
     assert not page.start_btn.isEnabled()
+
+
+# ---------- Task 5: chạy, Dừng, chạy lại ----------
+def outs(tmp_path, sub, ext):
+    return sorted((tmp_path / sub).rglob(f"*.{ext}"))
+
+
+def test_run_split_end_to_end(page, env, tmp_path):
+    add_ready(page, env / "mua.mp4")
+    page.mode_radio["parts"].setChecked(True)
+    page.parts_spin.setValue(2)
+    busy = []
+    page.busyChanged.connect(busy.append)
+    page.start()
+    assert page.is_busy() and page.start_btn.text() == "Dừng"
+    assert wait(lambda: not page.is_busy(), 60)
+    assert busy == [True, False]
+    assert len(outs(tmp_path, "out", "mp4")) == 2
+    key = str(env / "mua.mp4")
+    assert page.status["split"][key] == "done" and "2 đoạn" in page.tree.topLevelItem(0).text(3)
+    assert "2 đoạn" in page.log.toPlainText()
+    assert page.start_btn.text() == "Chạy lại"
+
+
+def test_settings_change_resets_done(page, env):
+    add_ready(page, env / "lua.mp4")
+    page.mode_radio["parts"].setChecked(True)
+    page.start()
+    assert wait(lambda: not page.is_busy(), 60)
+    assert page.status["split"][str(env / "lua.mp4")] == "done"
+    page.parts_spin.setValue(3)
+    assert str(env / "lua.mp4") not in page.status["split"] and page.start_btn.text() != "Chạy lại"
+
+
+def test_rerun_all_done_goes_to_new_folder(page, env, tmp_path):
+    add_ready(page, env / "lua.mp4")
+    page.mode_radio["parts"].setChecked(True)
+    page.parts_spin.setValue(2)
+    page.start()
+    assert wait(lambda: not page.is_busy(), 60)
+    page.start()  # "Chạy lại"
+    assert wait(lambda: not page.is_busy(), 60)
+    assert sorted(p.name for p in (tmp_path / "out").iterdir()) == ["lua", "lua (2)"]
+
+
+def test_run_frames(page, env, tmp_path):
+    add_ready(page, env / "mua.mp4", env / "lua.mp4")
+    page.set_tab("frames")
+    page.frame_radio["count"].setChecked(True)
+    page.count_spin.setValue(3)
+    counters = []
+    page.counterChanged.connect(counters.append)
+    page.start()
+    assert wait(lambda: not page.is_busy(), 60)
+    assert len(outs(tmp_path, "anh", "jpg")) == 6
+    assert "1/2" in counters and counters[-1] == ""
+    assert all(page.status["frames"][p] == "done" for p in page.files())
+    assert page.status["split"] == {}  # thẻ Chia đoạn không bị đụng
+
+
+def test_busy_locks_controls(page, env):
+    add_ready(page, env / "mua.mp4")
+    page.mode_radio["parts"].setChecked(True)
+    page.parts_spin.setValue(3)
+    page.start()
+    assert not page.add_btn.isEnabled() and not page.side_stack.isEnabled()
+    page.set_tab("frames")
+    assert page.tab() == "split"
+    page.add_files([str(env / "lua.mp4")])
+    assert page.tree.topLevelItemCount() == 1
+    assert wait(lambda: not page.is_busy(), 60)
+    assert page.add_btn.isEnabled() and page.side_stack.isEnabled()
+
+
+def test_stop_then_rerun_cleans(page, env, tmp_path):
+    from loopstation.core import probe
+    add_ready(page, env / "mua.mp4")
+    page.mode_radio["parts"].setChecked(True)
+    page.parts_spin.setValue(3)
+    page.aspect_box.setCurrentIndex(page.aspect_box.findData("9:16"))  # chậm hơn, kịp bấm Dừng
+    page.start()
+    assert wait(lambda: page.tree.topLevelItem(0).data(3, 257) not in (None, 0.0) or not page.is_busy(), 30)
+    page.stop()
+    assert wait(lambda: not page.is_busy(), 30)
+    key = str(env / "mua.mp4")
+    assert page.status["split"][key] == "stopped" and "Đã dừng" in page.tree.topLevelItem(0).text(3)
+    assert "Đã dừng" in page.log.toPlainText()
+    assert all(probe.probe(str(p)).ok for p in outs(tmp_path, "out", "mp4"))  # không còn file dở
+    page.start()
+    assert wait(lambda: not page.is_busy(), 60)
+    assert sorted(p.name for p in (tmp_path / "out").iterdir()) == ["mua"]  # chạy lại đúng chỗ cũ, không (2)
+    assert len(outs(tmp_path, "out", "mp4")) == 3
+
+
+def test_unwritable_folder_warns(page, env, tmp_path, settings):
+    bad = tmp_path / "file-not-dir"
+    bad.write_text("x")
+    settings.setValue("cut/folder", str(bad))
+    add_ready(page, env / "lua.mp4")
+    notes = []
+    page.notice.connect(lambda t, k: notes.append(k))
+    from PySide6.QtWidgets import QFileDialog
+    orig = QFileDialog.getExistingDirectory
+    QFileDialog.getExistingDirectory = staticmethod(lambda *a, **k: "")
+    try:
+        page.start()
+    finally:
+        QFileDialog.getExistingDirectory = orig
+    assert not page.is_busy() and "warn" in notes

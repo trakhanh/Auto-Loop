@@ -263,9 +263,12 @@ def frame_args(src: str, info: MediaInfo, s: FrameSettings, pattern: Path) -> li
     post: list[str] = []
     if s.mode == "count":
         n = max(1, int(s.count))
-        pre = ["-ss", f"{d / (2 * n):.3f}"]  # ảnh nằm giữa từng khoảng đều nhau
-        flt = f"fps={n}/{d:g}"
-        post = ["-frames:v", str(n)]
+        # ảnh thứ k = khung đầu tiên từ mốc t0 + k × bước (giữa từng khoảng đều nhau). Chọn theo mốc tuyệt đối:
+        # bộ lọc fps hay rơi mất ảnh cuối ở video ngắn, còn "cách ảnh trước ≥ bước" thì trôi dần.
+        t0, step = f"{d / (2 * n):.4f}".rstrip("0").rstrip("."), f"{d / n:.6f}".rstrip("0").rstrip(".")
+        flt = ("select=gte(t\\," + t0 + ")*(isnan(prev_selected_t)+gt(floor((t-" + t0 + ")/" + step
+               + ")\\,floor((prev_selected_t-" + t0 + ")/" + step + ")))")
+        post = ["-fps_mode", "vfr", "-frames:v", str(n)]
     elif s.mode == "every_sec":
         flt = f"fps=1/{max(0.01, float(s.every_sec)):g}"
     elif s.mode == "every_n":
@@ -340,6 +343,7 @@ class RunResult:
     files: list[Path]
     errors: list[str]
     folder: Path
+    total: int | None = None  # số đoạn dự định (xuất ảnh: None)
 
 
 def _out_seconds(block: dict) -> float | None:
@@ -389,7 +393,7 @@ def split_video(runner, src: str, info: MediaInfo, s: SplitSettings, folder: Pat
             runner.ffmpeg(split_args(src, seg, out, info, s, encoder), on_progress=prog)
         except CancelledError as e:
             out.unlink(missing_ok=True)
-            e.files = files
+            e.files, e.folder, e.stem, e.total = files, d, stem, n  # để chạy lại đúng chỗ (reuse)
             raise
         except FFmpegError as e:
             out.unlink(missing_ok=True)
@@ -401,7 +405,7 @@ def split_video(runner, src: str, info: MediaInfo, s: SplitSettings, folder: Pat
         done += seg.dur
     if on_progress:
         on_progress(1.0, f"đoạn {n}/{n}")
-    return RunResult(files, errors, d)
+    return RunResult(files, errors, d, n)
 
 
 def extract_frames(runner, src: str, info: MediaInfo, s: FrameSettings, folder: Path,
@@ -430,7 +434,7 @@ def extract_frames(runner, src: str, info: MediaInfo, s: FrameSettings, folder: 
     try:
         runner.ffmpeg(frame_args(src, info, s, pattern), on_progress=prog)
     except CancelledError as e:
-        e.files = own_files(d, stem, ext)
+        e.files, e.folder, e.stem, e.total = own_files(d, stem, ext), d, stem, None
         raise
     except FFmpegError as e:
         errors.append(_last_line(e))
