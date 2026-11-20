@@ -119,7 +119,7 @@ def cache_dir(sub: str = "") -> Path:
 
 
 CACHE_PARTS = ("blocks", "srcaudio", "thumbs", "jobs", "estimate", "ambient", "ambientlib", "lookpreview", "cleanaudio",
-               "xuat-tam", "denoise", "musicblk")  # xuat-tam: video xuất ra máy trước khi chép lên Google Drive / OneDrive
+               "xuat-tam", "denoise", "musicblk", "dlthumbs")  # xuat-tam: video xuất ra máy trước khi chép lên Google Drive / OneDrive
 
 
 def preview_dir() -> Path:
