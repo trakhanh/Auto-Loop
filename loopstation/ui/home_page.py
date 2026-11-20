@@ -31,9 +31,9 @@ CARDS = [
     ("denoise", "waves", "success", "Lọc tạp âm",
      "Bỏ gió, ù nền trong video — giữ tiếng bước chân, nước, lửa. Như Premiere Reduce Noise.",
      "Nhiều video một lần → bản _DeNoise cạnh file gốc"),
-    ("download", "download", "info", "Tải video",
-     "Lưu video YouTube, TikTok, Bilibili, X, Facebook, Instagram… về máy.",
-     "Dán link lẻ hoặc cả kênh → file MP4 / MP3"),
+    ("download", "download", "accent", "Tải video",
+     "Dán link YouTube, TikTok, Bilibili, X, Facebook, Instagram… — lấy về MP4 / MP3, cả kênh một lần.",
+     "Tự chuyển sang H.264 để mở được mọi phần mềm dựng · lưu kèm ảnh bìa, mô tả"),
     ("open", "save", "neutral", "Mở dự án đã lưu",
      "Tiếp tục một dự án .lsproj đã làm trước đó.",
      "Hoặc mở dự án mẫu bên dưới để tập dùng"),
@@ -126,11 +126,14 @@ class HomePage(QWidget):
         tools.setSpacing(theme.SP['lg'])
         self.cards: dict[str, HomeCard] = {}
         n_main = n_tool = 0
+        dl_row = QHBoxLayout()
         for key, ic, color, t, d, ex in CARDS:
-            main = key in MAIN_KEYS
+            main = key in MAIN_KEYS or key == "download"
             card = HomeCard(ic, color, t, d, ex, compact=not main)
             card.clicked.connect(lambda _=False, kk=key: self.chosen.emit(kk))
-            if main:
+            if key == "download":  # tính năng lớn: một hàng riêng, thẻ to, dễ thấy
+                dl_row.addWidget(card)
+            elif main:
                 grid.addWidget(card, 0, n_main)
                 n_main += 1
             else:
@@ -139,6 +142,8 @@ class HomePage(QWidget):
             self.cards[key] = card
         main_lab = QLabel("Kiểu sản phẩm")
         main_lab.setObjectName("h2")
+        dl_lab = QLabel("Lấy video về máy")
+        dl_lab.setObjectName("h2")
         tool_lab = QLabel("Công cụ khác")
         tool_lab.setObjectName("h2")
 
@@ -174,6 +179,9 @@ class HomePage(QWidget):
         lay.addSpacing(theme.SP['sm'])
         lay.addWidget(main_lab)
         lay.addLayout(grid)
+        lay.addSpacing(theme.SP['sm'])
+        lay.addWidget(dl_lab)
+        lay.addLayout(dl_row)
         lay.addSpacing(theme.SP['sm'])
         lay.addWidget(tool_lab)
         lay.addLayout(tools)

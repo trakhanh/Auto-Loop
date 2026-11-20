@@ -5,16 +5,24 @@ nhật; file tải về chỉ nằm trong thư mục lưu — không tự đưa 
 from __future__ import annotations
 
 import hashlib
+import re
 import threading
+import time
 import urllib.request
 from datetime import date
 from pathlib import Path
 
-from PySide6.QtCore import QObject, QSettings, QSize, QStandardPaths, Qt, Signal
-from PySide6.QtGui import QGuiApplication, QIcon, QKeySequence, QPixmap, QShortcut
+from PySide6.QtCore import (
+    QAbstractAnimation, QObject, QPropertyAnimation, QRect, QSettings, QSize, QStandardPaths, Qt, QTimer,
+    QVariantAnimation, Signal,
+)
+from PySide6.QtGui import (
+    QBrush, QGuiApplication, QIcon, QKeySequence, QLinearGradient, QPainter, QPen, QPixmap, QShortcut,
+)
 from PySide6.QtWidgets import (
-    QAbstractItemView, QCheckBox, QComboBox, QDialog, QDialogButtonBox, QFileDialog, QFormLayout, QGridLayout,
-    QGroupBox, QHBoxLayout, QHeaderView, QLabel, QLineEdit, QMenu, QPlainTextEdit, QProgressBar, QPushButton,
+    QAbstractItemView, QBoxLayout, QButtonGroup, QCheckBox, QComboBox, QDialog, QDialogButtonBox, QFileDialog,
+    QFormLayout, QFrame, QGroupBox, QHBoxLayout, QHeaderView, QLabel, QLineEdit, QMenu, QPlainTextEdit, QProgressBar,
+    QPushButton, QScrollArea, QSizePolicy, QStackedWidget, QStyle, QStyledItemDelegate, QStyleOptionViewItem,
     QTreeWidget, QTreeWidgetItem, QVBoxLayout, QWidget,
 )
 
@@ -25,6 +33,12 @@ from . import icons, theme
 from . import widgets as w
 
 ROLE = Qt.ItemDataRole.UserRole
+PROG_ROLE = Qt.ItemDataRole.UserRole + 1  # tiến độ 0..1 (None = không vẽ thanh)
+# màu nhãn nền tảng (token theme.py)
+PLATFORM_TOKENS = {"YouTube": "danger_text", "TikTok": "text", "Bilibili": "info_text", "X": "text_2",
+                   "Facebook": "accent_text", "Instagram": "warn_text"}
+PLATFORM_CHIPS = (("YouTube", "error"), ("TikTok", "text"), ("Bilibili", "info"), ("X", "muted"),
+                  ("Facebook", "accent"), ("Instagram", "warn"))
 MORE = "__more__"  # dòng "Hiện thêm" trong nhóm
 CANCELLED = "__cancel__"
 
@@ -66,6 +80,164 @@ def fmt_speed(bps: float) -> str:
     return f"{mb:.1f} MB/s".replace(".", ",") if mb >= 1 else f"{bps / 1024:.0f} KB/s"
 
 
+class Segmented(QWidget):
+    """Hàng nút chọn một (thấy hết lựa chọn, bấm là xong) — API giống QComboBox để dùng thay chỗ nhau."""
+    currentIndexChanged = Signal(int)
+
+    def __init__(self, pairs, current, tips: dict | None = None, parent=None):
+        super().__init__(parent)
+        lay = QHBoxLayout(self)
+        lay.setContentsMargins(0, 0, 0, 0)
+        lay.setSpacing(4)
+        self._data: list = []
+        self._group = QButtonGroup(self)
+        self._group.setExclusive(True)
+        for i, (key, label) in enumerate(pairs):
+            b = QPushButton(label)
+            b.setCheckable(True)
+            theme.tag(b, variant="ghost")
+            # chia đều bề ngang, không để chữ dài nhất ép cả cột Cài đặt rộng ra
+            b.setSizePolicy(QSizePolicy.Policy.Ignored, QSizePolicy.Policy.Fixed)
+            b.setMinimumWidth(theme.px(48))
+            if tips and key in tips:
+                b.setToolTip(tips[key])
+            self._group.addButton(b, i)
+            lay.addWidget(b, 1)
+            self._data.append(key)
+        self._group.idClicked.connect(self.currentIndexChanged.emit)
+        i = self.findData(current)
+        self._group.button(i if i >= 0 else 0).setChecked(True)
+
+    def findData(self, value) -> int:  # noqa: N802
+        return self._data.index(value) if value in self._data else -1
+
+    def currentIndex(self) -> int:  # noqa: N802
+        return self._group.checkedId()
+
+    def currentData(self):  # noqa: N802
+        i = self.currentIndex()
+        return self._data[i] if 0 <= i < len(self._data) else None
+
+    def setCurrentIndex(self, i: int) -> None:  # noqa: N802
+        if not 0 <= i < len(self._data) or i == self.currentIndex():
+            return
+        self._group.button(i).setChecked(True)
+        self.currentIndexChanged.emit(i)
+
+    def button(self, i: int) -> QPushButton:
+        return self._group.button(i)
+
+
+class PlatformDelegate(QStyledItemDelegate):
+    """Cột Nền tảng: nhãn bo tròn, màu theo nền tảng."""
+
+    def paint(self, painter: QPainter, option, index) -> None:
+        text = index.data() or ""
+        opt = QStyleOptionViewItem(option)
+        self.initStyleOption(opt, index)
+        opt.text = ""
+        st = opt.widget.style() if opt.widget else None
+        if st is not None:
+            st.drawControl(QStyle.ControlElement.CE_ItemViewItem, opt, painter, opt.widget)
+        if not text:
+            return
+        key = PLATFORM_TOKENS.get(text, "text_muted")
+        fm = opt.fontMetrics
+        wpx = fm.horizontalAdvance(text) + 16
+        h = fm.height() + 4
+        r = QRect(opt.rect.left() + 4, opt.rect.center().y() - h // 2, min(wpx, opt.rect.width() - 8), h)
+        painter.save()
+        painter.setRenderHint(QPainter.RenderHint.Antialiasing)
+        painter.setPen(Qt.PenStyle.NoPen)
+        painter.setBrush(theme.qcolor(key, 46))
+        painter.drawRoundedRect(r, h / 2, h / 2)
+        painter.setPen(theme.qcolor(key))
+        painter.drawText(r, Qt.AlignmentFlag.AlignCenter, text)
+        painter.restore()
+
+    def sizeHint(self, option, index) -> QSize:  # noqa: N802
+        sz = super().sizeHint(option, index)
+        return QSize(sz.width() + 20, sz.height())
+
+
+class ProgressDelegate(QStyledItemDelegate):
+    """Cột Trạng thái: chữ như thường + thanh tiến độ màu ở dưới khi đang tải (vệt sáng chạy dọc thanh; chưa biết
+    phần trăm — đang bắt đầu / ghép / chuyển mã — thì một khúc sáng chạy qua lại)."""
+
+    def paint(self, painter: QPainter, option, index) -> None:
+        super().paint(painter, option, index)
+        frac = index.data(PROG_ROLE)
+        if frac is None:
+            return
+        frac = float(frac)
+        r = option.rect.adjusted(6, 0, -8, 0)
+        bar = QRect(r.left(), r.bottom() - 7, r.width(), 5)
+        phase = (time.monotonic() * 0.7) % 1.0
+        painter.save()
+        painter.setRenderHint(QPainter.RenderHint.Antialiasing)
+        painter.setPen(Qt.PenStyle.NoPen)
+        painter.setBrush(theme.qcolor("line"))
+        painter.drawRoundedRect(bar, 2.5, 2.5)
+        if frac < 0:  # chưa biết phần trăm
+            seg = max(24, bar.width() // 3)
+            x = bar.left() - seg + int((bar.width() + seg) * phase)
+            part = QRect(max(bar.left(), x), bar.top(), min(seg, bar.right() - x) - max(0, bar.left() - x), bar.height())
+            if part.width() > 0:
+                painter.setBrush(theme.qcolor("accent"))
+                painter.drawRoundedRect(part, 2.5, 2.5)
+        else:
+            done = QRect(bar.left(), bar.top(), max(5, int(bar.width() * max(0.0, min(1.0, frac)))), bar.height())
+            painter.setBrush(theme.qcolor("accent"))
+            painter.drawRoundedRect(done, 2.5, 2.5)
+            sx = done.left() + int((done.width() + 40) * phase) - 40  # vệt sáng chạy trong phần đã tải
+            g = QLinearGradient(sx, 0, sx + 40, 0)
+            g.setColorAt(0.0, theme.qcolor("text", 0))
+            g.setColorAt(0.5, theme.qcolor("text", 120))
+            g.setColorAt(1.0, theme.qcolor("text", 0))
+            painter.setClipRect(done)
+            painter.setBrush(QBrush(g))
+            painter.drawRoundedRect(done, 2.5, 2.5)
+        painter.restore()
+
+
+class Spinner(QWidget):
+    """Vòng xoay "đang làm" (màu nhấn của bộ màu đang chọn)."""
+
+    def __init__(self, size: int = 18, parent=None):
+        super().__init__(parent)
+        self.setFixedSize(size, size)
+        self._a = 0
+        self._t = QTimer(self)
+        self._t.setInterval(16)
+        self._t.timeout.connect(self._tick)
+        self.hide()
+
+    def start(self) -> None:
+        self.show()
+        self._t.start()
+
+    def stop(self) -> None:
+        self._t.stop()
+        self.hide()
+
+    def _tick(self) -> None:
+        self._a = (self._a + 7) % 360
+        self.update()
+
+    def paintEvent(self, _e) -> None:  # noqa: N802
+        pw = max(2, self.width() // 9)
+        p = QPainter(self)
+        p.setRenderHint(QPainter.RenderHint.Antialiasing)
+        r = self.rect().adjusted(pw, pw, -pw, -pw)
+        pen = QPen(theme.qcolor("line"), pw)
+        pen.setCapStyle(Qt.PenCapStyle.RoundCap)
+        p.setPen(pen)
+        p.drawEllipse(r)
+        pen.setColor(theme.qcolor("accent"))
+        p.setPen(pen)
+        p.drawArc(r, -self._a * 16, 110 * 16)
+
+
 class DownloadPage(QWidget):
     busyChanged = Signal(bool)
     counterChanged = Signal(str)
@@ -87,6 +259,14 @@ class DownloadPage(QWidget):
         self._want_update = False
         self._tool_broken = False  # yt-dlp.exe không chạy được (hỏng / bị diệt virus chặn) → hiện lại thẻ cài
         self._halt = ""  # lý do tạm dừng lượt tải (mất mạng / công cụ hỏng)
+        self._run_done = 0  # số video tải xong trong lượt này
+        self._fracs: dict[int, float] = {}  # tiến độ từng video đang tải (cho thanh tổng)
+        self._read_total = self._read_count = 0
+        self.flashed: list[str] = []  # video vừa xong (dòng loé xanh)
+        self._flash_anims: dict[int, QVariantAnimation] = {}
+        self._anim = QTimer(self)  # vẽ lại thanh tiến độ cho vệt sáng chạy (chỉ chạy khi đang tải)
+        self._anim.setInterval(40)
+        self._h264_enc = "libx264"  # cửa sổ chính đổi sang encoder card đồ hoạ khi dò xong (set_encoders)
         self._install_cancel: threading.Event | None = None
         self._thumbs_wanted: set[str] = set()
         self.b = _Bridge()
@@ -101,10 +281,12 @@ class DownloadPage(QWidget):
         self.b.updated.connect(self._on_updated)
         self.b.thumb.connect(self._on_thumb)
         self._build()
+        self._anim.timeout.connect(lambda: self.tree.viewport().update())
         for e in self.queue.entries:
             self._add_row(e)
         self._refresh_ready()
         self._update_tool_label()
+        self._update_counts()
 
     # ---------- dựng giao diện ----------
     def _build(self) -> None:
@@ -136,21 +318,41 @@ class DownloadPage(QWidget):
         ic.addWidget(self.install_msg)
         lay.addWidget(self.install_card)
 
+        # ----- thân trang: trái = dán link + danh sách · phải = Cài đặt tải (hẹp: xếp dọc) -----
+        self.body = QBoxLayout(QBoxLayout.Direction.LeftToRight)
+        self.body.setSpacing(theme.SP['lg'])
+        left_w = QWidget()
+        left = QVBoxLayout(left_w)
+        left.setContentsMargins(0, 0, 0, 0)
+        left.setSpacing(theme.SP['sm'])
         top = QHBoxLayout()
         self.links_edit = QPlainTextEdit()
-        self.links_edit.setPlaceholderText("Dán một hoặc nhiều link (mỗi dòng một link): YouTube, TikTok, Bilibili, "
-                                           "X, Facebook, Instagram… — link danh sách phát / kênh cũng được")
-        self.links_edit.setFixedHeight(theme.px(78))
+        self.links_edit.setObjectName("linkBox")
+        self.links_edit.setPlaceholderText("Dán link video vào đây — một hoặc nhiều link, mỗi dòng một link. "
+                                           "Link danh sách phát / kênh cũng được.")
+        self.links_edit.setFixedHeight(theme.px(64))
         self.read_btn = QPushButton("Đọc link")
-        theme.tag(self.read_btn, variant="tonal")
-        self.read_btn.setIcon(icons.icon("search", 15, "accent_text"))
+        theme.tag(self.read_btn, variant="primary")
+        self.read_btn.setIcon(icons.icon("search", 15, "white"))
         self.read_btn.setToolTip("Lấy tên, ảnh nhỏ, thời lượng để xem trước — chưa tải gì")
+        self.read_btn.setMinimumHeight(theme.px(36))
         self.read_btn.clicked.connect(self.read_links)
+        rcol = QVBoxLayout()
+        rcol.setSpacing(6)
+        rcol.addWidget(self.read_btn)
+        self.read_spinner = Spinner(theme.px(18))
+        rcol.addWidget(self.read_spinner, 0, Qt.AlignmentFlag.AlignHCenter)
+        rcol.addStretch(1)
         top.addWidget(self.links_edit, 1)
-        top.addWidget(self.read_btn, 0, Qt.AlignmentFlag.AlignTop)
-        lay.addLayout(top)
+        top.addLayout(rcol)
+        left.addLayout(top)
+        plat = QLabel(" · ".join(theme.span(tone, name) for name, tone in PLATFORM_CHIPS) +
+                      theme.span("muted", " · và hơn 1.000 trang khác"))
+        plat.setObjectName("muted")
+        plat.setWordWrap(True)
+        left.addWidget(plat)
         self.info_label = w.muted("")
-        lay.addWidget(self.info_label)
+        left.addWidget(self.info_label)
 
         self.tree = QTreeWidget()
         self.tree.setHeaderLabels(["Video", "Nền tảng", "Thời lượng", "Trạng thái"])
@@ -161,38 +363,47 @@ class DownloadPage(QWidget):
         self.tree.customContextMenuRequested.connect(self._menu)
         self.tree.itemChanged.connect(self._on_item_changed)
         self.tree.itemDoubleClicked.connect(self._on_double)
+        self.tree.setItemDelegateForColumn(1, PlatformDelegate(self.tree))
+        self.tree.setItemDelegateForColumn(3, ProgressDelegate(self.tree))
         hd = self.tree.header()
         hd.setSectionResizeMode(0, QHeaderView.ResizeMode.Stretch)
-        for c in (1, 2, 3):
+        for c in (1, 2):
             hd.setSectionResizeMode(c, QHeaderView.ResizeMode.ResizeToContents)
-        lay.addWidget(self.tree, 1)
+        hd.setSectionResizeMode(3, QHeaderView.ResizeMode.Interactive)
+        hd.resizeSection(3, theme.px(230))
+        hd.setStretchLastSection(False)
+        self.empty_view = self._build_empty()
+        self.loading_view = self._build_loading()
+        self.list_stack = QStackedWidget()
+        self.list_stack.addWidget(self.empty_view)
+        self.list_stack.addWidget(self.loading_view)
+        self.list_stack.addWidget(self.tree)
+        self.list_stack.setMinimumHeight(theme.px(160))
+        left.addWidget(self.list_stack, 1)
+        self.body.addWidget(left_w, 1)
 
+        self.side_card = self._build_side()
+        self.side_scroll = QScrollArea()
+        self.side_scroll.setWidget(self.side_card)
+        self.side_scroll.setWidgetResizable(True)
+        self.side_scroll.setFrameShape(QFrame.Shape.NoFrame)
+        self.side_scroll.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
+        self.side_scroll.setFixedWidth(theme.px(345))
+        self.body.addWidget(self.side_scroll)
+        lay.addLayout(self.body, 1)
+
+        # ----- thanh dưới: luôn trong màn hình -----
         bar = QHBoxLayout()
-        bar.addWidget(QLabel("Lưu vào:"))
-        self.folder_label = w.ElidedLabel("")
-        self.folder_label.setMinimumWidth(theme.px(120))
-        bar.addWidget(self.folder_label, 1)
-        self.folder_btn = QPushButton("Đổi")
-        theme.tag(self.folder_btn, variant="ghost")
-        self.folder_btn.clicked.connect(self.pick_folder)
-        bar.addWidget(self.folder_btn)
-        bar.addWidget(w.hairline())
-        self.quality_box = combo(downloader.QUALITY_LABELS, self.opts.quality)
-        self.quality_box.setToolTip("Cao nhất (2K/4K) của YouTube là VP9 / AV1 — Premiere cũ, CapCut có thể không mở "
-                                    "được. 1080p luôn là H.264, mở được mọi phần mềm dựng.")
-        self.quality_box.currentIndexChanged.connect(lambda _i: self._set_opt("quality", self.quality_box.currentData()))
-        bar.addWidget(self.quality_box)
-        self.login_box = combo(downloader.LOGINS, str(self.settings.value("download/login", "") or ""))
-        self.login_box.setToolTip("Dùng đăng nhập từ trình duyệt cho trang bắt đăng nhập (Facebook, Instagram…). "
-                                  "Firefox chắc chắn nhất; Chrome / Edge hay bị Windows chặn — khi đó dùng file "
-                                  "đăng nhập (cookies.txt).")
-        self._login_prev = self.login_box.currentIndex()
-        self.login_box.currentIndexChanged.connect(self._login_changed)
-        bar.addWidget(QLabel("Đăng nhập:"))
-        bar.addWidget(self.login_box)
-        self.start_btn = QPushButton("Tải đã chọn")
+        bar.setSpacing(theme.SP['md'])
+        self.selected_label = QLabel("")
+        self.selected_label.setObjectName("h3")
+        self.opts_summary = w.ElidedLabel("")
+        self.opts_summary.setObjectName("muted")
+        self.start_btn = QPushButton("Tải video")
         theme.tag(self.start_btn, variant="primary")
-        self.start_btn.setIcon(icons.icon("download", 15, "white"))
+        self.start_btn.setIcon(icons.icon("download", 16, "white"))
+        self.start_btn.setMinimumHeight(theme.px(38))
+        self.start_btn.setMinimumWidth(theme.px(150))
         self.start_btn.clicked.connect(lambda: self.stop() if self._busy else self.start())
         self.open_btn = QPushButton("Mở thư mục")
         theme.tag(self.open_btn, variant="ghost")
@@ -206,26 +417,20 @@ class DownloadPage(QWidget):
         m.addAction("Thử lại các video lỗi", self.retry_errors)
         m.addAction("Xoá danh sách (không xoá file)", self.clear_list)
         self.more_btn.setMenu(m)
+        bar.addWidget(self.selected_label)
+        bar.addWidget(self.opts_summary, 1)
+        bar.addWidget(self.more_btn)
+        bar.addWidget(self.open_btn)
+        bar.addWidget(self.start_btn)
+        self.run_bar = QProgressBar()  # tiến độ cả lượt tải (chạy mượt), chỉ hiện khi đang tải
+        self.run_bar.setRange(0, 1000)
+        self.run_bar.setTextVisible(False)
+        self.run_bar.setFixedHeight(theme.px(6))
+        self.run_bar.hide()
+        self._run_anim = QPropertyAnimation(self.run_bar, b"value", self)
+        self._run_anim.setDuration(260)
+        lay.addWidget(self.run_bar)
         lay.addLayout(bar)
-
-        orow = QHBoxLayout()
-        self.opts_btn = QPushButton("Tuỳ chỉnh")
-        theme.tag(self.opts_btn, variant="ghost")
-        self.opts_btn.setCheckable(True)
-        self.opts_btn.setIcon(icons.icon("sliders", 14))
-        self.opts_btn.toggled.connect(self._toggle_opts)
-        self.opts_summary = w.ElidedLabel("")
-        self.opts_summary.setObjectName("muted")
-        orow.addWidget(self.opts_btn)
-        orow.addWidget(self.opts_summary, 1)
-        orow.addWidget(self.start_btn)
-        orow.addWidget(self.open_btn)
-        orow.addWidget(self.more_btn)
-        lay.addLayout(orow)
-        self.opts_panel = self._build_opts()
-        lay.addWidget(self.opts_panel)
-        self.tool_label = w.muted("")
-        lay.addWidget(self.tool_label)
 
         open_ = str(self.settings.value("download/opts_open", "false")).lower() in ("true", "1")
         self.opts_panel.setVisible(open_)
@@ -237,44 +442,170 @@ class DownloadPage(QWidget):
         sc.setContext(Qt.ShortcutContext.WidgetWithChildrenShortcut)
         sc.activated.connect(self._paste)
 
-    def _build_opts(self) -> QWidget:
+    def _build_empty(self) -> QWidget:
         box = QGroupBox()
-        g = QGridLayout(box)
-        g.setContentsMargins(14, 12, 14, 12)
-        g.setHorizontalSpacing(theme.px(14))
-        self.fmt_box = combo(downloader.FORMAT_LABELS, self.opts.fmt)
+        v = QVBoxLayout(box)
+        v.setContentsMargins(24, 24, 24, 24)
+        v.setSpacing(theme.SP['md'])
+        v.addStretch(1)
+        ic = QLabel()
+        icons.bind(ic, "download", 44, "accent_text")
+        ic.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        title = QLabel("Chưa có video nào")
+        title.setObjectName("h2")
+        title.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        steps = QLabel("<b>1.</b> Dán link vào ô phía trên &nbsp;&nbsp; <b>2.</b> Bấm <b>Đọc link</b> để xem trước "
+                       "&nbsp;&nbsp; <b>3.</b> Tick video muốn lấy rồi bấm <b>Tải</b>")
+        steps.setObjectName("muted")
+        steps.setWordWrap(True)
+        steps.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        hint = w.muted("Link kênh hoặc danh sách phát: app hiện cả nhóm, tick sẵn 50 video đầu.")
+        hint.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        for x in (ic, title, steps, hint):
+            v.addWidget(x)
+        v.addStretch(1)
+        return box
+
+    def _build_loading(self) -> QWidget:
+        box = QGroupBox()
+        v = QVBoxLayout(box)
+        v.addStretch(1)
+        self.big_spinner = Spinner(theme.px(44))
+        v.addWidget(self.big_spinner, 0, Qt.AlignmentFlag.AlignHCenter)
+        self.loading_label = QLabel("Đang đọc link…")
+        self.loading_label.setObjectName("h2")
+        self.loading_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        v.addWidget(self.loading_label)
+        sub = w.muted("Đang lấy tên, ảnh nhỏ, thời lượng — chưa tải gì. Link kênh có thể mất vài giây.")
+        sub.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        v.addWidget(sub)
+        v.addStretch(1)
+        return box
+
+    def _section(self, lay: QVBoxLayout, text: str) -> None:
+        lab = QLabel(text)
+        lab.setObjectName("sectionLabel")
+        lay.addSpacing(theme.SP['xs'])
+        lay.addWidget(lab)
+
+    def _build_side(self) -> QWidget:
+        card = QGroupBox("Cài đặt tải")
+        v = QVBoxLayout(card)
+        v.setContentsMargins(14, 30, 14, 14)
+        v.setSpacing(theme.SP['xs'])
+        self._section(v, "Định dạng")
+        self.fmt_box = Segmented(downloader.FORMAT_LABELS, self.opts.fmt, downloader.FORMAT_TIPS)
+        v.addWidget(self.fmt_box)
+        self._section(v, "Chất lượng")
+        self.quality_box = Segmented(downloader.QUALITY_LABELS, self.opts.quality,
+                                     {"best": "Nét nhất trang có. YouTube trên 1080p là VP9 / AV1 — với MP4 + "
+                                              "\"Luôn ra H.264\" app tự chuyển để mở được mọi phần mềm."})
+        self.audio_box = Segmented(downloader.AUDIO_Q_LABELS, self.opts.audio_q)
+        v.addWidget(self.quality_box)
+        v.addWidget(self.audio_box)
+        self.h264_chk = QCheckBox("Luôn ra H.264")
+        self.h264_chk.setToolTip("Trang chỉ có H.265 / AV1 / VP9 (TikTok, Bilibili, YouTube 2K/4K…) → tải xong app tự "
+                                 "chuyển sang H.264 bằng card đồ hoạ, để mở được mọi phần mềm dựng. "
+                                 "Tắt nếu muốn giữ nguyên bản gốc.")
+        self.h264_chk.setChecked(self.opts.h264)
+        v.addWidget(self.h264_chk)
+
+        self._section(v, "Lưu vào")
+        frow = QHBoxLayout()
+        frow.setSpacing(6)
+        fic = QLabel()
+        icons.bind(fic, "folder", 15, "accent_text")
+        self.folder_label = w.ElidedLabel("", Qt.TextElideMode.ElideMiddle)
+        self.folder_btn = QPushButton("Đổi")
+        theme.tag(self.folder_btn, variant="ghost")
+        self.folder_btn.clicked.connect(self.pick_folder)
+        frow.addWidget(fic)
+        frow.addWidget(self.folder_label, 1)
+        frow.addWidget(self.folder_btn)
+        v.addLayout(frow)
+
+        self._section(v, "Đăng nhập")
+        self.login_box = combo(downloader.LOGINS, str(self.settings.value("download/login", "") or ""))
+        self.login_box.setToolTip("Dùng đăng nhập từ trình duyệt cho trang bắt đăng nhập. Firefox chắc chắn nhất; "
+                                  "Chrome / Edge hay bị Windows chặn — khi đó dùng file đăng nhập (cookies.txt).")
+        self._login_prev = self.login_box.currentIndex()
+        self.login_box.currentIndexChanged.connect(self._login_changed)
+        v.addWidget(self.login_box)
+
+        self._section(v, "Lưu kèm")
+        self.thumb_chk = QCheckBox("Ảnh bìa (.jpg)")
+        self.thumb_chk.setToolTip("Lưu ảnh bìa (thumbnail) của video thành file .jpg cạnh video")
+        self.desc_chk = QCheckBox("Mô tả (.txt)")
+        self.desc_chk.setToolTip("Ghi tiêu đề, kênh, ngày đăng, link và mô tả của video ra file .txt cạnh video")
+        self.open_after_chk = QCheckBox("Mở thư mục khi xong")
+        for c, val in ((self.thumb_chk, self.opts.thumb), (self.desc_chk, self.opts.desc),
+                       (self.open_after_chk, self.opts.open_after)):
+            c.setChecked(val)
+            v.addWidget(c)
+
+        v.addSpacing(theme.SP['sm'])
+        self.opts_btn = QPushButton("Nâng cao")
+        theme.tag(self.opts_btn, variant="ghost")
+        self.opts_btn.setCheckable(True)
+        self.opts_btn.setIcon(icons.icon("sliders", 14))
+        self.opts_btn.setToolTip("Phụ đề, tên file, thư mục con, tải cùng lúc, giới hạn tốc độ…")
+        self.opts_btn.toggled.connect(self._toggle_opts)
+        v.addWidget(self.opts_btn, 0, Qt.AlignmentFlag.AlignLeft)
+        self.opts_panel = self._build_opts()
+        v.addWidget(self.opts_panel)
+        v.addStretch(1)
+        self.tool_label = w.muted("")
+        v.addWidget(self.tool_label)
+
+        for name, sb in (("fmt", self.fmt_box), ("quality", self.quality_box), ("audio_q", self.audio_box)):
+            sb.currentIndexChanged.connect(lambda _i, n=name, b=sb: self._set_opt(n, b.currentData()))
+        for name, c in (("h264", self.h264_chk), ("thumb", self.thumb_chk), ("desc", self.desc_chk),
+                        ("open_after", self.open_after_chk)):
+            c.toggled.connect(lambda on, n=name: self._set_opt(n, bool(on)))
+        return card
+
+    def _build_opts(self) -> QWidget:
+        box = QWidget()
+        f = QFormLayout(box)
+        f.setContentsMargins(0, 4, 0, 0)
+        f.setRowWrapPolicy(QFormLayout.RowWrapPolicy.WrapAllRows)  # nhãn nằm trên ô: cột hẹp vẫn đủ chỗ
         self.subs_box = combo(downloader.SUBS_LABELS, self.opts.subs)
         self.subs_box.setToolTip("Phụ đề tiếng Việt / tiếng Anh (kể cả phụ đề tự tạo) nếu video có")
         self.name_box = combo(downloader.NAME_LABELS, self.opts.name)
-        self.name_box.setToolTip("Cuối tên luôn có [mã video] để app nhận ra video đã tải, không tải trùng")
+        self.name_box.setToolTip("Cuối tên luôn có [mã video] để app nhận ra video đã tải, không tải trùng. "
+                                 "\"Số thứ tự\" dùng cho video trong danh sách phát / kênh.")
         self.subdir_box = combo(downloader.SUBDIR_LABELS, self.opts.subdir)
         self.conc_box = combo([(n, f"{n} video") for n in downloader.CONCURRENT], self.opts.concurrent)
         self.rate_box = combo(downloader.RATE_LABELS, self.opts.rate)
         self.rate_box.setToolTip("Giới hạn tốc độ mỗi video — để mạng văn phòng không bị nghẽn")
         self.page_box = combo([(n, f"{n} video") for n in downloader.PAGE_SIZES], self.opts.page)
         self.page_box.setToolTip("Link kênh / danh sách phát: mỗi lần đọc (và mỗi lần Hiện thêm) lấy bao nhiêu video")
-        self.embed_chk = QCheckBox("Ghi thông tin vào file")
+        self.max_box = combo(downloader.MAX_MIN_LABELS, self.opts.max_minutes)
+        for cb in (self.subs_box, self.name_box, self.subdir_box, self.max_box, self.login_box):
+            cb.setMinimumContentsLength(6)
+        self.max_box.setToolTip("Khi đọc kênh / danh sách phát: video dài hơn mức này được bỏ tick sẵn "
+                                "(vẫn tick lại được)")
+        self.embed_chk = QCheckBox("Ghi thông tin")
+        self.embed_chk.setMinimumWidth(0)
         self.embed_chk.setToolTip("Ghi tiêu đề, kênh, mô tả và ảnh bìa vào trong file video / nhạc")
         self.embed_chk.setChecked(self.opts.embed)
         self.extra_edit = QLineEdit(self.opts.extra)
-        self.extra_edit.setPlaceholderText('Tham số thêm cho yt-dlp (cho người rành) — vd --match-filter "duration < 600"')
-        self.extra_edit.setToolTip("Nối vào cuối lệnh yt-dlp. Gõ sai có thể làm tải lỗi — để trống nếu không chắc.")
+        self.extra_edit.setPlaceholderText("vd --no-mtime")
+        self.extra_edit.setToolTip("Tham số thêm cho yt-dlp (cho người rành), nối vào cuối lệnh. "
+                                   "Gõ sai có thể làm tải lỗi — để trống nếu không chắc.")
         self.reset_opts_btn = QPushButton("Về mặc định")
         theme.tag(self.reset_opts_btn, variant="ghost")
         self.reset_opts_btn.clicked.connect(self.reset_opts)
-        cells = (("Định dạng", self.fmt_box), ("Phụ đề", self.subs_box), ("Tên file", self.name_box),
-                 ("Thư mục con", self.subdir_box), ("Tải cùng lúc", self.conc_box), ("Giới hạn tốc độ", self.rate_box),
-                 ("Mỗi lần đọc kênh", self.page_box))
-        for i, (label, wid) in enumerate(cells):  # 3 cột: vừa cả cửa sổ hẹp, không tràn ngang
-            r, c = divmod(i, 3)
-            g.addWidget(QLabel(label), r * 2, c)
-            g.addWidget(wid, r * 2 + 1, c)
-        g.addWidget(self.embed_chk, 5, 1, 1, 2)
-        g.addWidget(self.extra_edit, 6, 0, 1, 2)
-        g.addWidget(self.reset_opts_btn, 6, 2)
-        for name, cb in (("fmt", self.fmt_box), ("subs", self.subs_box), ("name", self.name_box),
-                          ("subdir", self.subdir_box), ("concurrent", self.conc_box), ("rate", self.rate_box),
-                          ("page", self.page_box)):
+        for label, wid in (("Phụ đề", self.subs_box), ("Tên file", self.name_box), ("Thư mục con", self.subdir_box),
+                           ("Tải cùng lúc", self.conc_box), ("Giới hạn tốc độ", self.rate_box),
+                           ("Mỗi lần đọc kênh", self.page_box), ("Bỏ tick video dài hơn", self.max_box)):
+            f.addRow(label, wid)
+        f.addRow(self.embed_chk)
+        f.addRow("Tham số thêm", self.extra_edit)
+        f.addRow(self.reset_opts_btn)
+        for name, cb in (("subs", self.subs_box), ("name", self.name_box), ("subdir", self.subdir_box),
+                         ("concurrent", self.conc_box), ("rate", self.rate_box), ("page", self.page_box),
+                         ("max_minutes", self.max_box)):
             cb.currentIndexChanged.connect(lambda _i, n=name, b=cb: self._set_opt(n, b.currentData()))
         self.embed_chk.toggled.connect(lambda on: self._set_opt("embed", bool(on)))
         self.extra_edit.editingFinished.connect(lambda: self._set_opt("extra", self.extra_edit.text().strip()))
@@ -294,18 +625,27 @@ class DownloadPage(QWidget):
         self._syncing = True
         try:
             for box, val in ((self.fmt_box, self.opts.fmt), (self.quality_box, self.opts.quality),
+                             (self.audio_box, self.opts.audio_q),
                              (self.subs_box, self.opts.subs), (self.name_box, self.opts.name),
                              (self.subdir_box, self.opts.subdir), (self.conc_box, self.opts.concurrent),
-                             (self.rate_box, self.opts.rate), (self.page_box, self.opts.page)):
+                             (self.rate_box, self.opts.rate), (self.page_box, self.opts.page),
+                             (self.max_box, self.opts.max_minutes)):
                 i = box.findData(val)
                 if i >= 0 and box.currentIndex() != i:
                     box.setCurrentIndex(i)
-            self.embed_chk.setChecked(self.opts.embed)
+            for c, val in ((self.embed_chk, self.opts.embed), (self.h264_chk, self.opts.h264),
+                           (self.thumb_chk, self.opts.thumb), (self.desc_chk, self.opts.desc),
+                           (self.open_after_chk, self.opts.open_after)):
+                c.setChecked(val)
             if self.extra_edit.text() != self.opts.extra:
                 self.extra_edit.setText(self.opts.extra)
         finally:
             self._syncing = False
-        self.quality_box.setEnabled(self.opts.fmt == "mp4")
+        video = self.opts.fmt in ("mp4", "mkv")
+        self.quality_box.setVisible(video)
+        self.quality_box.setEnabled(video)
+        self.audio_box.setVisible(self.opts.fmt == "mp3")
+        self.h264_chk.setVisible(self.opts.fmt == "mp4")
         self.opts_summary.setText(downloader.summary(self.opts))
 
     def reset_opts(self) -> None:
@@ -444,7 +784,8 @@ class DownloadPage(QWidget):
         text = self.links_edit.toPlainText()
         links = downloader.split_links(text)
         bad = downloader.count_non_links(text)
-        self.info_label.setText(f"Bỏ qua {bad} dòng không phải link." if bad else "")
+        self._skip_note = f"Bỏ qua {bad} dòng không phải link." if bad else ""
+        self.info_label.setText(self._skip_note)
         if not links or not self.ready() or self._reading:
             return
         self.links_edit.clear()
@@ -453,6 +794,8 @@ class DownloadPage(QWidget):
     def _read(self, links: list[str]) -> None:
         self._reading = True
         self.read_btn.setEnabled(False)
+        self._read_total, self._read_count = len(links), 0
+        self._show_reading()
         login, cookies = self.login()
         exe, deno, page = self._exe(), str(dl_tools.deno_path()), self.opts.page
 
@@ -475,11 +818,28 @@ class DownloadPage(QWidget):
             self.b.read_done.emit()
         threading.Thread(target=run, daemon=True).start()
 
+    def _show_reading(self) -> None:
+        on = self._reading
+        self.read_btn.setText("Đang đọc…" if on else "Đọc link")
+        if on:
+            self.read_spinner.start()
+            self.big_spinner.start()
+            n = f" {self._read_count + 1}/{self._read_total}" if self._read_total > 1 else ""
+            self.info_label.setText(f"Đang đọc{n} link…")
+            self.loading_label.setText(f"Đang đọc{n} link…")
+        else:
+            self.read_spinner.stop()
+            self.big_spinner.stop()
+        self._update_counts()
+
     def _on_info(self, link: str, res, err: str) -> None:
+        self._read_count += 1
+        if self._reading and self._read_count < self._read_total:
+            self._show_reading()
         if isinstance(res, downloader.Group):
             if res.url in self.queue.groups:
                 return
-            self.queue.add_group(res, self.opts.page)
+            self.queue.add_group(res, self.opts.page, self.opts.max_minutes * 60)
             for e in self.queue.entries:
                 if e.group == res.url:
                     self._add_row(e)
@@ -500,6 +860,9 @@ class DownloadPage(QWidget):
 
     def _on_read_done(self) -> None:
         self._reading = False
+        if self.info_label.text().startswith("Đang đọc"):
+            self.info_label.setText(getattr(self, "_skip_note", ""))
+        self._show_reading()
         self._refresh_ready()
 
     def show_more(self, group_url: str) -> None:
@@ -511,6 +874,8 @@ class DownloadPage(QWidget):
         login, cookies = self.login()
         exe, deno = self._exe(), str(dl_tools.deno_path())
         start, end = gi.loaded + 1, gi.loaded + self.opts.page
+        self._read_total, self._read_count = 1, 0
+        self._show_reading()
 
         def run() -> None:
             try:
@@ -528,7 +893,7 @@ class DownloadPage(QWidget):
         if items is None:
             self.notice.emit(f"Không đọc thêm được: {err}", "warn")
             return
-        for e in self.queue.extend_group(group_url, items, self.opts.page):
+        for e in self.queue.extend_group(group_url, items, self.opts.page, self.opts.max_minutes * 60):
             self._add_row(e)
         self._refresh_group(group_url)
         self._changed()
@@ -632,6 +997,8 @@ class DownloadPage(QWidget):
             tone = "danger_text"
         row.setText(3, text)
         row.setForeground(3, theme.qcolor(tone))
+        if e.status != "running":
+            row.setData(3, PROG_ROLE, None)
         self._updating_tree = False
 
     def _on_item_changed(self, row: QTreeWidgetItem, col: int) -> None:
@@ -804,10 +1171,50 @@ class DownloadPage(QWidget):
         if on == self._busy:
             return
         self._busy = on
-        self.start_btn.setText("Dừng" if on else "Tải đã chọn")
         theme.tag(self.start_btn, variant="danger" if on else "primary")
-        self.start_btn.setIcon(icons.icon("stop" if on else "download", 15, "danger_text" if on else "white"))
+        self.start_btn.setIcon(icons.icon("stop" if on else "download", 16, "danger_text" if on else "white"))
+        if on:
+            self.run_bar.setValue(0)
+            self.run_bar.show()
+            self._anim.start()
+        else:
+            self._anim.stop()
+            self._fracs.clear()
+            self.run_bar.hide()
+        self._update_counts()
         self.busyChanged.emit(on)
+
+    def set_encoders(self, available: dict) -> None:
+        """Cửa sổ chính dò xong card đồ hoạ: chuyển sang H.264 bằng NVENC / QSV / AMF nếu có."""
+        from ..core import encoders
+        self._h264_enc = encoders.pick("h264", "auto", available)
+
+    def _update_counts(self) -> None:
+        """Nút Tải ghi rõ số video đã chọn; danh sách trống → hướng dẫn 3 bước."""
+        n = self.queue.remaining()
+        if self._busy:
+            self.start_btn.setText("Dừng")
+        else:
+            self.start_btn.setText(f"Tải {n} video" if n else "Tải video")
+        has = bool(self.queue.entries)
+        self.selected_label.setText((f"Đã chọn {n} video" if n else "Chưa chọn video nào") if has else "")
+        self.list_stack.setCurrentWidget(self.tree if has else (self.loading_view if self._reading
+                                                                  else self.empty_view))
+        self._update_run_bar()
+
+    def _update_run_bar(self) -> None:
+        """Thanh tổng: (video đã xong trong lượt + phần đã tải của video đang tải) / tổng video của lượt."""
+        if not self._busy:
+            return
+        total = self._run_done + self.queue.remaining()
+        if total <= 0:
+            return
+        val = int(1000 * (self._run_done + sum(max(0.0, f) for f in self._fracs.values())) / total)
+        if abs(val - self.run_bar.value()) >= 3:
+            self._run_anim.stop()
+            self._run_anim.setStartValue(self.run_bar.value())
+            self._run_anim.setEndValue(max(0, min(1000, val)))
+            self._run_anim.start()
 
     def start(self) -> None:
         if self._busy or not self.ready():
@@ -820,6 +1227,7 @@ class DownloadPage(QWidget):
             if not self.pick_folder() or not ffmpeg_tools.usable_dir(self.folder()):
                 return
         self._stopping = False
+        self._run_done = 0
         self._set_busy(True)
         self._fill()
 
@@ -853,6 +1261,9 @@ class DownloadPage(QWidget):
     def _launch(self, e: dq.Entry, folder: str) -> None:
         e.status, e.message = "running", ""
         self._paint(e)
+        row = self._row(e)
+        if row is not None:
+            row.setData(3, PROG_ROLE, -1.0)  # đang bắt đầu: khúc sáng chạy qua lại
         self._changed()
         cancel = threading.Event()
         self._cancels[id(e)] = cancel
@@ -861,14 +1272,31 @@ class DownloadPage(QWidget):
             ff = ffmpeg_tools.ffmpeg()
         except FileNotFoundError:
             ff = "ffmpeg"
-        args = downloader.download_args(e.url, folder, Options(**vars(self.opts)), login, cookies, ff,
-                                        str(dl_tools.deno_path()), e.section)
-        exe = self._exe()
+        opts = Options(**vars(self.opts))
+        args = downloader.download_args(e.url, folder, opts, login, cookies, ff,
+                                        str(dl_tools.deno_path()), e.section, e.index)
+        exe, enc = self._exe(), self._h264_enc
 
         def run() -> None:
             try:
                 res = downloader.run_download(exe, args, lambda p: self.b.progress.emit(e, p),
                                               lambda s: self.b.stage.emit(e, s), cancel, login, e.vid)
+                if opts.desc and res.meta:
+                    try:
+                        downloader.write_meta_txt(res.path, res.meta)
+                    except OSError:
+                        pass
+                if downloader.needs_h264(opts, res.codec):  # trang chỉ có H.265 / AV1 / VP9 → chuyển sang H.264
+                    self.b.stage.emit(e, "Đang chuyển sang H.264…")
+                    try:
+                        res.path = downloader.convert_to_h264(
+                            res.path, enc, cancel,
+                            lambda f: self.b.stage.emit(e, f"Đang chuyển sang H.264… {int(f * 100)}%"))
+                        res.codec = ""
+                    except downloader.CancelledError:
+                        raise
+                    except Exception:  # noqa: BLE001 — chuyển không được: giữ bản gốc, cột trạng thái ghi codec
+                        pass
                 self.b.finished.emit(e, res, "", "")
             except downloader.CancelledError:
                 self.b.finished.emit(e, None, CANCELLED, "")
@@ -884,17 +1312,30 @@ class DownloadPage(QWidget):
         pct = f"{p.done * 100 // p.total}%" if p.total else f"{p.done / (1 << 20):.0f} MB"
         sp = fmt_speed(p.speed)
         self._paint(e, pct + (f" · {sp}" if sp else ""))
+        row = self._row(e)
+        frac = (p.done / p.total) if p.total else -1.0
+        self._fracs[id(e)] = max(0.0, frac)
+        if row is not None:
+            row.setData(3, PROG_ROLE, frac)
+        self._update_run_bar()
 
     def _on_stage(self, e: dq.Entry, text: str) -> None:
         if e.status == "running":
             self._paint(e, text)
+            m = re.search(r"(\d+)%", text)
+            row = self._row(e)
+            if row is not None:
+                row.setData(3, PROG_ROLE, int(m.group(1)) / 100 if m else -1.0)
 
     def _on_finished(self, e: dq.Entry, res, friendly: str, stderr: str) -> None:
         self._cancels.pop(id(e), None)
+        self._fracs.pop(id(e), None)
         if friendly == CANCELLED:
             e.status = "pending"
         elif res is not None:
             e.status, e.path, e.codec = "done", res.path, res.codec
+            self._run_done += 1
+            self._flash(e)
         else:
             e.status, e.message = "error", friendly
             row = self._row(e)
@@ -917,6 +1358,28 @@ class DownloadPage(QWidget):
         else:
             self._fill()
 
+    def _flash(self, e: dq.Entry) -> None:
+        """Dòng vừa tải xong loé xanh rồi nhạt dần (~0,9 giây)."""
+        row = self._row(e)
+        self.flashed.append(e.vid)
+        if row is None:
+            return
+        anim = QVariantAnimation(self)
+        anim.setDuration(900)
+        anim.setStartValue(1.0)
+        anim.setEndValue(0.0)
+
+        def step(v) -> None:
+            if self._row(e) is not row:
+                return
+            brush = QBrush(theme.qcolor("success_text", int(70 * float(v)))) if float(v) > 0.02 else QBrush()
+            for c in range(self.tree.columnCount()):
+                row.setBackground(c, brush)
+        anim.valueChanged.connect(step)
+        anim.finished.connect(lambda: (step(0.0), self._flash_anims.pop(id(e), None)))
+        self._flash_anims[id(e)] = anim
+        anim.start(QAbstractAnimation.DeletionPolicy.DeleteWhenStopped)
+
     def _finish_run(self) -> None:
         self.queue.stop_all()
         for e in self.queue.entries:
@@ -933,9 +1396,11 @@ class DownloadPage(QWidget):
             self.notice.emit(halt if halt != downloader.TOOL_BLOCKED else
                              "Công cụ tải bị chặn hoặc hỏng — bấm Cài lại công cụ tải", "warn")
         elif was and not stopped:
-            done = sum(1 for e in self.queue.entries if e.status == "done")
             bad = sum(1 for e in self.queue.entries if e.status == "error" and e.checked)
-            self.notice.emit(f"Tải xong: {done} video" + (f", {bad} lỗi" if bad else ""), "warn" if bad else "ok")
+            self.notice.emit(f"Tải xong: {self._run_done} video" + (f", {bad} lỗi" if bad else ""),
+                             "warn" if bad else "ok")
+            if self.opts.open_after and self._run_done:
+                w.open_with_default_app(self.folder())
         if self._want_update and not self._exe_override:
             self._check_update(force=True)
 
@@ -951,8 +1416,19 @@ class DownloadPage(QWidget):
 
     def _changed(self) -> None:
         self.counterChanged.emit(self.queue.counter_text())
+        self._update_counts()
         self.save()
 
     def adapt(self, width: int, height: int = 0) -> None:
-        """Hẹp: ẩn cột Thời lượng cho cột tên đủ chỗ."""
+        """Rộng: Cài đặt tải là cột bên phải. Hẹp: xếp xuống dưới danh sách, ẩn cột Thời lượng."""
+        narrow = width < theme.px(900)
+        if narrow:
+            self.body.setDirection(QBoxLayout.Direction.TopToBottom)
+            self.side_scroll.setMinimumWidth(0)
+            self.side_scroll.setMaximumWidth(16777215)
+            self.side_scroll.setMinimumHeight(self.side_card.sizeHint().height())
+        else:
+            self.body.setDirection(QBoxLayout.Direction.LeftToRight)
+            self.side_scroll.setMinimumHeight(0)
+            self.side_scroll.setFixedWidth(theme.px(345))
         self.tree.setColumnHidden(2, width < theme.px(760))

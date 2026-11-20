@@ -485,6 +485,25 @@ class MainWindow(QMainWindow):
         self._side_buttons.append((home_btn, "home", "Bắt đầu"))
         self.nav.addButton(home_btn, HOME_PAGE)
         sv.addWidget(home_btn)
+        self.download_btn = QPushButton("  Tải video")
+        self.download_btn.setObjectName("nav")
+        self.download_btn.setIcon(icons.icon("download", 16))
+        self.download_btn.setIconSize(QSize(16, 16))
+        self.download_btn.setCheckable(True)
+        self.download_btn.setToolTip("Tải video YouTube, TikTok, Bilibili, X, Facebook, Instagram… về máy")
+        self._side_buttons.append((self.download_btn, "download", "Tải video"))
+        self.nav.addButton(self.download_btn, DOWNLOAD_PAGE)
+        sv.addWidget(self.download_btn)
+        self.download_tool_new = None
+        if str(self.settings.value("new/download_seen", "")) != "1":
+            inner = QHBoxLayout(self.download_btn)  # nhãn MỚI nằm trong nút (tới khi mở trang lần đầu)
+            inner.setContentsMargins(0, 0, 8, 0)
+            inner.addStretch(1)
+            self.download_tool_new = QLabel("MỚI")
+            self.download_tool_new.setObjectName("newTag")
+            self.download_tool_new.setFixedHeight(18)
+            self.download_tool_new.setMinimumWidth(self.download_tool_new.sizeHint().width())
+            inner.addWidget(self.download_tool_new, 0, Qt.AlignmentFlag.AlignVCenter)
         sv.addSpacing(6)
         sv.addWidget(lbl_steps)
 
@@ -520,25 +539,6 @@ class MainWindow(QMainWindow):
         lab.setObjectName("sectionLabel")
         self.project_label = lab
         sv.addWidget(lab)
-        self.download_btn = QPushButton("  Tải video")
-        self.download_btn.setObjectName("nav")
-        self.download_btn.setIcon(icons.icon("download", 15))
-        self.download_btn.setIconSize(QSize(15, 15))
-        self.download_btn.setCheckable(True)
-        self.download_btn.setToolTip("Tải video YouTube, TikTok, Bilibili, X, Facebook, Instagram… về máy")
-        self._side_buttons.append((self.download_btn, "download", "Tải video"))
-        self.nav.addButton(self.download_btn, DOWNLOAD_PAGE)
-        sv.addWidget(self.download_btn)
-        self.download_tool_new = None
-        if str(self.settings.value("new/download_seen", "")) != "1":
-            inner = QHBoxLayout(self.download_btn)  # nhãn MỚI nằm trong nút (tới khi mở trang lần đầu)
-            inner.setContentsMargins(0, 0, 8, 0)
-            inner.addStretch(1)
-            self.download_tool_new = QLabel("MỚI")
-            self.download_tool_new.setObjectName("newTag")
-            self.download_tool_new.setFixedHeight(18)
-            self.download_tool_new.setMinimumWidth(self.download_tool_new.sizeHint().width())
-            inner.addWidget(self.download_tool_new, 0, Qt.AlignmentFlag.AlignVCenter)
         # Mới / Mở / Lưu đã có trên thanh trên cùng — thanh bên chỉ giữ công cụ riêng
         for ic_name, text, fn in (("folder", "Xuất hàng loạt…", self.batch_from_folders),
                                   ("waves", "Lọc tạp âm…", self.open_denoise)):
@@ -610,6 +610,7 @@ class MainWindow(QMainWindow):
 
         proj_bar = QHBoxLayout()
         proj_bar.setSpacing(2)
+        self._proj_btns: list[QPushButton] = []
         for ic_name, text, tip, fn in (
             ("plus", "Mới", "Dự án mới (Ctrl+N)", self.new_project),
             ("folder", "Mở", "Mở dự án .lsproj (Ctrl+O)", self.open_project),
@@ -626,6 +627,7 @@ class MainWindow(QMainWindow):
             tb.setAccessibleName(text)
             tb.clicked.connect(fn)
             proj_bar.addWidget(tb)
+            self._proj_btns.append(tb)
         hv.addLayout(proj_bar)
         # hồ sơ kênh: chọn kênh là áp cả bộ intro / outro, logo, nhạc, mẫu bảng, nơi lưu…
         self.profile_btn = QPushButton("Kênh: chưa chọn")
@@ -711,6 +713,14 @@ class MainWindow(QMainWindow):
         self.tl_toggle.clicked.connect(lambda on: (self.settings.setValue("ui/timeline_dock", "on" if on else "off"),
                                                    setattr(self, "_tl_user", True)))
         hv.addWidget(self.tl_toggle)
+        # trang Tải video không dùng dự án: ẩn tên dự án / Kênh / kiểu sản phẩm / số liệu, hiện tiêu đề trang
+        self._project_header = [hv.itemAt(i).widget() for i in range(hv.count())
+                                if hv.itemAt(i).widget() is not None and hv.itemAt(i).widget() is not self.tl_toggle]
+        self._project_header += self._proj_btns
+        self.page_title = QLabel("<b>Tải video</b> &nbsp;·&nbsp; YouTube, TikTok, Bilibili, X, Facebook, Instagram…")
+        self.page_title.setObjectName("h2")
+        self.page_title.hide()
+        hv.insertWidget(0, self.page_title, 1)
 
         # Thanh dòng thời gian dùng chung cho cả 3 bước (Video, Nhạc, Xuất) — nằm ở đáy như CapCut / Premiere
         self.timeline_wrap = QWidget()
@@ -1005,7 +1015,11 @@ class MainWindow(QMainWindow):
         if index == 4:
             _ = self.help_page
         self.stack.setCurrentIndex(index)
-        if index == DOWNLOAD_PAGE:
+        dl = index == DOWNLOAD_PAGE
+        for wd in self._project_header:
+            wd.setVisible(not dl)
+        self.page_title.setVisible(dl)
+        if dl:
             self._download_seen()
             self.download_page.shown()
         if btn is not None:
@@ -1815,6 +1829,7 @@ class MainWindow(QMainWindow):
 
     def _on_encoders(self, available: dict) -> None:
         self.export_tab.set_available(available)
+        self.download_page.set_encoders(available)  # chuyển sang H.264 bằng card đồ hoạ
         self.gpu_label.setText(self.export_tab.gpu_text())
         self.recompute()
         QTimer.singleShot(1500, self._maybe_resume_queue)

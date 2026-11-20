@@ -25,6 +25,8 @@ def opt(flag, default=""):
 
 
 if "-J" in args:
+    if os.environ.get("FAKE_YTDLP_SLOW_INFO"):
+        time.sleep(float(os.environ["FAKE_YTDLP_SLOW_INFO"]))
     if mode == "fail_login":
         sys.stderr.write("ERROR: [instagram] x: login required\n")
         sys.exit(1)
@@ -32,7 +34,8 @@ if "-J" in args:
         start, end = int(opt("--playlist-start", "1")), int(opt("--playlist-end", "50"))
         total = 120
         entries = [{"id": f"{vid}{i}", "title": f"Video {i}", "url": f"https://y/{vid}{i}", "ie_key": "Youtube",
-                    "duration": 30 + i} for i in range(start, min(end, total) + 1)]
+                    "duration": (7200 if os.environ.get("FAKE_YTDLP_LONG") and i % 2 == 0 else 30 + i)}
+                   for i in range(start, min(end, total) + 1)]
         data = {"_type": "playlist", "title": "Danh sách " + vid, "playlist_count": total,
                 "extractor_key": "YoutubeTab", "webpage_url": url, "entries": entries}
         if os.environ.get("FAKE_YTDLP_NOCOUNT"):
@@ -78,4 +81,4 @@ time.sleep(0.1)
 if any(a.startswith("after_move:KTLS_META|") for a in args):
     print("KTLS_META|" + json.dumps({"title": title, "uploader": "Kênh A", "webpage_url": url, "upload_date": "20261120",
                                      "description": "Dòng mô tả 1\nmô tả dòng 2"}, ensure_ascii=False), flush=True)
-print(f"KTLS_FILE|{folder / name}|avc1.640028", flush=True)
+print(f"KTLS_FILE|{folder / name}|{os.environ.get('FAKE_YTDLP_CODEC', 'avc1.640028')}", flush=True)

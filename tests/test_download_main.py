@@ -156,3 +156,28 @@ def test_help_topic_group_listed():
     """Soát cuối (help_check): nhóm của chủ đề Tải video phải có trong danh sách nhóm của trang Hướng dẫn."""
     from loopstation.ui import help_page
     assert {t[1] for t in help_page.TOPICS} <= set(help_page.GROUPS)
+
+
+def test_download_is_prominent(win):
+    """2c: Tải video là mục riêng ngay dưới Bắt đầu (không lẫn trong Công cụ); thẻ lớn riêng ở trang Bắt đầu."""
+    sv = win.side.layout()
+    order = [sv.itemAt(i).widget() for i in range(sv.count()) if sv.itemAt(i).widget() is not None]
+    i_home = next(i for i, x in enumerate(order) if x is win.nav.button(5))
+    assert order.index(win.download_btn) < order.index(win.steps_label)
+    assert order.index(win.download_btn) > i_home
+    assert not win.home.cards["download"].property("compact")
+
+
+def test_header_shows_page_title_on_download(win):
+    win.go_to(6)
+    pump()
+    assert win.page_title.isVisible() and "Tải video" in win.page_title.text()
+    assert not win.name_edit.isVisible() and not win.mode_box.isVisible() and not win.profile_btn.isVisible()
+    win.go_to(0)
+    pump()
+    assert not win.page_title.isVisible() and win.name_edit.isVisible() and win.mode_box.isVisible()
+
+
+def test_encoders_reach_download_page(win):
+    win._on_encoders({"h264": ["nvidia", "cpu"], "hevc": ["cpu"], "audio": []})
+    assert win.download_page._h264_enc == "h264_nvenc"

@@ -275,3 +275,125 @@ def test_page_fits_without_horizontal_scroll(page):
     page.opts_btn.setChecked(True)
     pump()
     assert page.minimumSizeHint().width() <= 960
+
+
+# ---------- 2c: giao diện mới + tuỳ chọn mới ----------
+def test_empty_state_then_list(page):
+    assert page.list_stack.currentWidget() is page.empty_view
+    read(page, "https://y/e9")
+    assert page.list_stack.currentWidget() is page.tree
+
+
+def test_start_button_counts_selected(page):
+    read(page, "https://y/b1\nhttps://y/b2")
+    assert "Tải 2 video" in page.start_btn.text() and "Đã chọn 2" in page.selected_label.text()
+    page.queue.entries[0].checked = False
+    page._paint(page.queue.entries[0])
+    page._changed()
+    assert "Tải 1 video" in page.start_btn.text()
+
+
+def test_mp3_shows_audio_quality(page):
+    page.fmt_box.setCurrentIndex(page.fmt_box.findData("mp3"))
+    assert page.audio_box.isVisibleTo(page) and not page.quality_box.isVisibleTo(page)
+    page.audio_box.setCurrentIndex(page.audio_box.findData("192"))
+    assert page.opts.audio_q == "192" and page.settings.value("download/opt/audio_q") == "192"
+    page.fmt_box.setCurrentIndex(page.fmt_box.findData("mp4"))
+    assert page.quality_box.isVisibleTo(page) and not page.audio_box.isVisibleTo(page)
+
+
+def test_desc_txt_written(page):
+    page.desc_chk.setChecked(True)
+    read(page, "https://y/t1")
+    page.start()
+    assert wait(lambda: not page.is_busy())
+    e = page.queue.entries[0]
+    assert e.status == "done" and Path(e.path).with_suffix(".txt").is_file()
+
+
+def test_open_after_download(page, monkeypatch):
+    from loopstation.ui import widgets
+    opened = []
+    monkeypatch.setattr(widgets, "open_with_default_app", lambda p: opened.append(p))
+    page.open_after_chk.setChecked(True)
+    read(page, "https://y/o1")
+    page.start()
+    assert wait(lambda: not page.is_busy())
+    assert opened == [page.folder()]
+
+
+def test_long_videos_unticked_on_read(page, monkeypatch):
+    monkeypatch.setenv("FAKE_YTDLP_LONG", "1")
+    page.max_box.setCurrentIndex(page.max_box.findData(60))
+    read(page, "https://y/list5")
+    es = page.queue.entries
+    assert es and all(e.checked == (e.duration <= 3600) for e in es) and not all(e.checked for e in es)
+
+
+def test_h264_conversion_after_download(page, monkeypatch):
+    from loopstation.core import downloader
+    conv = []
+    monkeypatch.setattr(downloader, "convert_to_h264",
+                        lambda path, enc, cancel, prog=None: conv.append((path, enc)) or path)
+    monkeypatch.setenv("FAKE_YTDLP_CODEC", "hvc1.1.6.L120")
+    read(page, "https://y/v5")
+    page.start()
+    assert wait(lambda: not page.is_busy())
+    e = page.queue.entries[0]
+    assert conv and conv[0][0] == e.path and e.status == "done" and e.codec == ""
+    page.h264_chk.setChecked(False)
+    conv.clear()
+    read(page, "https://y/v6")
+    page.start()
+    assert wait(lambda: not page.is_busy())
+    assert not conv and page.queue.entries[-1].codec == "H.265"
+
+
+def test_side_card_stacks_when_narrow(page):
+    from PySide6.QtWidgets import QBoxLayout
+    page.adapt(700)
+    assert page.body.direction() == QBoxLayout.Direction.TopToBottom
+    page.adapt(1300)
+    assert page.body.direction() == QBoxLayout.Direction.LeftToRight
+
+
+def test_side_card_not_clipped(page):
+    """Soát ảnh 2c: cột Cài đặt tải không được rộng hơn khung của nó (bị cắt mất nút MP3 / M4A)."""
+    page.opts_btn.setChecked(True)
+    page.adapt(1300)
+    pump()
+    assert page.side_card.minimumSizeHint().width() <= page.side_scroll.width() - 2
+
+
+# ---------- hiệu ứng: đang đọc link / đang tải / xong ----------
+def test_spinner_while_reading(page, monkeypatch):
+    monkeypatch.setenv("FAKE_YTDLP_SLOW_INFO", "1.0")
+    page.links_edit.setPlainText("https://y/w1\nhttps://y/w2")
+    page.read_btn.click()
+    assert wait(lambda: page.read_spinner.isVisible(), 3)
+    assert "Đang đọc" in page.read_btn.text() and page.list_stack.currentWidget() is page.loading_view
+    assert wait(lambda: not page._reading, 10)
+    pump(0.1)
+    assert not page.read_spinner.isVisible() and page.read_btn.text() == "Đọc link"
+    assert page.list_stack.currentWidget() is page.tree
+
+
+def test_run_bar_and_animation_while_downloading(page, monkeypatch):
+    read(page, "https://y/r7")
+    assert not page.run_bar.isVisible() and not page._anim.isActive()
+    monkeypatch.setenv("FAKE_YTDLP_MODE", "hang")
+    page.start()
+    assert wait(lambda: page.queue.entries[0].status == "running")
+    pump(0.3)
+    assert page.run_bar.isVisible() and page._anim.isActive()
+    page.stop()
+    assert wait(lambda: not page.is_busy(), 6)
+    pump(0.5)
+    assert not page.run_bar.isVisible() and not page._anim.isActive()
+
+
+def test_done_row_flashes(page):
+    read(page, "https://y/f3")
+    page.start()
+    assert wait(lambda: not page.is_busy())
+    assert page.queue.entries[0].vid in page.flashed

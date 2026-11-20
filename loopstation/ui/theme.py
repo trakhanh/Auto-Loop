@@ -609,6 +609,7 @@ QHeaderView::section:hover {{ color: {t['text']}; }}
 QTextBrowser {{ background: {t['panel']}; border: none; border-radius: {R['lg']}px; padding: 12px 18px; }}
 QPlainTextEdit {{ background: {t['field']}; border: 1px solid {t['line']}; border-radius: {R['lg']}px;
     padding: 8px; font-family: Consolas, 'Cascadia Mono', monospace; font-size: {f['small']}; color: {t['text_2']}; }}
+QPlainTextEdit#linkBox {{ font-family: 'Segoe UI'; font-size: {f['body']}; color: {t['text']}; padding: 10px; }}
 
 QProgressBar {{ background: {t['field']}; border: 1px solid {t['line']}; border-radius: {R['lg']}px;
     min-height: 20px; text-align: center; color: {t['text']}; font-weight: 600; }}
