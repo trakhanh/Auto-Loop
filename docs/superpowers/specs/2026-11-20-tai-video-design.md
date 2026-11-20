@@ -246,3 +246,11 @@ kiểu máy tính; không có hướng dẫn khi trống.
   `--print after_move:KTLS_META|%(.{title,uploader,webpage_url,upload_date,description})j`; tên "Số thứ tự – Tiêu đề"
   (số = vị trí trong nhóm, app ghi thẳng vào mẫu tên; video lẻ dùng "Tiêu đề"); bỏ tick video dài hơn N phút khi đọc
   kênh (gợi ý — người dùng vẫn tick lại được); tải xong mở thư mục.
+
+## 2d. Xem trước rõ hơn + cột Cài đặt tải gọn (anh Khánh duyệt 2026-11-20 sau khi xem bản 2c)
+- **Tự đọc khi dán:** dán link (Ctrl+V, chuột phải › Dán, kéo thả) → tự Đọc link; nút Đọc link vẫn giữ cho link gõ tay.
+- **Xem trước:** ảnh bìa trong dòng to hơn (80×45); rê chuột vào dòng → ảnh bìa lớn (320 px) + tên + kênh · ngày đăng ·
+  lượt xem. Bấm đúp dòng chưa tải → mở video trên trình duyệt; dòng đã tải → mở thư mục chứa file.
+- **Cột Cài đặt tải** (phản hồi: khó nhìn): nút chọn kiểu "segmented" có nền rãnh, chữ không bị cắt (bề ngang cột tự
+  theo nội dung); nhãn mục thẳng hàng với ô; đường dẫn lưu trong khung như ô nhập; "Nâng cao" là tiêu đề mục có mũi
+  tên, nội dung lưới 2 cột (nhãn trên ô) thay cho danh sách dọc dài; thanh tổng mảnh (6 px); nút Dừng rõ (nền đỏ nhạt).
