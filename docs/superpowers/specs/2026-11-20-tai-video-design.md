@@ -254,3 +254,20 @@ kiểu máy tính; không có hướng dẫn khi trống.
 - **Cột Cài đặt tải** (phản hồi: khó nhìn): nút chọn kiểu "segmented" có nền rãnh, chữ không bị cắt (bề ngang cột tự
   theo nội dung); nhãn mục thẳng hàng với ô; đường dẫn lưu trong khung như ô nhập; "Nâng cao" là tiêu đề mục có mũi
   tên, nội dung lưới 2 cột (nhãn trên ô) thay cho danh sách dọc dài; thanh tổng mảnh (6 px); nút Dừng rõ (nền đỏ nhạt).
+
+## 2e. Douyin qua trình duyệt trong app (anh Khánh chọn 2026-11-20)
+Thử thật: yt-dlp (nightly 2026.11.19) không tải được Douyin kể cả khi có cookie mới (403 — Douyin đổi cách ký yêu
+cầu). Spike: trang video Douyin mở trong **QtWebEngine** (ẩn, không cần đăng nhập) → đọc `<video>.currentSrc` →
+tải trực tiếp (User-Agent của trình duyệt + Referer douyin.com) → được MP4 1080p H.264 + AAC.
+- Link Douyin (`douyin.com`, `v.douyin.com`, `iesdouyin.com`) không qua yt-dlp: **Đọc link** = mở trang ẩn, lấy tiêu
+  đề, thời lượng, ảnh bìa (poster), mã video (`/video/<id>` hoặc `modal_id=`); **Tải** = mở lại trang lấy link mới
+  (link file có hạn) → tải có tiến độ, Dừng được → áp Tuỳ chỉnh: MP3/M4A (tách tiếng bằng FFmpeg), MKV (đổi vỏ),
+  Luôn ra H.264 (chuyển khi cần), Mô tả (.txt), Ảnh bìa (.jpg), Chỉ tải đoạn (cắt bằng FFmpeg).
+- Douyin bắt xác minh (không ra link video sau ~12 giây) → hiện cửa sổ trình duyệt để người dùng tự kéo thanh xác
+  minh, xong thì tiếp tục (chờ tối đa 2 phút).
+- Link trang cá nhân Douyin (`/user/…`): báo "Kênh Douyin chưa hỗ trợ — dán link từng video".
+- Hồ sơ trình duyệt riêng của app ở `<thư mục dữ liệu>/web` (cookie Douyin giữ lại cho lần sau; không đụng trình
+  duyệt của người dùng).
+- **Đóng gói:** bỏ loại trừ QtWebEngine (+ Qml, Quick, QuickWidgets, Positioning, WebChannel, PrintSupport mà nó cần);
+  bỏ các file `.debug.pak`; giữ `qtwebengine_locales/en-US.pak`, `vi.pak`. Bộ cài nặng thêm ~100–150 MB (đã báo anh).
+  `app.py` bật `AA_ShareOpenGLContexts` trước khi tạo QApplication (QtWebEngine yêu cầu).
