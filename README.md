@@ -4,7 +4,7 @@
 
 # KT Loop Station
 
-**Ghép và loop clip + nhạc thành video YouTube dài hàng giờ — xem trước ngay trong app, xuất nhanh bằng card đồ hoạ.**
+**Ghép và loop clip + nhạc thành video YouTube dài hàng giờ — tải video từ YouTube, TikTok, Douyin, Bilibili…, chia đoạn, xuất ảnh — xem trước ngay trong app, xuất nhanh bằng card đồ hoạ.**
 
 <sub>By Khánh Trà · Ứng dụng Windows · Giao diện tiếng Việt · Bản mới nhất: <b>2.0.0</b></sub>
 
@@ -35,7 +35,39 @@
 
 ## Có gì mới ở 2.0
 
-> **2.0.0** · <b>Tải video</b> (mục riêng ngay dưới Bắt đầu): dán link YouTube, TikTok, <b>Douyin</b>, Bilibili, X, Facebook, Instagram… — app tự đọc, hiện ảnh bìa, tên, thời lượng; link kênh / danh sách phát hiện thành nhóm. Chọn MP4 / MKV gốc / MP3 / M4A, chất lượng Cao nhất · 1080p · 720p · 480p, <b>Luôn ra H.264</b> (trang chỉ có H.265 / AV1 thì app tự chuyển bằng card đồ hoạ — mở được Premiere, CapCut), lưu kèm ảnh bìa / mô tả, phụ đề, chỉ tải đoạn, tải cùng lúc 2–3 video. Công cụ tải (yt-dlp) cài một lần và tự cập nhật; Douyin tải qua trình duyệt riêng trong app. <b>Cắt video</b>: chia video thành nhiều đoạn (số phần, thời lượng cố định / ngẫu nhiên, danh sách mốc, khoảng A–B) và <b>xuất khung hình</b> (theo số ảnh, khoảng thời gian, số khung, chuyển cảnh), một file hay hàng loạt. Chỉ tải nội dung bạn có quyền dùng.
+### Tải video — dán link là xong
+
+<p align="center"><img src="docs/screenshots/11-tai-video.png" width="900" alt="Trang Tải video: danh sách video có logo nền tảng, thanh tiến độ, nhóm kênh, cột Cài đặt tải"></p>
+
+- **Mục riêng ngay dưới Bắt đầu.** Dán một hoặc nhiều link → app **tự đọc**: ảnh bìa, tên, kênh, thời lượng. Rê chuột vào dòng để xem ảnh bìa lớn, bấm đúp để mở video trên trình duyệt.
+- **Nhiều nền tảng:** YouTube · TikTok · **Douyin** · Bilibili · X · Facebook · Instagram… (hơn 1.000 trang). Link **kênh / danh sách phát** hiện thành nhóm, tick sẵn 50 video đầu, có *Hiện thêm*.
+- **Cài đặt tải** luôn ở cột phải: **MP4 · MKV gốc · MP3 · M4A**; chất lượng **Cao nhất · 1080p · 720p · 480p** (MP3: 320 / 192 / 128 kbps).
+- **Luôn ra H.264**: trang chỉ có H.265 / AV1 (TikTok, Bilibili, YouTube 2K/4K) → tải xong app tự chuyển bằng card đồ hoạ, mở được Premiere, CapCut.
+- **Lưu kèm** ảnh bìa (.jpg), tiêu đề + mô tả (.txt); phụ đề; tên file theo mẫu (có *Số thứ tự – Tiêu đề*); **chỉ tải đoạn** (chuột phải › Chỉ tải đoạn…); tải cùng lúc 2–3 video; giới hạn tốc độ.
+- **Danh sách:** lọc theo tên / kênh, nền tảng, trạng thái · **Chọn tất cả** · **Chọn nhanh** (chưa tải, lỗi, đã tải) · **Xoá đã chọn**. Video đã có trong thư mục được bỏ qua, không tải trùng.
+- **Đăng nhập trong app** (Bilibili, Facebook, Instagram, X…): đăng nhập tài khoản của bạn trong trình duyệt riêng của app để tải bản cao hơn (Bilibili 1080p cần đăng nhập) và video cần đăng nhập.
+- **Douyin** tải qua trình duyệt riêng trong app; Douyin hỏi xác minh thì một cửa sổ hiện ra để bạn tự xác minh.
+- Công cụ tải (yt-dlp) cài một lần khi mở trang lần đầu (~65 MB) và **tự cập nhật** mỗi ngày. Mất mạng giữa chừng thì tự tạm dừng, không biến cả danh sách thành lỗi.
+
+> [!NOTE]
+> Chỉ tải nội dung bạn có quyền dùng — tải video người khác để đăng lại có thể vi phạm điều khoản nền tảng và bị gậy bản quyền.
+
+### Cắt video — chia đoạn &amp; xuất ảnh
+
+<table>
+<tr>
+<td width="50%"><img src="docs/screenshots/13-cat-video.png"><p align="center"><sub><b>Chia đoạn</b> — số phần, mỗi đoạn dài, ngẫu nhiên A–B, theo mốc, theo khoảng; đổi tỉ lệ 9:16 / 1:1 (nền mờ, viền đen, cắt)</sub></p></td>
+<td width="50%"><img src="docs/screenshots/14-xuat-anh.png"><p align="center"><sub><b>Xuất ảnh</b> — theo tổng số ảnh, mỗi N giây, mỗi N khung hình, theo chuyển động / đổi cảnh</sub></p></td>
+</tr>
+</table>
+
+- Một video hay **hàng loạt** (kéo thả cả thư mục), mỗi video một thư mục riêng; dòng **Dự kiến** cho biết sẽ ra bao nhiêu đoạn / ảnh trước khi chạy.
+- Chế độ **Chính xác** hoặc **Nhanh** (không mã hoá lại), có tiến độ, nút **Dừng** và nhật ký từng video.
+
+<details>
+<summary><b>Các bản trước</b> (1.9 · 1.8)</summary>
+
+<br>
 
 ## Có gì mới ở 1.9
 
@@ -116,6 +148,8 @@ Trang <b>Xuất</b> có hàng <b>Bitrate hình</b>: chọn <i>Tự đặt bitrat
 <p align="center"><img src="docs/screenshots/04-xuat.png" width="820" alt="Trang Xuất với hàng Bitrate hình và gợi ý độ phân giải theo clip gốc"></p>
 <p align="center"><sub><b>Trang Xuất</b> — gợi ý độ phân giải / fps theo clip gốc, Bitrate hình (mỗi 1 Mbps ≈ 450 MB cho mỗi giờ video)</sub></p>
 
+</details>
+
 <br>
 
 ## Làm được gì
@@ -172,6 +206,23 @@ Mỗi thư mục con thành một video / file nhạc; 3 kiểu xuất, chỉnh 
 Tracklist (dán làm Chapters), mốc thời gian đoạn LOOP / THƯỜNG (<code>.txt .csv .srt</code>, marker DaVinci <code>.edl</code>).
 </td>
 </tr>
+<tr>
+<td valign="top">
+<img src="docs/icons/download.png" width="36"><br>
+<b>Tải video nhiều nền tảng</b><br>
+YouTube, TikTok, Douyin, Bilibili, X, Facebook, Instagram… — dán link, xem trước, tải MP4 / MP3, cả kênh một lần; tự chuyển H.264 để dựng ngay.
+</td>
+<td valign="top">
+<img src="docs/icons/scissors.png" width="36"><br>
+<b>Chia video thành nhiều đoạn</b><br>
+Chia đều, theo độ dài, ngẫu nhiên, theo mốc / khoảng A–B; đổi sang 9:16 nền mờ cho TikTok / Shorts; một file hay hàng loạt.
+</td>
+<td valign="top">
+<img src="docs/icons/image.png" width="36"><br>
+<b>Xuất ảnh từ video</b><br>
+Lấy ảnh theo số ảnh, mỗi N giây, mỗi N khung hình hoặc mỗi lần đổi cảnh — làm thumbnail, ảnh tham khảo.
+</td>
+</tr>
 </table>
 
 <br>
@@ -183,7 +234,7 @@ Tracklist (dán làm Chapters), mốc thời gian đoạn LOOP / THƯỜNG (<cod
 <td width="33%" valign="top" align="center">
 <h1>①</h1>
 <b>Bấm nút “Tải về cho Windows”</b><br>
-<sub>Trình duyệt tải file <code>KTLoopStation-Setup.exe</code> (~195 MB).</sub>
+<sub>Trình duyệt tải file <code>KTLoopStation-Setup.exe</code> (~290 MB).</sub>
 </td>
 <td width="33%" valign="top" align="center">
 <h1>②</h1>
@@ -225,6 +276,10 @@ Tracklist (dán làm Chapters), mốc thời gian đoạn LOOP / THƯỜNG (<cod
 | **2** | **Nhạc &amp; Nền** | Kéo thả bài nhạc — nhạc tự lặp theo độ dài video. Thêm tiếng mưa, chỉnh **Bảng trộn âm** (có nghe thử). |
 | **3** | **Xuất** | Bấm Phát ở **Trình phát** để xem thử, rồi chọn thư mục lưu → **Bắt đầu xuất**, hoặc **Thêm vào hàng đợi** để xuất nhiều video liền nhau. |
 
+**Tải video** (thanh bên, ngay dưới Bắt đầu): dán link → app tự đọc → tick video muốn lấy → **Tải N video**. Lần đầu bấm **Cài công cụ tải**. Cần bản cao hơn / video cần đăng nhập: **Đăng nhập…** ở cột Cài đặt tải.
+
+**Cắt video**: thêm video (hoặc cả thư mục) → chọn thẻ **Chia đoạn** hoặc **Xuất ảnh** → chọn cách cắt / cách lấy ảnh → **Bắt đầu**.
+
 Chọn **kiểu xuất** ở thanh trên cùng: **Video có nhạc** (`.mp4`) · **Chỉ video** (`.mp4`, giữ tiếng gốc clip / thêm tiếng nền) · **Chỉ nhạc** (`.mp3 .m4a .flac .wav`). Thanh bước dưới thanh trên cùng luôn nói việc cần làm tiếp; hướng dẫn có ảnh minh hoạ từng bước nằm ngay trong app: **Hướng dẫn** ở thanh bên hoặc phím <kbd>F1</kbd>.
 
 <p align="center"><img src="docs/screenshots/09-huong-dan-chu-de.png" width="760" alt="Một chủ đề trong Hướng dẫn: thanh tiêu đề, nút mở đúng chỗ trong app, ảnh đánh số"></p>
@@ -257,8 +312,12 @@ Chọn **kiểu xuất** ở thanh trên cùng: **Video có nhạc** (`.mp4`) ·
 
 <table>
 <tr>
-<td width="50%"><img src="docs/screenshots/01-bat-dau.png"><p align="center"><sub><b>Màn hình Bắt đầu</b> — chọn việc muốn làm</sub></p></td>
+<td width="50%"><img src="docs/screenshots/01-bat-dau.png"><p align="center"><sub><b>Màn hình Bắt đầu</b> — kiểu sản phẩm, Tải video · Cắt video, công cụ khác</sub></p></td>
 <td width="50%"><img src="docs/screenshots/03-nhac-bang-tron-am.png"><p align="center"><sub><b>Trang Nhạc</b> — playlist, Bảng trộn âm, tiếng nền</sub></p></td>
+</tr>
+<tr>
+<td><img src="docs/screenshots/12-tai-video-trong.png"><p align="center"><sub><b>Tải video</b> — dán link, 3 bước, các nền tảng hỗ trợ</sub></p></td>
+<td><img src="docs/screenshots/02-video.png"><p align="center"><sub><b>Trang Video</b> — bảng clip, Trình phát, dòng thời gian</sub></p></td>
 </tr>
 <tr>
 <td><img src="docs/screenshots/08-huong-dan.png"><p align="center"><sub><b>Hướng dẫn (F1)</b> — Tổng quan: có gì mới, 3 bước, mọi chủ đề</sub></p></td>

@@ -154,6 +154,59 @@ wait(0.8)
 lib.grab().save(str(OUT / "10-thu-vien-mau.png"))
 lib.reject()
 
+# Tải video: danh sách mẫu (không gọi mạng) — logo nền tảng, đang tải có thanh tiến độ, nhóm kênh, cột Cài đặt tải
+from loopstation.core.downloader import Group, Item  # noqa: E402
+from loopstation.ui.download_page import PROG_ROLE  # noqa: E402
+dp = win.download_page
+dp._exe_override = ["khong-goi-mang"]  # coi như đã cài công cụ tải (ảnh chụp không tải gì)
+dp._refresh_ready()
+win.go_to(mw.DOWNLOAD_PAGE)
+wait(0.5)
+win.grab().save(str(OUT / "12-tai-video-trong.png"))  # màn hình trống: hướng dẫn 3 bước + logo
+demo_rows = [("Mưa rừng nhiệt đới 3 giờ — tiếng mưa thư giãn", "YouTube", 10800, "Kênh Chill"),
+             ("Hoàng hôn trên biển", "TikTok", 45, "@bien.xanh"), ("城市夜景 4K", "Bilibili", 312, "UP主"),
+             ("Phố cổ về đêm", "Douyin", 30, "抖音用户"), ("Reel cà phê sáng", "Instagram", 20, "cafe.sang"),
+             ("Timelapse mây trời", "X", 58, "@sky"), ("Lửa trại ấm áp", "Facebook", 600, "Camping VN")]
+for i, (t, pf, d, up) in enumerate(demo_rows):
+    e = dp.queue.add_item(Item(f"https://example.com/v{i}", f"v{i}", t, pf, d, "", uploader=up))
+    dp._add_row(e)
+es = dp.queue.entries
+es[0].status, es[0].codec = "done", ""
+es[1].status = "running"
+es[6].status, es[6].message, es[6].checked = "error", "Cần đăng nhập — bấm Đăng nhập trong app", False
+for e in es:
+    dp._paint(e)
+dp._paint(es[1], "62% · 4,8 MB/s")
+dp._row(es[1]).setData(3, PROG_ROLE, 0.62)
+dp.queue.add_group(Group("https://example.com/@kenh/videos", "Kênh Lofi Chill", 0,
+                         [Item(f"https://example.com/k{i}", f"k{i}", f"Lofi số {i + 1}", "YouTube", 180 + i, "",
+                               uploader="Kênh Lofi Chill") for i in range(50)]), 50)
+for e in dp.queue.entries[len(demo_rows):len(demo_rows) + 3]:
+    dp._add_row(e)
+dp._busy = False
+dp._set_busy(True)
+dp._fracs[id(es[1])] = 0.62
+dp._run_done = 1
+dp._changed()
+wait(0.8)
+win.grab().save(str(OUT / "11-tai-video.png"))
+dp._anim.stop()
+dp._busy = False
+dp.queue.clear()
+dp.tree.clear()
+dp._rows.clear()
+dp._group_rows.clear()
+
+# Cắt video: Chia đoạn + Xuất ảnh với 2 video mẫu
+cp = win.cut_page
+cp.add_files([str(x) for x in sorted((ROOT / "Mau-Test" / "Video").glob("*.mp4"))[:3]])
+win.go_to(mw.CUT_PAGE)
+wait(2.5)
+win.grab().save(str(OUT / "13-cat-video.png"))
+cp.set_tab("frames")
+wait(0.8)
+win.grab().save(str(OUT / "14-xuat-anh.png"))
+
 win._closing = True
 win.close()
 wait(0.3)

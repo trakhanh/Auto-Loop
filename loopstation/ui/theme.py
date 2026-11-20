@@ -588,6 +588,8 @@ QCheckBox::indicator, QTreeView::indicator {{ width: 16px; height: 16px; border-
 QCheckBox::indicator:hover, QTreeView::indicator:hover {{ border-color: {t['accent_text']}; }}
 QCheckBox::indicator:checked, QTreeView::indicator:checked {{ background: {t['accent']};
     border-color: {t['accent']}; image: url("{check}"); }}
+QCheckBox::indicator:indeterminate, QTreeView::indicator:indeterminate {{ background: {rgba(t['accent'], 0.45)};
+    border-color: {t['accent']}; }}
 QCheckBox:disabled {{ color: {t['text_disabled']}; }}
 QCheckBox::indicator:disabled {{ background: {t['panel']}; border-color: {t['line']}; }}
 QCheckBox::indicator:checked:disabled, QTreeView::indicator:checked:disabled {{ background: {rgba(t['accent'], 0.35)};
