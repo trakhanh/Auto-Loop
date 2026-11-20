@@ -82,6 +82,8 @@ class SettingsPage(QWidget):
     welcomeRequested = Signal()  # xem lại màn hình chào
     updateCheckRequested = Signal()  # Giới thiệu → Kiểm tra cập nhật
     cacheChanged = Signal()  # đổi nơi đặt / xoá bộ nhớ đệm → cửa sổ chính kiểm tra lại ổ đĩa
+    dlToolsChanged = Signal()  # gỡ / cập nhật công cụ tải video → trang Tải video kiểm tra lại
+    _dlChecked = Signal(object)  # kết quả kiểm tra bản mới công cụ tải (từ luồng nền)
 
     def set_update_status(self, text: str, tone: str = "", busy: bool = False) -> None:
         self.update_status.setText(text)
@@ -336,6 +338,26 @@ class SettingsPage(QWidget):
         self.update_auto.setChecked(settings.value(AUTO_KEY, "true") in (True, "true"))
         self.update_auto.toggled.connect(lambda on: settings.setValue(AUTO_KEY, "true" if on else "false"))
         fa.addRow(self.update_auto)
+        self.dl_busy = lambda: False  # cửa sổ chính gắn trang Tải video vào đây (đang tải thì không thay / gỡ công cụ)
+        self.dl_tools_label = QLabel("")
+        self.dl_tools_label.setTextInteractionFlags(Qt.TextInteractionFlag.TextSelectableByMouse)
+        self.dl_check_btn = QPushButton("Kiểm tra bản mới")
+        self.dl_check_btn.setObjectName("pill")
+        self.dl_check_btn.setToolTip("Cập nhật yt-dlp / Deno ngay (app vẫn tự kiểm tra mỗi ngày khi mở trang Tải video)")
+        self.dl_check_btn.clicked.connect(self._dl_check)
+        self.dl_remove_btn = QPushButton("Gỡ")
+        self.dl_remove_btn.setObjectName("pill")
+        self.dl_remove_btn.setToolTip("Xoá công cụ tải khỏi máy (~150 MB). Lần sau mở trang Tải video sẽ hỏi cài lại.")
+        self.dl_remove_btn.clicked.connect(self._dl_remove)
+        self._dlChecked.connect(self._dl_checked)
+        drow = QHBoxLayout()
+        drow.setContentsMargins(0, 0, 0, 0)
+        drow.setSpacing(theme.SP['md'])
+        drow.addWidget(self.dl_tools_label, 1)
+        drow.addWidget(self.dl_check_btn)
+        drow.addWidget(self.dl_remove_btn)
+        fa.addRow("Công cụ tải", drow)
+        self.refresh_dl_tools()
         fa.addRow(w.muted("Báo lỗi: gửi kèm số phiên bản này và file nhật ký (Thư mục dữ liệu → logs)."))
         # bố cục tự cân: màn hình rộng → 2 cột (trái: tuỳ chọn hay đổi · phải: phần cứng), hẹp → 1 cột;
         # cả khối rộng tối đa 1360 px, căn giữa (không còn một cột hẹp giữa màn hình rộng, hai bên trống trơn)
@@ -631,6 +653,45 @@ class SettingsPage(QWidget):
                 self._col_a.addWidget(g)
         self._col_a.addStretch(1)
         self._grid.setStretch(1, 1 if two else 0)  # một cột: cột phải rỗng không chiếm nửa bề ngang
+
+    # ---------- công cụ tải video ----------
+    def refresh_dl_tools(self, note: str = "") -> None:
+        from ..core import dl_tools
+        v = dl_tools.versions()
+        if dl_tools.installed():
+            text = f"yt-dlp {v.get('yt-dlp', '?')} · Deno {v.get('deno', '?')}"
+        else:
+            text = "Chưa cài (cài ở trang Tải video)"
+        self.dl_tools_label.setText(text + (f" — {note}" if note else ""))
+        self.dl_check_btn.setEnabled(dl_tools.installed())
+        self.dl_remove_btn.setEnabled(dl_tools.installed())
+
+    def _dl_check(self) -> None:
+        from datetime import date
+
+        from ..core import dl_tools
+        self.dl_check_btn.setEnabled(False)
+        self.refresh_dl_tools("đang kiểm tra…")
+        busy = self.dl_busy
+        threading.Thread(target=lambda: self._dlChecked.emit(dl_tools.update_if_newer(busy, date.today(), True)),
+                         daemon=True).start()
+
+    def _dl_checked(self, done: list) -> None:
+        self.refresh_dl_tools("đã cập nhật" if done else "đang là bản mới nhất (hoặc chưa kiểm tra được)")
+        if done:
+            self.dlToolsChanged.emit()
+
+    def _dl_remove(self) -> None:
+        from ..core import dl_tools
+        if self.dl_busy():
+            self.refresh_dl_tools("đang tải video — dừng tải trước khi gỡ")
+            return
+        if QMessageBox.question(self, "Gỡ công cụ tải", "Gỡ công cụ tải video (yt-dlp, Deno) khỏi máy?") \
+                != QMessageBox.StandardButton.Yes:
+            return
+        dl_tools.uninstall()
+        self.refresh_dl_tools()
+        self.dlToolsChanged.emit()
 
     def adapt(self, width: int, height: int = 0) -> None:
         """Rộng ≥ 1180 px: 2 cột cân nhau; hẹp hơn: 1 cột."""

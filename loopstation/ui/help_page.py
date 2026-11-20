@@ -666,6 +666,26 @@ topic("filekem", "Xuất file", "file_plus", "File kèm: tracklist, mốc cho ed
     ("_markers-davinci.edl", "DaVinci Resolve: Timeline → Import → Timeline Markers from EDL (timeline bắt đầu 01:00:00:00). THƯỜNG đỏ, LOOP xanh dương, INTRO / OUTRO xanh lá"),
     ("_project.lsproj", "mở lại để xuất lại y hệt (chỉ kèm theo video, file nhạc không có)")], ("File", "Dùng để")))
 
+topic("taivideo", "Công cụ", "download", "Tải video", hero(
+    "Tải video", "Lưu video YouTube, TikTok, Bilibili, X, Facebook, Instagram… về máy để tham khảo hoặc đăng lại.",
+    (("Mở trang Tải video", "app:download"),)) + steps([
+    ("Dán link", "một hoặc nhiều link, mỗi dòng một link. Link danh sách phát / kênh cũng được."),
+    ("Bấm Đọc link", "xem trước tên, thời lượng. Kênh hiện thành một nhóm, tick sẵn 50 video đầu "
+                     "(bấm đúp <b>Hiện thêm…</b> để đọc thêm)."),
+    ("Bấm Tải đã chọn", "tải lần lượt; video lỗi báo đỏ kèm lý do (rê chuột vào ⓘ), video khác vẫn tải tiếp. "
+                        "Video đã có trong thư mục được bỏ qua.")]) + legend([
+    ("Chất lượng", "<b>1080p</b> mở được mọi phần mềm dựng. <b>Cao nhất (2K/4K)</b> của YouTube là VP9 / AV1 — "
+                   "Premiere cũ, CapCut có thể không mở được."),
+    ("Tuỳ chỉnh", "chỉ lấy tiếng (MP3 / M4A), phụ đề, mẫu tên file, thư mục con theo kênh, tải cùng lúc 2–3 video, "
+                  "giới hạn tốc độ, số video mỗi lần đọc kênh. Chuột phải một video → <b>Chỉ tải đoạn…</b>."),
+    ("Đăng nhập", "Facebook, Instagram (đôi khi X) bắt đăng nhập: chọn <b>Đăng nhập: Firefox</b> (chắc chắn nhất). "
+                  "Chrome / Edge hay bị Windows chặn → cài tiện ích trình duyệt <i>Get cookies.txt LOCALLY</i>, "
+                  "mở trang đã đăng nhập, xuất file <code>cookies.txt</code>, rồi chọn <b>File đăng nhập…</b>."),
+    ("Công cụ tải", "lần đầu bấm <b>Cài công cụ tải</b> (~65 MB). App tự cập nhật mỗi ngày vì các trang hay đổi "
+                    "cách chặn. Cài đặt → Giới thiệu → Công cụ tải: kiểm tra bản mới / gỡ.")]) + box(
+    "warn", "Chỉ tải nội dung công ty có quyền dùng — tải video người khác để đăng lại có thể vi phạm điều khoản "
+            "nền tảng và bị gậy bản quyền."))
+
 topic("caidat", "Khác", "settings", "Cài đặt & card đồ hoạ", hero(
     "Cài đặt & card đồ hoạ", "Kiểm tra máy có dùng được card đồ hoạ để xuất nhanh không, và các tuỳ chọn hệ thống.",
     (("Mở Cài đặt", "app:settings"),)) + img("settings") + legend([

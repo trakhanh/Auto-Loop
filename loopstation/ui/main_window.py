@@ -45,6 +45,7 @@ BACKUP_EVERY = 120  # giây: tối đa một bản lưu dự phòng mỗi 2 phú
 AUTOSAVE_DELAY_MS = 3000
 SESSION_FLAG = "phien-dang-mo.txt"  # còn file này lúc mở app = lần trước app không đóng đúng cách
 HOME_PAGE = 5  # trang "Bắt đầu" trong self.stack
+DOWNLOAD_PAGE = 6  # trang "Tải video"
 QUEUE_FILE = "queue.json"
 
 
@@ -198,6 +199,20 @@ class MainWindow(QMainWindow):
         hm.setWidgetResizable(True)
         hm.setFrameShape(QFrame.Shape.NoFrame)
         self.stack.addWidget(hm)  # chỉ số HOME_PAGE
+        from .download_page import DownloadPage
+        self.download_page = DownloadPage(self.settings)
+        dp = QScrollArea()
+        dp.setWidget(self.download_page)
+        dp.setWidgetResizable(True)
+        dp.setFrameShape(QFrame.Shape.NoFrame)
+        self.stack.addWidget(dp)  # chỉ số DOWNLOAD_PAGE
+        self.pages = (*self.pages, self.download_page)
+        self.download_page.busyChanged.connect(self._download_busy)
+        self.download_page.counterChanged.connect(self._download_counter)
+        self.download_page.notice.connect(lambda text, kind: self.notify(text, kind, 5000))
+        self.home.cards["download"].new_tag.setVisible(str(self.settings.value("new/download_seen", "")) != "1")
+        self.settings_page.dl_busy = self.download_page.is_busy
+        self.settings_page.dlToolsChanged.connect(self.download_page.shown)
         self.guide = StepGuide()
         self.guide.goTo.connect(self.go_to)
         self.export_tab.emptyActionRequested.connect(self.go_to)
@@ -505,6 +520,25 @@ class MainWindow(QMainWindow):
         lab.setObjectName("sectionLabel")
         self.project_label = lab
         sv.addWidget(lab)
+        self.download_btn = QPushButton("  Tải video")
+        self.download_btn.setObjectName("nav")
+        self.download_btn.setIcon(icons.icon("download", 15))
+        self.download_btn.setIconSize(QSize(15, 15))
+        self.download_btn.setCheckable(True)
+        self.download_btn.setToolTip("Tải video YouTube, TikTok, Bilibili, X, Facebook, Instagram… về máy")
+        self._side_buttons.append((self.download_btn, "download", "Tải video"))
+        self.nav.addButton(self.download_btn, DOWNLOAD_PAGE)
+        sv.addWidget(self.download_btn)
+        self.download_tool_new = None
+        if str(self.settings.value("new/download_seen", "")) != "1":
+            inner = QHBoxLayout(self.download_btn)  # nhãn MỚI nằm trong nút (tới khi mở trang lần đầu)
+            inner.setContentsMargins(0, 0, 8, 0)
+            inner.addStretch(1)
+            self.download_tool_new = QLabel("MỚI")
+            self.download_tool_new.setObjectName("newTag")
+            self.download_tool_new.setFixedHeight(18)
+            self.download_tool_new.setMinimumWidth(self.download_tool_new.sizeHint().width())
+            inner.addWidget(self.download_tool_new, 0, Qt.AlignmentFlag.AlignVCenter)
         # Mới / Mở / Lưu đã có trên thanh trên cùng — thanh bên chỉ giữ công cụ riêng
         for ic_name, text, fn in (("folder", "Xuất hàng loạt…", self.batch_from_folders),
                                   ("waves", "Lọc tạp âm…", self.open_denoise)):
@@ -926,6 +960,8 @@ class MainWindow(QMainWindow):
         tag = getattr(self, "denoise_tool_new", None)
         if tag is not None:  # thanh bên chỉ còn biểu tượng: nhãn MỚI che mất biểu tượng → ẩn
             tag.setVisible(not compact and str(self.settings.value("new/denoise_tool_seen", "")) != "1")
+        if getattr(self, "download_tool_new", None) is not None:
+            self.download_tool_new.setVisible(not compact and str(self.settings.value("new/download_seen", "")) != "1")
 
     def _update_nav_badges(self, proj: Project) -> None:
         n_clips = sum(1 for c in proj.video.clips if c.enabled and (c.count > 0 if c.plays_mode == "fixed" else c.max > 0))
@@ -969,6 +1005,9 @@ class MainWindow(QMainWindow):
         if index == 4:
             _ = self.help_page
         self.stack.setCurrentIndex(index)
+        if index == DOWNLOAD_PAGE:
+            self._download_seen()
+            self.download_page.shown()
         if btn is not None:
             btn.setChecked(True)
             self.nav_pill.move_to(btn, animate=False)
@@ -995,6 +1034,8 @@ class MainWindow(QMainWindow):
             self.batch_from_folders()
         elif key == "denoise":
             self.open_denoise()
+        elif key == "download":
+            self.go_to(DOWNLOAD_PAGE)
         elif key == "open":
             self.open_project()
 
@@ -1776,7 +1817,8 @@ class MainWindow(QMainWindow):
         self.export_tab.set_available(available)
         self.gpu_label.setText(self.export_tab.gpu_text())
         self.recompute()
-        QTimer.singleShot(1500, self._maybe_resume_queue)  # cần biết card đồ hoạ rồi mới chạy được hàng đợi
+        QTimer.singleShot(1500, self._maybe_resume_queue)
+        QTimer.singleShot(2200, self._maybe_resume_downloads)  # cần biết card đồ hoạ rồi mới chạy được hàng đợi
 
     # ---------- xuất ----------
     def _check_ready(self) -> bool:
@@ -2117,6 +2159,41 @@ class MainWindow(QMainWindow):
         self.viewer.player.pause()
         self.music_tab.mixer.stop()
 
+    # ---------- Tải video ----------
+    def _download_seen(self) -> None:
+        if str(self.settings.value("new/download_seen", "")) != "1":
+            self.settings.setValue("new/download_seen", "1")
+            if self.download_tool_new is not None:
+                self.download_tool_new.hide()
+            self.home.cards["download"].new_tag.hide()
+
+    def _download_busy(self, on: bool) -> None:
+        power.hold("download", on)
+        self.settings.setValue("download/was_running", "running" if on else "")
+        self.settings.sync()
+
+    def _download_counter(self, text: str) -> None:
+        label = f"Tải video ({text})" if text else "Tải video"
+        self._side_buttons = [(b, ic, label if b is self.download_btn else t) for b, ic, t in self._side_buttons]
+        self.download_btn.setToolTip(label)
+        if not self._compact:
+            self.download_btn.setText(f"  {label}")
+
+    def _maybe_resume_downloads(self) -> None:
+        """Lần trước app tắt ngang lúc đang tải video: hỏi tải tiếp (không tự tải khi chưa hỏi)."""
+        if getattr(self, "_dl_resume_asked", False) or self._closing:
+            return
+        self._dl_resume_asked = True
+        was = str(self.settings.value("download/was_running", "")) == "running"
+        self.settings.setValue("download/was_running", "")
+        n = self.download_page.remaining()
+        if not was or not n:
+            return
+        if QMessageBox.question(self, "Tải tiếp?", f"Còn {n} video đang tải dở — tải tiếp?") \
+                == QMessageBox.StandardButton.Yes:
+            self.go_to(DOWNLOAD_PAGE)
+            self.download_page.start()
+
     def _mark_queue_running(self, on: bool) -> None:
         """Ghi lại hàng đợi đang chạy: app bị tắt ngang lúc này → lần mở sau hỏi chạy tiếp (đúng nhóm mục, giữ
         cả lựa chọn tắt máy khi xong)."""
@@ -2313,6 +2390,20 @@ class MainWindow(QMainWindow):
 
     def _shutdown_countdown(self, ok: int, bad: int) -> None:
         import subprocess
+        if self.download_page.is_busy():  # còn đang tải video: chờ tải xong rồi mới đếm ngược (không mất file)
+            if not getattr(self, "_shutdown_waiting", False):
+                self._shutdown_waiting = True
+
+                def later(busy: bool) -> None:
+                    if busy:
+                        return
+                    self.download_page.busyChanged.disconnect(later)
+                    self._shutdown_waiting = False
+                    if self.settings_page.shutdown.isChecked():
+                        self._shutdown_countdown(ok, bad)
+                self.download_page.busyChanged.connect(later)
+            self.export_tab.on_progress(1.0, "Hàng đợi xong — chờ tải video xong rồi tắt máy…")
+            return
         self._save_queue()  # lưu trước khi Windows tắt máy (có thể không kịp đóng app bình thường)
         try:
             self.collect_project().save(str(ffmpeg_tools.data_dir() / AUTOSAVE))
@@ -2401,7 +2492,7 @@ class MainWindow(QMainWindow):
     # ---------- Bảng trộn âm: nghe thử 20 giây ----------
     def _help_action(self, act: str) -> None:
         """Nút “Mở …” trong trang Hướng dẫn → đi tới đúng chỗ."""
-        pages = {"home": HOME_PAGE, "video": 0, "music": 1, "export": 2, "settings": 3}
+        pages = {"home": HOME_PAGE, "video": 0, "music": 1, "export": 2, "settings": 3, "download": DOWNLOAD_PAGE}
         if act in pages:
             if act == "video" and self.mode == "music_only":
                 self.set_mode("video_music")
@@ -2872,6 +2963,12 @@ class MainWindow(QMainWindow):
 
     # ---------- đóng ----------
     def closeEvent(self, e) -> None:  # noqa: N802
+        if self.download_page.is_busy():
+            if QMessageBox.question(self, "Đang tải video", "Đang tải video. Dừng tải và thoát?") \
+                    != QMessageBox.StandardButton.Yes:
+                e.ignore()
+                return
+            self.download_page.stop()
         if self.job:
             if QMessageBox.question(self, "Đang xuất", "Đang xuất file. Huỷ và thoát?") \
                     != QMessageBox.StandardButton.Yes:
@@ -2889,6 +2986,7 @@ class MainWindow(QMainWindow):
                 worker.join(timeout=10)  # để luồng xuất kịp xoá file dở
         self._closing = True
         self._mark_queue_running(False)  # người dùng tự đóng (kể cả lúc nghỉ giữa hai mục): lần sau không hỏi chạy tiếp
+        self.settings.setValue("download/was_running", "")  # tự đóng: lần sau không hỏi tải tiếp
         self._timer.stop()
         power.release_all()
         self.music_tab.mixer.stop()
@@ -2911,6 +3009,7 @@ class MainWindow(QMainWindow):
             return
         self._session_saved = True
         self._save_queue()
+        self.download_page.save()  # Windows tắt máy giữa lúc tải: cờ download/was_running được giữ để lần sau hỏi
         if self._initial_loaded:
             try:
                 self.collect_project().save(str(ffmpeg_tools.data_dir() / AUTOSAVE))
