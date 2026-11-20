@@ -34,6 +34,12 @@ CARDS = [
     ("download", "download", "accent", "Tải video",
      "Dán link YouTube, TikTok, Bilibili, X, Facebook, Instagram… — lấy về MP4 / MP3, cả kênh một lần.",
      "Tự chuyển sang H.264 để mở được mọi phần mềm dựng · lưu kèm ảnh bìa, mô tả"),
+    ("cut", "scissors", "info", "Chia video thành đoạn",
+     "Cắt video dài thành nhiều đoạn ngắn để up hàng loạt — chia đều, theo độ dài, ngẫu nhiên, theo mốc.",
+     "Đổi sang 9:16 nền mờ cho TikTok / Shorts"),
+    ("frames", "image", "success", "Xuất ảnh từ video",
+     "Lấy ảnh từ video: theo số ảnh, mỗi N giây, mỗi N khung hình, theo đổi cảnh.",
+     "Nhiều video một lần → mỗi video một thư mục ảnh"),
     ("open", "save", "neutral", "Mở dự án đã lưu",
      "Tiếp tục một dự án .lsproj đã làm trước đó.",
      "Hoặc mở dự án mẫu bên dưới để tập dùng"),
@@ -41,6 +47,7 @@ CARDS = [
 
 
 MAIN_KEYS = ("video_music", "video_only", "music_only")  # ba kiểu sản phẩm: hàng chính; còn lại là công cụ, nhẹ hơn
+BIG_TOOLS = ("download", "cut", "frames")  # công cụ lớn: hàng riêng, thẻ to (Tải video, Cắt video, Xuất ảnh)
 
 
 class HomeCard(QPushButton):
@@ -128,10 +135,10 @@ class HomePage(QWidget):
         n_main = n_tool = 0
         dl_row = QHBoxLayout()
         for key, ic, color, t, d, ex in CARDS:
-            main = key in MAIN_KEYS or key == "download"
+            main = key in MAIN_KEYS or key in BIG_TOOLS
             card = HomeCard(ic, color, t, d, ex, compact=not main)
             card.clicked.connect(lambda _=False, kk=key: self.chosen.emit(kk))
-            if key == "download":  # tính năng lớn: một hàng riêng, thẻ to, dễ thấy
+            if key in BIG_TOOLS:  # tính năng lớn: một hàng riêng, thẻ to, dễ thấy
                 dl_row.addWidget(card)
             elif main:
                 grid.addWidget(card, 0, n_main)
@@ -142,7 +149,7 @@ class HomePage(QWidget):
             self.cards[key] = card
         main_lab = QLabel("Kiểu sản phẩm")
         main_lab.setObjectName("h2")
-        dl_lab = QLabel("Lấy video về máy")
+        dl_lab = QLabel("Tải video · Cắt video")
         dl_lab.setObjectName("h2")
         tool_lab = QLabel("Công cụ khác")
         tool_lab.setObjectName("h2")

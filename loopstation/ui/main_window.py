@@ -46,6 +46,9 @@ AUTOSAVE_DELAY_MS = 3000
 SESSION_FLAG = "phien-dang-mo.txt"  # còn file này lúc mở app = lần trước app không đóng đúng cách
 HOME_PAGE = 5  # trang "Bắt đầu" trong self.stack
 DOWNLOAD_PAGE = 6  # trang "Tải video"
+CUT_PAGE = 7  # trang "Cắt video" (Chia đoạn + Xuất ảnh)
+TOOL_PAGES = {DOWNLOAD_PAGE: "<b>Tải video</b> &nbsp;·&nbsp; YouTube, TikTok, Bilibili, X, Facebook, Instagram…",
+              CUT_PAGE: "<b>Cắt video</b> &nbsp;·&nbsp; chia thành nhiều đoạn, xuất ảnh"}  # trang không dùng dự án
 QUEUE_FILE = "queue.json"
 
 
@@ -213,6 +216,20 @@ class MainWindow(QMainWindow):
         self.home.cards["download"].new_tag.setVisible(str(self.settings.value("new/download_seen", "")) != "1")
         self.settings_page.dl_busy = self.download_page.is_busy
         self.settings_page.dlToolsChanged.connect(self.download_page.shown)
+        from .cut_page import CutPage
+        self.cut_page = CutPage(self.settings)
+        cp = QScrollArea()
+        cp.setWidget(self.cut_page)
+        cp.setWidgetResizable(True)
+        cp.setFrameShape(QFrame.Shape.NoFrame)
+        self.stack.addWidget(cp)  # chỉ số CUT_PAGE
+        self.pages = (*self.pages, self.cut_page)
+        self.cut_page.busyChanged.connect(lambda on: power.hold("cut", on))
+        self.cut_page.counterChanged.connect(self._cut_counter)
+        self.cut_page.notice.connect(lambda text, kind: self.notify(text, kind, 5000))
+        cut_new = str(self.settings.value("new/cut_seen", "")) != "1"
+        for key in ("cut", "frames"):
+            self.home.cards[key].new_tag.setVisible(cut_new)
         self.guide = StepGuide()
         self.guide.goTo.connect(self.go_to)
         self.export_tab.emptyActionRequested.connect(self.go_to)
@@ -504,6 +521,25 @@ class MainWindow(QMainWindow):
             self.download_tool_new.setFixedHeight(18)
             self.download_tool_new.setMinimumWidth(self.download_tool_new.sizeHint().width())
             inner.addWidget(self.download_tool_new, 0, Qt.AlignmentFlag.AlignVCenter)
+        self.cut_btn = QPushButton("  Cắt video")
+        self.cut_btn.setObjectName("nav")
+        self.cut_btn.setIcon(icons.icon("scissors", 16))
+        self.cut_btn.setIconSize(QSize(16, 16))
+        self.cut_btn.setCheckable(True)
+        self.cut_btn.setToolTip("Chia video thành nhiều đoạn ngắn để up hàng loạt · xuất ảnh từ video")
+        self._side_buttons.append((self.cut_btn, "scissors", "Cắt video"))
+        self.nav.addButton(self.cut_btn, CUT_PAGE)
+        sv.addWidget(self.cut_btn)
+        self.cut_tool_new = None
+        if str(self.settings.value("new/cut_seen", "")) != "1":
+            inner = QHBoxLayout(self.cut_btn)  # nhãn MỚI nằm trong nút (tới khi mở trang lần đầu)
+            inner.setContentsMargins(0, 0, 8, 0)
+            inner.addStretch(1)
+            self.cut_tool_new = QLabel("MỚI")
+            self.cut_tool_new.setObjectName("newTag")
+            self.cut_tool_new.setFixedHeight(18)
+            self.cut_tool_new.setMinimumWidth(self.cut_tool_new.sizeHint().width())
+            inner.addWidget(self.cut_tool_new, 0, Qt.AlignmentFlag.AlignVCenter)
         sv.addSpacing(6)
         sv.addWidget(lbl_steps)
 
@@ -717,7 +753,7 @@ class MainWindow(QMainWindow):
         self._project_header = [hv.itemAt(i).widget() for i in range(hv.count())
                                 if hv.itemAt(i).widget() is not None and hv.itemAt(i).widget() is not self.tl_toggle]
         self._project_header += self._proj_btns
-        self.page_title = QLabel("<b>Tải video</b> &nbsp;·&nbsp; YouTube, TikTok, Bilibili, X, Facebook, Instagram…")
+        self.page_title = QLabel(TOOL_PAGES[DOWNLOAD_PAGE])
         self.page_title.setObjectName("h2")
         self.page_title.hide()
         hv.insertWidget(0, self.page_title, 1)
@@ -1015,13 +1051,18 @@ class MainWindow(QMainWindow):
         if index == 4:
             _ = self.help_page
         self.stack.setCurrentIndex(index)
-        dl = index == DOWNLOAD_PAGE
+        tool = index in TOOL_PAGES  # trang công cụ toàn màn hình: không dùng dự án
         for wd in self._project_header:
-            wd.setVisible(not dl)
-        self.page_title.setVisible(dl)
-        if dl:
+            wd.setVisible(not tool)
+        self.page_title.setVisible(tool)
+        if tool:
+            self.page_title.setText(TOOL_PAGES[index])
+        if index == DOWNLOAD_PAGE:
             self._download_seen()
             self.download_page.shown()
+        elif index == CUT_PAGE:
+            self._cut_seen()
+            self.cut_page.shown()
         if btn is not None:
             btn.setChecked(True)
             self.nav_pill.move_to(btn, animate=False)
@@ -1050,6 +1091,9 @@ class MainWindow(QMainWindow):
             self.open_denoise()
         elif key == "download":
             self.go_to(DOWNLOAD_PAGE)
+        elif key in ("cut", "frames"):
+            self.go_to(CUT_PAGE)
+            self.cut_page.set_tab("split" if key == "cut" else "frames")
         elif key == "open":
             self.open_project()
 
@@ -1830,6 +1874,7 @@ class MainWindow(QMainWindow):
     def _on_encoders(self, available: dict) -> None:
         self.export_tab.set_available(available)
         self.download_page.set_encoders(available)  # chuyển sang H.264 bằng card đồ hoạ
+        self.cut_page.set_encoders(available)  # Cắt video chế độ Chính xác: mã hoá bằng card đồ hoạ
         self.gpu_label.setText(self.export_tab.gpu_text())
         self.recompute()
         QTimer.singleShot(1500, self._maybe_resume_queue)
@@ -2182,6 +2227,21 @@ class MainWindow(QMainWindow):
                 self.download_tool_new.hide()
             self.home.cards["download"].new_tag.hide()
 
+    def _cut_seen(self) -> None:
+        if str(self.settings.value("new/cut_seen", "")) != "1":
+            self.settings.setValue("new/cut_seen", "1")
+            if self.cut_tool_new is not None:
+                self.cut_tool_new.hide()
+            for key in ("cut", "frames"):
+                self.home.cards[key].new_tag.hide()
+
+    def _cut_counter(self, text: str) -> None:
+        label = f"Cắt video ({text})" if text else "Cắt video"
+        self._side_buttons = [(b, ic, label if b is self.cut_btn else t) for b, ic, t in self._side_buttons]
+        self.cut_btn.setToolTip(label)
+        if not self._compact:
+            self.cut_btn.setText(f"  {label}")
+
     def _download_busy(self, on: bool) -> None:
         power.hold("download", on)
         self.settings.setValue("download/was_running", "running" if on else "")
@@ -2405,19 +2465,22 @@ class MainWindow(QMainWindow):
 
     def _shutdown_countdown(self, ok: int, bad: int) -> None:
         import subprocess
-        if self.download_page.is_busy():  # còn đang tải video: chờ tải xong rồi mới đếm ngược (không mất file)
+        # còn đang tải / cắt video: chờ xong rồi mới đếm ngược (không mất file)
+        busy_page = next((pg for pg in (self.download_page, self.cut_page) if pg.is_busy()), None)
+        if busy_page is not None:
             if not getattr(self, "_shutdown_waiting", False):
                 self._shutdown_waiting = True
 
-                def later(busy: bool) -> None:
+                def later(busy: bool, pg=busy_page) -> None:
                     if busy:
                         return
-                    self.download_page.busyChanged.disconnect(later)
+                    pg.busyChanged.disconnect(later)
                     self._shutdown_waiting = False
                     if self.settings_page.shutdown.isChecked():
                         self._shutdown_countdown(ok, bad)
-                self.download_page.busyChanged.connect(later)
-            self.export_tab.on_progress(1.0, "Hàng đợi xong — chờ tải video xong rồi tắt máy…")
+                busy_page.busyChanged.connect(later)
+            what = "tải video" if busy_page is self.download_page else "cắt video"
+            self.export_tab.on_progress(1.0, f"Hàng đợi xong — chờ {what} xong rồi tắt máy…")
             return
         self._save_queue()  # lưu trước khi Windows tắt máy (có thể không kịp đóng app bình thường)
         try:
@@ -2507,7 +2570,8 @@ class MainWindow(QMainWindow):
     # ---------- Bảng trộn âm: nghe thử 20 giây ----------
     def _help_action(self, act: str) -> None:
         """Nút “Mở …” trong trang Hướng dẫn → đi tới đúng chỗ."""
-        pages = {"home": HOME_PAGE, "video": 0, "music": 1, "export": 2, "settings": 3, "download": DOWNLOAD_PAGE}
+        pages = {"home": HOME_PAGE, "video": 0, "music": 1, "export": 2, "settings": 3, "download": DOWNLOAD_PAGE,
+                 "cut": CUT_PAGE}
         if act in pages:
             if act == "video" and self.mode == "music_only":
                 self.set_mode("video_music")
@@ -2984,6 +3048,12 @@ class MainWindow(QMainWindow):
                 e.ignore()
                 return
             self.download_page.stop()
+        if self.cut_page.is_busy():
+            if QMessageBox.question(self, "Đang cắt video", "Đang cắt video. Dừng và thoát?") \
+                    != QMessageBox.StandardButton.Yes:
+                e.ignore()
+                return
+            self.cut_page.stop()
         if self.job:
             if QMessageBox.question(self, "Đang xuất", "Đang xuất file. Huỷ và thoát?") \
                     != QMessageBox.StandardButton.Yes:
@@ -3025,6 +3095,7 @@ class MainWindow(QMainWindow):
         self._session_saved = True
         self._save_queue()
         self.download_page.save()  # Windows tắt máy giữa lúc tải: cờ download/was_running được giữ để lần sau hỏi
+        self.cut_page.save()
         if self._initial_loaded:
             try:
                 self.collect_project().save(str(ffmpeg_tools.data_dir() / AUTOSAVE))
