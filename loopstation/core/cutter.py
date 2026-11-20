@@ -266,18 +266,31 @@ def aspect_filter(w: int, h: int, aspect: str, fit: str) -> str:
             f"[b][f]overlay=(W-w)/2:(H-h)/2,setsar=1")
 
 
-def split_args(src: str, seg: Segment, out: Path, info: MediaInfo, s: SplitSettings, encoder: str) -> list[str]:
-    """Tham số FFmpeg cắt một đoạn (không gồm tên chương trình). Nhanh = chép nguyên (-c copy), bỏ qua đổi tỉ lệ."""
+def speed_plan(encoder: str) -> tuple[str, int]:
+    """(giải mã bằng gì, mấy đoạn cùng lúc) theo encoder đã dò. NVIDIA: giải mã CUDA (CPU giải mã là phần chậm nhất
+    khi card mã hoá) + 3 đoạn song song — đo trên 1080p: nhanh gấp ~2 lần. Card khác / CPU: giải mã CPU."""
+    return ("cuda" if encoder.endswith("_nvenc") else ""), encoders.parallel_jobs(encoder)
+
+
+def split_args(src: str, seg: Segment, out: Path, info: MediaInfo, s: SplitSettings, encoder: str,
+               hwdec: str = "") -> list[str]:
+    """Tham số FFmpeg cắt một đoạn (không gồm tên chương trình). Nhanh = chép nguyên (-c copy), bỏ qua đổi tỉ lệ.
+    `hwdec` (vd "cuda"): giải mã bằng card đồ hoạ — chỉ khi mã hoá lại."""
     # đoạn đầu: không tua (-ss 0 làm hỏng đoạn đầu của file .flv — mất hình / thiếu giây)
     seek = ["-ss", f"{seg.start:.3f}"] if seg.start > EPS else []
     head = [*seek, "-i", src, "-t", f"{seg.dur:.3f}", "-map", "0:v:0", "-map", "0:a?"]
     if not s.exact:
         return [*head, "-c", "copy", "-avoid_negative_ts", "make_zero", str(out)]
+    if hwdec:
+        head = ["-hwaccel", hwdec, *head]  # khung giải mã tự chép về RAM cho bộ lọc / encoder
     flt = aspect_filter(info.width, info.height, s.aspect, s.fit)
     if not flt and (info.width % 2 or info.height % 2):  # H.264 4:2:0 không nhận cạnh lẻ (quay màn hình, clip đã cắt)
         flt = "scale=trunc(iw/2)*2:trunc(ih/2)*2"
     gop = max(1, round(float(info.fps or 30) * 2))
-    return [*head, *(["-vf", flt] if flt else []), *encoders.encoder_args(encoder, "high", gop),
+    enc = encoders.encoder_args(encoder, "high", gop)
+    if encoder == "libx264":  # máy không có card: "slow" của bản xuất dài chậm ~7 lần, clip ngắn up mạng không cần
+        enc[enc.index("-preset") + 1] = "veryfast"
+    return [*head, *(["-vf", flt] if flt else []), *enc,
             "-pix_fmt", encoders.pix_fmt(encoder), "-c:a", "aac", "-b:a", "192k", "-movflags", "+faststart",
             str(out)]
 
@@ -303,7 +316,7 @@ def scene_threshold(pct: int) -> float:
     return max(1, min(100, int(pct))) / 100
 
 
-def frame_args(src: str, info: MediaInfo, s: FrameSettings, pattern: Path) -> list[str]:
+def frame_args(src: str, info: MediaInfo, s: FrameSettings, pattern: Path, hwdec: str = "") -> list[str]:
     """Tham số FFmpeg xuất ảnh ra `pattern` (vd …/tên_%04d.jpg)."""
     d = max(info.duration, 0.001)
     pre: list[str] = []
@@ -325,7 +338,8 @@ def frame_args(src: str, info: MediaInfo, s: FrameSettings, pattern: Path) -> li
         flt = "select=eq(n\\,0)+gt(scene\\," + f"{scene_threshold(s.scene):g})"
         post = ["-fps_mode", "vfr"]
     q = ["-q:v", "2"] if s.fmt == "jpg" else []
-    return [*pre, "-i", src, "-map", "0:v:0", "-vf", flt, *post, *q, str(pattern)]
+    hw = ["-hwaccel", hwdec] if hwdec else []
+    return [*hw, *pre, "-i", src, "-map", "0:v:0", "-vf", flt, *post, *q, str(pattern)]
 
 
 def frame_estimate(info: MediaInfo, s: FrameSettings) -> int | None:
@@ -422,10 +436,14 @@ def _place(folder: Path, src: str, per_video: bool, ext: str, reuse: tuple[Path,
 
 def split_video(runner, src: str, info: MediaInfo, s: SplitSettings, folder: Path, encoder: str,
                 segments: list[Segment], on_progress=None, on_file=None,
-                reuse: tuple[Path, str] | None = None) -> RunResult:
+                reuse: tuple[Path, str] | None = None, hwdec: str = "", jobs: int = 1) -> RunResult:
     """Cắt `segments` của một video ra <thư mục>/<tên gốc>_01.mp4…; đoạn lỗi ghi vào errors rồi chạy tiếp.
     `reuse` = (thư mục, tên gốc) của lượt bị Dừng trước đó (đã dọn): ghi lại đúng chỗ đó nếu không đụng file khác.
-    Bị Dừng → xoá file đang ghi dở, ném CancelledError có thuộc tính `files` (các đoạn đã xong)."""
+    `jobs` đoạn chạy cùng lúc; `hwdec` giải mã bằng card — card lỗi với video này thì tự chạy lại bằng CPU.
+    Bị Dừng → xoá các file đang ghi dở, ném CancelledError có thuộc tính `files` (các đoạn đã xong)."""
+    import threading
+    from concurrent.futures import ThreadPoolExecutor
+
     from .ffmpeg_tools import CancelledError, FFmpegError
     ext = ".mp4" if s.exact else (Path(src).suffix.lower() or ".mp4")
     d, stem = _place(folder, src, s.per_video, ext[1:], reuse)
@@ -433,40 +451,76 @@ def split_video(runner, src: str, info: MediaInfo, s: SplitSettings, folder: Pat
     n = len(segments)
     nd = digits(n, 2)
     total = sum(x.dur for x in segments) or 1.0
-    files: list[Path] = []
-    errors: list[str] = []
-    done = 0.0
-    for i, seg in enumerate(segments):
+    lock = threading.Lock()
+    got = [0.0] * n  # giây đã cắt của từng đoạn (tiến độ chung = tổng / tổng thời lượng)
+    ok: dict[int, Path] = {}
+    errs: dict[int, str] = {}
+    hw = {"on": bool(hwdec) and s.exact}
+
+    def report(text: str) -> None:
+        if on_progress:
+            on_progress(min(1.0, sum(got) / total), text)
+
+    def one(i: int) -> None:
+        seg = segments[i]
         text = f"đoạn {i + 1}/{n}"
         out = d / f"{stem}_{i + 1:0{nd}d}{ext}"
-        if on_progress:
-            on_progress(min(1.0, done / total), text)
+        with lock:
+            report(text)
 
-        def prog(block, base=done, seg=seg, text=text):
+        def prog(block):
             t = _out_seconds(block)
-            if t is not None and on_progress:
-                on_progress(min(1.0, (base + min(max(t, 0.0), seg.dur)) / total), text)
-        try:
-            runner.ffmpeg(split_args(src, seg, out, info, s, encoder), on_progress=prog)
-        except CancelledError as e:
-            out.unlink(missing_ok=True)
-            e.files, e.folder, e.stem, e.total = files, d, stem, n  # để chạy lại đúng chỗ (reuse)
-            raise
-        except FFmpegError as e:
-            out.unlink(missing_ok=True)
-            errors.append(f"Đoạn {i + 1}: {_last_line(e)}")
-        else:
-            files.append(out)
+            if t is not None:
+                with lock:
+                    got[i] = min(max(t, 0.0), seg.dur)
+                    report(text)
+        while True:
+            use_hw = hw["on"]
+            try:
+                runner.ffmpeg(split_args(src, seg, out, info, s, encoder, hwdec if use_hw else ""), on_progress=prog)
+            except CancelledError:
+                out.unlink(missing_ok=True)
+                raise
+            except FFmpegError as e:
+                out.unlink(missing_ok=True)
+                if use_hw:  # card không giải mã được video này → CPU, cho cả các đoạn sau
+                    hw["on"] = False
+                    with lock:
+                        got[i] = 0.0
+                    continue
+                with lock:
+                    errs[i] = f"Đoạn {i + 1}: {_last_line(e)}"
+                    got[i] = seg.dur
+                    report(text)
+                return
+            with lock:
+                ok[i] = out
+                got[i] = seg.dur
+                report(text)
             if on_file:
                 on_file(out)
-        done += seg.dur
+            return
+
+    cancelled: CancelledError | None = None
+    with ThreadPoolExecutor(max(1, min(int(jobs), n or 1))) as ex:
+        futs = [ex.submit(one, i) for i in range(n)]
+        for f in futs:
+            try:
+                f.result()
+            except CancelledError as e:
+                cancelled = cancelled or e
+                runner.cancel()  # dừng nốt các đoạn đang chạy cùng lúc
+    files = [ok[i] for i in sorted(ok)]
+    if cancelled is not None:
+        cancelled.files, cancelled.folder, cancelled.stem, cancelled.total = files, d, stem, n
+        raise cancelled
     if on_progress:
         on_progress(1.0, f"đoạn {n}/{n}")
-    return RunResult(files, errors, d, n)
+    return RunResult(files, [errs[i] for i in sorted(errs)], d, n)
 
 
 def extract_frames(runner, src: str, info: MediaInfo, s: FrameSettings, folder: Path,
-                   on_progress=None, reuse: tuple[Path, str] | None = None) -> RunResult:
+                   on_progress=None, reuse: tuple[Path, str] | None = None, hwdec: str = "") -> RunResult:
     """Xuất ảnh ra <thư mục>/<tên gốc>_0001.jpg…; bị Dừng → CancelledError có `files` (ảnh đã ra)."""
     from .ffmpeg_tools import CancelledError, FFmpegError
     ext = "png" if s.fmt == "png" else "jpg"
@@ -485,7 +539,14 @@ def extract_frames(runner, src: str, info: MediaInfo, s: FrameSettings, folder: 
         on_progress(0.0, "")
     errors: list[str] = []
     try:
-        runner.ffmpeg(frame_args(src, info, s, pattern), on_progress=prog)
+        try:
+            runner.ffmpeg(frame_args(src, info, s, pattern, hwdec), on_progress=prog)
+        except FFmpegError:
+            if not hwdec:
+                raise
+            for f in own_files(d, stem, ext):  # card không giải mã được → xoá ảnh dở, chạy lại bằng CPU
+                f.unlink(missing_ok=True)
+            runner.ffmpeg(frame_args(src, info, s, pattern), on_progress=prog)
     except CancelledError as e:
         e.files, e.folder, e.stem, e.total = own_files(d, stem, ext), d, stem, None
         raise

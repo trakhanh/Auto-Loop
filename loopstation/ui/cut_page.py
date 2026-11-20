@@ -842,6 +842,7 @@ class CutPage(QWidget):
 
         def prog(frac, text):
             self.b.progress.emit(p, frac, text)
+        hwdec, jobs = cutter.speed_plan(encoder)  # card NVIDIA: giải mã CUDA + 3 đoạn cùng lúc
         try:
             spot = None
             if old is not None:  # lượt trước bị Dừng: dọn file chính lượt đó tạo, chạy lại đúng chỗ cũ
@@ -859,9 +860,10 @@ class CutPage(QWidget):
                 segs, note = cutter.plan_segments(info.duration, job)
                 if note:
                     self.b.note.emit(f"{Path(p).name}: {note}")
-                res = cutter.split_video(runner, p, info, job, folder, encoder, segs, on_progress=prog, reuse=spot)
+                res = cutter.split_video(runner, p, info, job, folder, encoder, segs, on_progress=prog, reuse=spot,
+                                         hwdec=hwdec, jobs=jobs)
             else:
-                res = cutter.extract_frames(runner, p, info, job, folder, on_progress=prog, reuse=spot)
+                res = cutter.extract_frames(runner, p, info, job, folder, on_progress=prog, reuse=spot, hwdec=hwdec)
             self.b.video_done.emit(p, res, "", None)
         except ffmpeg_tools.CancelledError as e:
             self.b.video_done.emit(p, None, "stop", (getattr(e, "folder", folder), getattr(e, "stem", ""),

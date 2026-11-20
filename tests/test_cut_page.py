@@ -320,3 +320,30 @@ def test_locked_file_on_rerun_does_not_hang(page, env, tmp_path, monkeypatch):
     monkeypatch.setattr(pathlib.Path, "unlink", locked)
     page.start()
     assert wait(lambda: not page.is_busy(), 60)
+
+
+def test_run_uses_speed_plan(page, env, monkeypatch):
+    """Trang chạy chia đoạn / xuất ảnh với giải mã + số đoạn cùng lúc theo card đồ hoạ (cutter.speed_plan)."""
+    from loopstation.core import cutter
+    from loopstation.ui import cut_page
+    seen = {}
+    real_split, real_frames = cutter.split_video, cutter.extract_frames
+    monkeypatch.setattr(cut_page.cutter, "speed_plan", lambda enc: ("", 2))
+
+    def spy_split(*a, **k):
+        seen["split"] = (k.get("hwdec"), k.get("jobs"))
+        return real_split(*a, **k)
+
+    def spy_frames(*a, **k):
+        seen["frames"] = k.get("hwdec")
+        return real_frames(*a, **k)
+    monkeypatch.setattr(cut_page.cutter, "split_video", spy_split)
+    monkeypatch.setattr(cut_page.cutter, "extract_frames", spy_frames)
+    add_ready(page, env / "lua.mp4")
+    page.mode_radio["parts"].setChecked(True)
+    page.start()
+    assert wait(lambda: not page.is_busy(), 60)
+    page.set_tab("frames")
+    page.start()
+    assert wait(lambda: not page.is_busy(), 60)
+    assert seen == {"split": ("", 2), "frames": ""}

@@ -229,3 +229,28 @@ def test_last_line_skips_generic_ffmpeg_tail():
                     "Error while opening encoder - maybe incorrect parameters\nConversion failed!")
     assert "Error while opening encoder" in c._last_line(err) or "641x361" in c._last_line(err)
     assert c._last_line(err) != "Conversion failed!"
+
+
+# ---------- tăng tốc ----------
+def test_split_args_hwdec_before_input():
+    a = c.split_args("a.mp4", c.Segment(10, 5), Path("o.mp4"), INFO, c.SplitSettings(), "h264_nvenc", hwdec="cuda")
+    assert a[:2] == ["-hwaccel", "cuda"] and a.index("-hwaccel") < a.index("-ss") < a.index("-i")
+    fast = c.split_args("a.mp4", c.Segment(10, 5), Path("o.mp4"), INFO, c.SplitSettings(exact=False), "h264_nvenc",
+                        hwdec="cuda")
+    assert "-hwaccel" not in fast  # chép nguyên: không giải mã
+
+
+def test_split_args_cpu_uses_fast_preset():
+    a = c.split_args("a.mp4", c.Segment(10, 5), Path("o.mp4"), INFO, c.SplitSettings(), "libx264")
+    assert a[a.index("-preset") + 1] == "veryfast" and a[a.index("-crf") + 1] == "18"
+
+
+def test_speed_plan():
+    assert c.speed_plan("h264_nvenc") == ("cuda", 3)
+    assert c.speed_plan("h264_qsv")[1] == 2 and c.speed_plan("h264_qsv")[0] == ""
+    assert c.speed_plan("libx264")[0] == "" and c.speed_plan("libx264")[1] >= 1
+
+
+def test_frame_args_hwdec():
+    a = c.frame_args("a.mp4", INFO, c.FrameSettings(), Path("x_%04d.jpg"), hwdec="cuda")
+    assert a[:2] == ["-hwaccel", "cuda"] and a.index("-hwaccel") < a.index("-i")

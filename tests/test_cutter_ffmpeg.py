@@ -209,3 +209,47 @@ def test_frames_cancel_lists_only_new_files(media, tmp_path):
                               reuse=(tmp_path, sample.stem))
     assert not set(ei.value.files) & set(first.files)
     assert all(p.exists() for p in first.files)
+
+
+def test_parallel_split_same_result(media, tmp_path):
+    from loopstation.core import cutter, ffmpeg_tools, probe
+    sample, _ = media
+    info = probe.probe(str(sample))
+    s = cutter.SplitSettings(mode="parts", parts=3)
+    segs, _ = cutter.plan_segments(info.duration, s)
+    seen = []
+    r = cutter.split_video(ffmpeg_tools.Runner(), str(sample), info, s, tmp_path, "libx264", segs, jobs=3,
+                           on_progress=lambda f, t: seen.append(f))
+    assert [p.name for p in r.files] == [f"{sample.stem}_{i:02d}.mp4" for i in (1, 2, 3)] and not r.errors
+    assert all(abs(dur(p) - 2.0) < 0.15 for p in r.files)
+    assert seen[-1] == pytest.approx(1.0) and all(0 <= f <= 1 for f in seen)
+
+
+def test_parallel_cancel_leaves_no_partial(media, tmp_path):
+    from loopstation.core import cutter, ffmpeg_tools, probe
+    sample, _ = media
+    info = probe.probe(str(sample))
+    s = cutter.SplitSettings(mode="parts", parts=3, aspect="9:16")
+    segs, _ = cutter.plan_segments(info.duration, s)
+    runner = ffmpeg_tools.Runner()
+    with pytest.raises(ffmpeg_tools.CancelledError) as ei:
+        cutter.split_video(runner, str(sample), info, s, tmp_path, "libx264", segs, jobs=3,
+                           on_progress=lambda f, t: f > 0.2 and runner.cancel())
+    left = sorted((tmp_path / sample.stem).iterdir())
+    assert left == sorted(ei.value.files)  # chỉ còn đoạn đã xong hẳn
+    assert all(probe.probe(str(p)).ok for p in left)
+
+
+def test_hwdec_failure_falls_back_to_cpu(media, tmp_path):
+    """Card không giải mã được video này (hoặc không có CUDA) → tự chạy lại bằng CPU, không báo lỗi."""
+    from loopstation.core import cutter, ffmpeg_tools, probe
+    sample, _ = media
+    info = probe.probe(str(sample))
+    s = cutter.SplitSettings(mode="parts", parts=2)
+    segs, _ = cutter.plan_segments(info.duration, s)
+    r = cutter.split_video(ffmpeg_tools.Runner(), str(sample), info, s, tmp_path, "libx264", segs,
+                           hwdec="khong-co-that")
+    assert len(r.files) == 2 and not r.errors
+    f = cutter.extract_frames(ffmpeg_tools.Runner(), str(sample), info, cutter.FrameSettings(count=3), tmp_path / "a",
+                              hwdec="khong-co-that")
+    assert len(f.files) == 3 and not f.errors
