@@ -537,3 +537,24 @@ def test_douyin_grab_fail_row(page):
     read(page, DY)
     e = page.queue.entries[0]
     assert e.unread and e.status == "error" and "Không lấy được video Douyin" in e.message
+
+
+# ---------- logo nền tảng ----------
+def test_platform_logos_on_page(page):
+    from loopstation.ui import brand
+    assert [c.property("platform") for c in page.platform_chips] == list(brand.SHOWN)
+    assert all(c.isVisibleTo(page) for c in page.platform_chips)
+    assert len(page.empty_logos) == len(brand.SHOWN)
+
+
+def test_platform_column_has_logo(page):
+    from PySide6.QtWidgets import QStyleOptionViewItem
+    from loopstation.ui.download_page import PlatformDelegate
+    read(page, "https://y/lg1")
+    row = page._row(page.queue.entries[0])
+    d = page.tree.itemDelegateForColumn(1)
+    assert isinstance(d, PlatformDelegate)
+    opt = QStyleOptionViewItem()
+    opt.font = page.tree.font()
+    idx = page.tree.indexFromItem(row, 1)
+    assert d.sizeHint(opt, idx).width() >= page.tree.fontMetrics().horizontalAdvance("YouTube") + 16 + 20

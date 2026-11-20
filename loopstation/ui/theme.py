@@ -67,6 +67,10 @@ R = {"sm": 4, "md": 6, "lg": 8, "xl": 12, "pill": 999}
 # Chiều cao điều khiển (px)
 H = {"sm": 24, "md": 32, "lg": 40}
 # Thang cỡ chữ (pt, ở cỡ chữ mặc định 10 — tự nhân theo Cài đặt → Cỡ chữ): chỉ dùng các bậc này
+# màu logo nền tảng (trang Tải video) — màu nhận diện của từng trang, dùng chung cho mọi bộ màu
+BRAND = {"youtube": "#ff2d2d", "tiktok_a": "#25f4ee", "tiktok_b": "#fe2c55", "bilibili": "#00aeec",
+         "facebook": "#1877f2", "x": "#e7e9ea", "instagram": "#e1306c", "instagram_b": "#f77737", "white": "#ffffff",
+         "other": "#9aa3b2"}
 FS = {"caption": 8.5, "small": 9, "body": 10, "label": 10, "subtitle": 11, "title": 13, "display": 17}
 # Thời lượng chuyển động (ms)
 DUR = {"fast": 120, "base": 180, "slow": 240}
@@ -624,6 +628,8 @@ QPushButton[seg="true"] {{ background: transparent; border: none; border-radius:
 QPushButton[seg="true"]:hover {{ color: {t['text']}; background: {rgba(t['accent'], 0.10)}; }}
 QPushButton[seg="true"]:checked {{ background: {rgba(t['accent'], 0.28)}; color: {t['text']}; }}
 QPushButton[seg="true"]:disabled {{ color: {t['text_disabled']}; }}
+QWidget#brandChip {{ background: {t['field']}; border: 1px solid {t['line']}; border-radius: 11px; }}
+QWidget#brandChip QLabel {{ background: transparent; color: {t['text_2']}; font-size: {f['small']}; }}
 QLabel#fieldLabel {{ color: {t['text_muted']}; font-size: {f['small']}; font-weight: 600; background: transparent; }}
 QLabel#pathBox {{ background: {t['field']}; border: 1px solid {t['line']}; border-radius: {R['md']}px;
     padding: 6px 8px; color: {t['text_2']}; }}

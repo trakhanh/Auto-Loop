@@ -31,16 +31,14 @@ from PySide6.QtWidgets import (
 from ..core import dl_tools, douyin, downloader, ffmpeg_tools, updater
 from ..core import download_queue as dq
 from ..core.downloader import Options
-from . import icons, theme
+from . import brand, icons, theme
 from . import widgets as w
 
 ROLE = Qt.ItemDataRole.UserRole
 PROG_ROLE = Qt.ItemDataRole.UserRole + 1  # tiến độ 0..1 (None = không vẽ thanh)
 # màu nhãn nền tảng (token theme.py)
-PLATFORM_TOKENS = {"YouTube": "danger_text", "TikTok": "text", "Bilibili": "info_text", "X": "text_2",
-                   "Facebook": "accent_text", "Instagram": "warn_text"}
-PLATFORM_CHIPS = (("YouTube", "error"), ("TikTok", "text"), ("Bilibili", "info"), ("X", "muted"),
-                  ("Facebook", "accent"), ("Instagram", "warn"))
+PLATFORM_TOKENS = {"YouTube": "danger_text", "TikTok": "text", "Douyin": "text", "Bilibili": "info_text",
+                   "X": "text_2", "Facebook": "accent_text", "Instagram": "warn_text"}
 MORE = "__more__"  # dòng "Hiện thêm" trong nhóm
 CANCELLED = "__cancel__"
 
@@ -176,21 +174,26 @@ class PlatformDelegate(QStyledItemDelegate):
             return
         key = PLATFORM_TOKENS.get(text, "text_muted")
         fm = opt.fontMetrics
-        wpx = fm.horizontalAdvance(text) + 16
-        h = fm.height() + 4
+        h = fm.height() + 6
+        lg = h - 6  # logo vừa trong nhãn
+        wpx = fm.horizontalAdvance(text) + lg + 22
         r = QRect(opt.rect.left() + 4, opt.rect.center().y() - h // 2, min(wpx, opt.rect.width() - 8), h)
         painter.save()
         painter.setRenderHint(QPainter.RenderHint.Antialiasing)
         painter.setPen(Qt.PenStyle.NoPen)
-        painter.setBrush(theme.qcolor(key, 46))
+        painter.setBrush(theme.qcolor(key, 40))
         painter.drawRoundedRect(r, h / 2, h / 2)
+        painter.drawPixmap(QRect(r.left() + 7, r.top() + 3, lg, lg), brand.pixmap(text, lg))
         painter.setPen(theme.qcolor(key))
-        painter.drawText(r, Qt.AlignmentFlag.AlignCenter, text)
+        painter.drawText(r.adjusted(lg + 11, 0, -8, 0), Qt.AlignmentFlag.AlignVCenter | Qt.AlignmentFlag.AlignLeft, text)
         painter.restore()
 
     def sizeHint(self, option, index) -> QSize:  # noqa: N802
         sz = super().sizeHint(option, index)
-        return QSize(sz.width() + 20, sz.height())
+        fm = option.fontMetrics if option.fontMetrics is not None else None
+        text = index.data() or ""
+        tw = fm.horizontalAdvance(text) if fm is not None else sz.width()
+        return QSize(max(sz.width(), tw) + (fm.height() if fm is not None else 14) + 30, sz.height())
 
 
 class ProgressDelegate(QStyledItemDelegate):
@@ -384,11 +387,27 @@ class DownloadPage(QWidget):
         top.addWidget(self.links_edit, 1)
         top.addLayout(rcol)
         left.addLayout(top)
-        plat = QLabel(" · ".join(theme.span(tone, name) for name, tone in PLATFORM_CHIPS) +
-                      theme.span("muted", " · và hơn 1.000 trang khác"))
-        plat.setObjectName("muted")
-        plat.setWordWrap(True)
-        left.addWidget(plat)
+        self.platform_row = QWidget()
+        flow = w.FlowLayout(self.platform_row, spacing=6)
+        self.platform_chips: list[QWidget] = []
+        for name in brand.SHOWN:
+            chip = QWidget()
+            chip.setObjectName("brandChip")
+            chip.setAttribute(Qt.WidgetAttribute.WA_StyledBackground, True)
+            chip.setProperty("platform", name)
+            cl = QHBoxLayout(chip)
+            cl.setContentsMargins(6, 3, 9, 3)
+            cl.setSpacing(5)
+            logo = QLabel()
+            logo.setPixmap(brand.pixmap(name, 16))
+            cl.addWidget(logo)
+            cl.addWidget(QLabel(name))
+            flow.addWidget(chip)
+            self.platform_chips.append(chip)
+        more = w.muted("và hơn 1.000 trang khác")
+        more.setWordWrap(False)
+        flow.addWidget(more)
+        left.addWidget(self.platform_row)
         self.info_label = w.muted("")
         left.addWidget(self.info_label)
 
@@ -500,8 +519,22 @@ class DownloadPage(QWidget):
         steps.setAlignment(Qt.AlignmentFlag.AlignCenter)
         hint = w.muted("Link kênh hoặc danh sách phát: app hiện cả nhóm, tick sẵn 50 video đầu.")
         hint.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        for x in (ic, title, steps, hint):
+        logos = QHBoxLayout()
+        logos.setSpacing(theme.SP['xl'])
+        logos.addStretch(1)
+        self.empty_logos: list[QLabel] = []
+        for name in brand.SHOWN:
+            lab = QLabel()
+            lab.setPixmap(brand.pixmap(name, 30))
+            lab.setToolTip(name)
+            logos.addWidget(lab)
+            self.empty_logos.append(lab)
+        logos.addStretch(1)
+        for x in (ic, title, steps):
             v.addWidget(x)
+        v.addSpacing(theme.SP['sm'])
+        v.addLayout(logos)
+        v.addWidget(hint)
         v.addStretch(1)
         return box
 
