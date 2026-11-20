@@ -6,7 +6,7 @@
 
 **Ghép và loop clip + nhạc thành video YouTube dài hàng giờ — tải video từ YouTube, TikTok, Douyin, Bilibili…, chia đoạn, xuất ảnh — xem trước ngay trong app, xuất nhanh bằng card đồ hoạ.**
 
-<sub>By Khánh Trà · Ứng dụng Windows · Giao diện tiếng Việt · Bản mới nhất: <b>2.0.0</b></sub>
+<sub>By Khánh Trà · Ứng dụng Windows · Giao diện tiếng Việt · Bản mới nhất: <b>2.0.1</b></sub>
 
 <br>
 
@@ -34,6 +34,8 @@
 <br>
 
 ## Có gì mới ở 2.0
+
+> **2.0.1** · <b>Giao diện Sáng / Tối / Theo Windows</b> (Cài đặt → Giao diện hiển thị), đổi bộ màu <b>hoà dần</b> không giật. <b>Cắt video nhanh hơn</b> ở chế độ Chính xác: card NVIDIA giải mã bằng card + cắt 3 đoạn cùng lúc (nhanh gấp ~2 lần), máy không có card rời nhanh gấp ~8 lần. Tải video: ô <b>Chọn tất cả</b> hiện rõ khi chỉ chọn một phần.
 
 ### Tải video — dán link là xong
 
