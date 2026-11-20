@@ -7,6 +7,10 @@ from __future__ import annotations
 import random
 import re
 from dataclasses import dataclass
+from pathlib import Path
+
+from . import encoders
+from .probe import MediaInfo
 
 EPS = 1e-6
 MIN_PIECE = 1.0  # đoạn ngắn hơn 1 giây thì bỏ (hoặc nhập vào đoạn trước)
@@ -177,3 +181,145 @@ def plan_segments(duration: float, s: SplitSettings, rng: random.Random | None =
             note = "Bỏ khoảng ngoài video: " + ", ".join(fmt_time(a) for a in skipped)
         return out, note
     raise ValueError(f"Cách cắt không rõ: {s.mode}")
+
+
+# ---------- kích thước + đổi tỉ lệ khung ----------
+ASPECTS = ("keep", "9:16", "16:9", "1:1", "4:5")
+FITS = ("blur", "black", "crop")
+_RATIOS = {"9:16": (9, 16), "16:9": (16, 9), "1:1": (1, 1), "4:5": (4, 5)}
+
+
+def _ev(x: float) -> int:
+    return max(2, int(round(x / 2)) * 2)
+
+
+def out_size(w: int, h: int, aspect: str) -> tuple[int, int]:
+    """Kích thước ra. 9:16 / 16:9: cạnh dài = cạnh dài nguồn; 1:1 / 4:5: cạnh dài = cạnh ngắn nguồn (không phóng
+    to quá nguồn). Luôn số chẵn (H.264 yêu cầu)."""
+    if aspect not in _RATIOS:
+        return w, h
+    rw, rh = _RATIOS[aspect]
+    long = max(w, h) if aspect in ("9:16", "16:9") else min(w, h)
+    if rw >= rh:
+        return _ev(long), _ev(long * rh / rw)
+    return _ev(long * rw / rh), _ev(long)
+
+
+def aspect_filter(w: int, h: int, aspect: str, fit: str) -> str:
+    """Chuỗi -vf đổi tỉ lệ: nền mờ / viền đen / cắt. "" = giữ nguyên."""
+    if aspect not in _RATIOS:
+        return ""
+    W, H = out_size(w, h, aspect)  # noqa: N806
+    if fit == "black":
+        return (f"scale={W}:{H}:force_original_aspect_ratio=decrease:force_divisible_by=2,"
+                f"pad={W}:{H}:(ow-iw)/2:(oh-ih)/2:black,setsar=1")
+    if fit == "crop":
+        return f"scale={W}:{H}:force_original_aspect_ratio=increase,crop={W}:{H},setsar=1"
+    w4, h4 = _ev(W / 4), _ev(H / 4)  # làm mờ trên ảnh nhỏ rồi phóng lên: nhanh, mờ mịn
+    return (f"split=2[bg][fg];"
+            f"[bg]scale={w4}:{h4}:force_original_aspect_ratio=increase,crop={w4}:{h4},gblur=sigma=12,"
+            f"scale={W}:{H}[b];"
+            f"[fg]scale={W}:{H}:force_original_aspect_ratio=decrease:force_divisible_by=2[f];"
+            f"[b][f]overlay=(W-w)/2:(H-h)/2,setsar=1")
+
+
+def split_args(src: str, seg: Segment, out: Path, info: MediaInfo, s: SplitSettings, encoder: str) -> list[str]:
+    """Tham số FFmpeg cắt một đoạn (không gồm tên chương trình). Nhanh = chép nguyên (-c copy), bỏ qua đổi tỉ lệ."""
+    head = ["-ss", f"{seg.start:.3f}", "-i", src, "-t", f"{seg.dur:.3f}", "-map", "0:v:0", "-map", "0:a?"]
+    if not s.exact:
+        return [*head, "-c", "copy", "-avoid_negative_ts", "make_zero", str(out)]
+    flt = aspect_filter(info.width, info.height, s.aspect, s.fit)
+    gop = max(1, round(float(info.fps or 30) * 2))
+    return [*head, *(["-vf", flt] if flt else []), *encoders.encoder_args(encoder, "high", gop),
+            "-pix_fmt", encoders.pix_fmt(encoder), "-c:a", "aac", "-b:a", "192k", "-movflags", "+faststart",
+            str(out)]
+
+
+# ---------- xuất ảnh ----------
+FRAME_MODES = ("count", "every_sec", "every_n", "scene")
+
+
+@dataclass
+class FrameSettings:
+    mode: str = "count"
+    count: int = 100
+    every_sec: float = 5.0
+    every_n: int = 150
+    scene: int = 10
+    fmt: str = "jpg"
+    per_video: bool = True
+    open_after: bool = False
+
+
+def scene_threshold(pct: int) -> float:
+    """% thay đổi giữa hai khung → ngưỡng điểm đổi cảnh của FFmpeg (10 % → 0,10). Số nhỏ = nhiều ảnh."""
+    return max(1, min(100, int(pct))) / 100
+
+
+def frame_args(src: str, info: MediaInfo, s: FrameSettings, pattern: Path) -> list[str]:
+    """Tham số FFmpeg xuất ảnh ra `pattern` (vd …/tên_%04d.jpg)."""
+    d = max(info.duration, 0.001)
+    pre: list[str] = []
+    post: list[str] = []
+    if s.mode == "count":
+        n = max(1, int(s.count))
+        pre = ["-ss", f"{d / (2 * n):.3f}"]  # ảnh nằm giữa từng khoảng đều nhau
+        flt = f"fps={n}/{d:g}"
+        post = ["-frames:v", str(n)]
+    elif s.mode == "every_sec":
+        flt = f"fps=1/{max(0.01, float(s.every_sec)):g}"
+    elif s.mode == "every_n":
+        flt = "select=not(mod(n\\," + f"{max(1, int(s.every_n))}))"
+        post = ["-fps_mode", "vfr"]
+    else:
+        flt = "select=eq(n\\,0)+gt(scene\\," + f"{scene_threshold(s.scene):g})"
+        post = ["-fps_mode", "vfr"]
+    q = ["-q:v", "2"] if s.fmt == "jpg" else []
+    return [*pre, "-i", src, "-map", "0:v:0", "-vf", flt, *post, *q, str(pattern)]
+
+
+def frame_estimate(info: MediaInfo, s: FrameSettings) -> int | None:
+    """Số ảnh dự kiến (đổi cảnh: không biết trước → None)."""
+    if s.mode == "count":
+        return max(1, int(s.count))
+    if s.mode == "every_sec":
+        return max(1, int(info.duration / max(0.01, s.every_sec) + EPS))
+    if s.mode == "every_n":
+        frames = info.nb_frames or info.duration * float(info.fps or 30)
+        return max(1, int(frames / max(1, s.every_n) + EPS))
+    return None
+
+
+# ---------- đặt tên, không ghi đè ----------
+def out_dir(folder: Path, src: str, per_video: bool) -> Path:
+    """Thư mục ra. Thư mục riêng mỗi video: <thư mục>/<tên gốc>, đã có file thì "<tên gốc> (2)", (3)…"""
+    folder = Path(folder)
+    if not per_video:
+        return folder
+    stem = Path(src).stem
+    k = 1
+    while True:
+        cand = folder / (stem if k == 1 else f"{stem} ({k})")
+        if not cand.exists() or (cand.is_dir() and not any(cand.iterdir())):
+            return cand
+        k += 1
+
+
+def unique_stem(folder: Path, stem: str, ext: str) -> str:
+    """Tên gốc cho các file "<stem>_01.<ext>"…; đã có file cùng kiểu trong thư mục → "<stem> (2)"…"""
+    folder = Path(folder)
+    k = 1
+    while True:
+        cand = stem if k == 1 else f"{stem} ({k})"
+        if not folder.is_dir() or not any(folder.glob(f"{glob_escape(cand)}_*.{ext}")):
+            return cand
+        k += 1
+
+
+def glob_escape(text: str) -> str:
+    """Ký tự đặc biệt của glob ([ ] * ?) trong tên file → khớp đúng chữ."""
+    return "".join(f"[{ch}]" if ch in "[]*?" else ch for ch in text)
+
+
+def digits(n: int, minimum: int) -> int:
+    return max(minimum, len(str(max(0, int(n)))))

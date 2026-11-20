@@ -103,3 +103,93 @@ def test_empty_marks_or_ranges_is_error():
 def test_all_marks_outside_is_error():
     with pytest.raises(ValueError):
         segs(100, mode="ranges", ranges="00:03:00-00:03:10")
+
+
+# ---------- kích thước, filter, tham số FFmpeg, đặt tên ----------
+from fractions import Fraction  # noqa: E402
+
+from loopstation.core.probe import MediaInfo  # noqa: E402
+
+INFO = MediaInfo(path="a.mp4", duration=100, has_video=True, width=1920, height=1080, fps=Fraction(30),
+                 has_audio=True)
+
+
+def test_out_size():
+    assert c.out_size(1920, 1080, "9:16") == (1080, 1920)
+    assert c.out_size(1080, 1920, "16:9") == (1920, 1080)
+    assert c.out_size(1920, 1080, "1:1") == (1080, 1080)
+    assert c.out_size(1920, 1080, "4:5") == (864, 1080)
+    assert c.out_size(1281, 721, "9:16") == (720, 1280)  # số chẵn
+    assert c.out_size(1080, 1920, "9:16") == (1080, 1920)  # video dọc (đã xoay) giữ nguyên
+    assert c.out_size(1920, 1080, "keep") == (1920, 1080)
+
+
+def test_aspect_filter_kinds():
+    assert c.aspect_filter(1920, 1080, "keep", "blur") == ""
+    blur = c.aspect_filter(1920, 1080, "9:16", "blur")
+    assert "gblur" in blur and "overlay" in blur and "split" in blur
+    assert "pad=1080:1920" in c.aspect_filter(1920, 1080, "9:16", "black")
+    assert "crop=1080:1920" in c.aspect_filter(1920, 1080, "9:16", "crop")
+
+
+def test_split_args_exact():
+    a = c.split_args("a.mp4", c.Segment(10, 5), Path("o.mp4"), INFO, c.SplitSettings(aspect="9:16"), "h264_nvenc")
+    assert a[a.index("-ss") + 1] == "10.000" and a.index("-ss") < a.index("-i")
+    assert a[a.index("-t") + 1] == "5.000"
+    assert "h264_nvenc" in a and "0:a?" in a and "aac" in a
+    assert "gblur" in a[a.index("-vf") + 1]
+    assert a[-1] == "o.mp4"
+    assert "-vf" not in c.split_args("a.mp4", c.Segment(0, 5), Path("o.mp4"), INFO, c.SplitSettings(), "libx264")
+
+
+def test_split_args_fast_ignores_aspect():
+    f = c.split_args("a.mp4", c.Segment(10, 5), Path("o.mkv"), INFO,
+                     c.SplitSettings(exact=False, aspect="9:16"), "h264_nvenc")
+    assert f[f.index("-c") + 1] == "copy" and "-vf" not in f and "h264_nvenc" not in f
+
+
+def vf(args):
+    return args[args.index("-vf") + 1]
+
+
+def test_frame_args_modes():
+    p = Path("x_%04d.jpg")
+    a = c.frame_args("a.mp4", INFO, c.FrameSettings(mode="count", count=4), p)
+    assert a[a.index("-ss") + 1] == "12.500" and a.index("-ss") < a.index("-i")
+    assert vf(a) == "fps=4/100" and a[a.index("-frames:v") + 1] == "4"
+    assert vf(c.frame_args("a.mp4", INFO, c.FrameSettings(mode="every_sec", every_sec=5), p)) == "fps=1/5"
+    assert vf(c.frame_args("a.mp4", INFO, c.FrameSettings(mode="every_sec", every_sec=0.5), p)) == "fps=1/0.5"
+    every_n = c.frame_args("a.mp4", INFO, c.FrameSettings(mode="every_n"), p)
+    assert vf(every_n) == r"select=not(mod(n\,150))" and "vfr" in every_n
+    scene = c.frame_args("a.mp4", INFO, c.FrameSettings(mode="scene", scene=10), p)
+    assert vf(scene) == r"select=eq(n\,0)+gt(scene\,0.1)" and "vfr" in scene
+    jpg = c.frame_args("a.mp4", INFO, c.FrameSettings(), p)
+    assert jpg[jpg.index("-q:v") + 1] == "2" and jpg[-1] == str(p)
+    assert "-q:v" not in c.frame_args("a.mp4", INFO, c.FrameSettings(fmt="png"), Path("x_%04d.png"))
+
+
+def test_scene_threshold():
+    assert c.scene_threshold(10) == 0.1
+    assert c.scene_threshold(0) == 0.01
+    assert c.scene_threshold(150) == 1.0
+
+
+def test_frame_estimate():
+    assert c.frame_estimate(INFO, c.FrameSettings(mode="count", count=100)) == 100
+    assert c.frame_estimate(INFO, c.FrameSettings(mode="every_sec", every_sec=5)) == 20
+    assert c.frame_estimate(INFO, c.FrameSettings(mode="every_n", every_n=150)) == 20  # 100 s × 30 fps / 150
+    assert c.frame_estimate(INFO, c.FrameSettings(mode="scene")) is None
+
+
+def test_names(tmp_path):
+    assert c.out_dir(tmp_path, "D:/v/Cảnh mưa.mp4", True) == tmp_path / "Cảnh mưa"
+    (tmp_path / "Cảnh mưa").mkdir()
+    assert c.out_dir(tmp_path, "D:/v/Cảnh mưa.mp4", True) == tmp_path / "Cảnh mưa"  # thư mục rỗng: dùng luôn
+    (tmp_path / "Cảnh mưa" / "x.mp4").write_bytes(b"1")
+    assert c.out_dir(tmp_path, "D:/v/Cảnh mưa.mp4", True) == tmp_path / "Cảnh mưa (2)"
+    assert c.out_dir(tmp_path, "a.mp4", False) == tmp_path
+    (tmp_path / "a_01.mp4").write_bytes(b"1")
+    assert c.unique_stem(tmp_path, "a", "mp4") == "a (2)"
+    assert c.unique_stem(tmp_path, "a", "jpg") == "a"
+    assert c.unique_stem(tmp_path, "b", "mp4") == "b"
+    assert c.digits(9, 2) == 2 and c.digits(120, 2) == 3 and c.digits(50, 4) == 4
