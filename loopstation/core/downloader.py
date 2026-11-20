@@ -86,7 +86,8 @@ SUBDIR_PREFIX = {"": "", "platform": "%(extractor_key)s/", "uploader": "%(upload
 CONCURRENT = (1, 2, 3)
 RATE_LABELS = (("", "Không giới hạn"), ("5M", "5 MB/s"), ("2M", "2 MB/s"), ("1M", "1 MB/s"))
 PAGE_SIZES = (20, 50, 100, 200)
-LOGINS = (("", "Không"), ("firefox", "Firefox"), ("edge", "Edge"), ("chrome", "Chrome"), ("file", "File đăng nhập…"))
+LOGINS = (("", "Không"), ("app", "Trình duyệt trong app"), ("firefox", "Firefox"), ("edge", "Edge"),
+          ("chrome", "Chrome"), ("file", "File đăng nhập…"))
 SUB_LANGS = "vi.*,en.*"
 
 PROGRESS_PREFIX = "KTLS|"
@@ -279,7 +280,7 @@ def channel_tab_url(data: dict) -> str | None:
 
 # ---------- tham số ----------
 def login_args(login: str, cookies_file: str) -> list[str]:
-    if login == "file":
+    if login in ("file", "app"):  # app: cookie của trình duyệt trong app (người dùng tự đăng nhập)
         return ["--cookies", cookies_file] if cookies_file else []
     if login in ("firefox", "edge", "chrome"):
         return ["--cookies-from-browser", login]
@@ -427,7 +428,7 @@ def friendly_error(stderr: str, login: str) -> str:
         return f"Không lấy được đăng nhập từ {browser} — thử Firefox hoặc file đăng nhập"
     if any(k in s for k in ("sign in to confirm", "login required", "log in", "login_required",
                             "requires authentication", "you must be logged in", "use --cookies")):
-        return "Cần đăng nhập — chọn Đăng nhập ▾"
+        return "Cần đăng nhập — bấm Đăng nhập trong app (cột Cài đặt tải)"
     if any(k in s for k in ("private video", "video unavailable", "has been removed", "does not exist",
                             "http error 404", "this video is private", "content isn't available")):
         return "Video riêng tư hoặc đã bị xoá"

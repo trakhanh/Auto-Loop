@@ -29,7 +29,7 @@ from PySide6.QtWidgets import (
     QTreeWidget, QTreeWidgetItem, QVBoxLayout, QWidget,
 )
 
-from ..core import dl_tools, douyin, downloader, ffmpeg_tools, updater
+from ..core import dl_tools, douyin, downloader, ffmpeg_tools, updater, webcookies
 from ..core import download_queue as dq
 from ..core.downloader import Options
 from . import brand, icons, theme
@@ -601,11 +601,24 @@ class DownloadPage(QWidget):
         self.login_box = combo(downloader.LOGINS, str(self.settings.value("download/login", "") or ""))
         self.login_box.setSizeAdjustPolicy(QComboBox.SizeAdjustPolicy.AdjustToContents)
         self.login_box.setMinimumWidth(self.login_box.sizeHint().width())
-        self.login_box.setToolTip("Dùng đăng nhập từ trình duyệt cho trang bắt đăng nhập. Firefox chắc chắn nhất; "
-                                  "Chrome / Edge hay bị Windows chặn — khi đó dùng file đăng nhập (cookies.txt).")
+        self.login_box.setToolTip("Trang bắt đăng nhập (Facebook, Instagram…) hoặc muốn bản cao hơn (Bilibili 1080p "
+                                  "cần đăng nhập): chọn <b>Trình duyệt trong app</b> rồi đăng nhập tài khoản của bạn. "
+                                  "Firefox / Edge / Chrome: dùng đăng nhập sẵn trên trình duyệt đó (Chrome / Edge hay bị "
+                                  "Windows chặn).")
         self._login_prev = self.login_box.currentIndex()
         self.login_box.currentIndexChanged.connect(self._login_changed)
-        v.addWidget(self.login_box)
+        lrow = QHBoxLayout()
+        lrow.setSpacing(6)
+        lrow.addWidget(self.login_box, 1)
+        self.login_btn = QPushButton("Đăng nhập…")
+        theme.tag(self.login_btn, variant="ghost")
+        self.login_btn.setToolTip("Mở trình duyệt trong app để đăng nhập Bilibili, Facebook, Instagram, X, YouTube…")
+        self.login_btn.clicked.connect(lambda: self.open_login())
+        lrow.addWidget(self.login_btn)
+        v.addLayout(lrow)
+        self.login_status = w.muted("")
+        v.addWidget(self.login_status)
+        self._show_login_status(str(self.settings.value("download/app_logins", "") or ""))
 
         self._section(v, "Lưu kèm")
         self.thumb_chk = QCheckBox("Ảnh bìa (.jpg)")
@@ -771,9 +784,42 @@ class DownloadPage(QWidget):
             self.settings.setValue("download/cookies_file", path)
         self._login_prev = i
         self.settings.setValue("download/login", key)
+        if key == "app" and not webcookies.cookie_file().is_file():
+            self.open_login()  # chưa đăng nhập lần nào trong app: mở cửa sổ đăng nhập ngay
 
     def login(self) -> tuple[str, str]:
-        return str(self.login_box.currentData() or ""), str(self.settings.value("download/cookies_file", "") or "")
+        key = str(self.login_box.currentData() or "")
+        if key == "app":
+            f = webcookies.cookie_file()
+            return key, (str(f) if f.is_file() else "")
+        return key, str(self.settings.value("download/cookies_file", "") or "")
+
+    def open_login(self, start: str = "Bilibili") -> None:
+        """Đăng nhập trong app: người dùng tự đăng nhập; đóng cửa sổ → app chép đăng nhập cho yt-dlp."""
+        from .web_grab import LoginDialog
+        dlg = LoginDialog(self, start=start)
+        dlg.done.connect(self._on_login_done)
+        dlg.exec()
+        w.dispose(dlg)
+
+    def _on_login_done(self, sites: list) -> None:
+        text = ", ".join(sites)
+        self.settings.setValue("download/app_logins", text)
+        if sites and self.login_box.currentData() != "app":
+            self.login_box.blockSignals(True)
+            self.login_box.setCurrentIndex(self.login_box.findData("app"))
+            self.login_box.blockSignals(False)
+            self._login_prev = self.login_box.currentIndex()
+            self.settings.setValue("download/login", "app")
+        self._show_login_status(text)
+        if sites:
+            self.notice.emit(f"Đã đăng nhập trong app: {text}", "ok")
+
+    def _show_login_status(self, text: str) -> None:
+        if self.login_box.currentData() == "app" or text:
+            self.login_status.setText(f"Đã đăng nhập: {text}" if text else "Chưa đăng nhập trang nào trong app")
+        else:
+            self.login_status.setText("")
 
     # ---------- thư mục ----------
     def folder(self) -> str:

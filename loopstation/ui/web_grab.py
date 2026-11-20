@@ -13,13 +13,56 @@ from pathlib import Path
 from PySide6.QtCore import QObject, Qt, QTimer, QUrl, Signal
 from PySide6.QtWidgets import QDialog, QHBoxLayout, QLabel, QPushButton, QVBoxLayout
 
-from ..core import douyin, ffmpeg_tools
-from . import theme
+from ..core import douyin, ffmpeg_tools, webcookies
+from . import brand, theme
 from . import widgets as w
 
 META_WAIT = 6.0  # giây chờ tiêu đề / thời lượng sau khi đã có link video
 VERIFY_WAIT = 180.0  # cửa sổ xác minh đang mở: chờ người dùng tối đa 3 phút
 GIVE_UP_MSG = "Không lấy được video Douyin — thử lại, hoặc bấm đúp để mở trên trình duyệt"
+_PROFILES: dict[str, object] = {}
+
+
+def app_profile(storage: Path | None = None):
+    """Hồ sơ trình duyệt riêng của app (một bản cho mỗi thư mục): dùng chung cho tải Douyin và Đăng nhập trong app."""
+    from PySide6.QtWebEngineCore import QWebEngineProfile
+    store = Path(storage) if storage is not None else ffmpeg_tools.data_dir() / "web"
+    key = str(store.resolve())
+    if key not in _PROFILES:
+        store.mkdir(parents=True, exist_ok=True)
+        prof = QWebEngineProfile(f"ktls-web-{len(_PROFILES)}")
+        prof.setPersistentStoragePath(str(store))
+        prof.setCachePath(str(store / "cache"))
+        prof.setPersistentCookiesPolicy(QWebEngineProfile.PersistentCookiesPolicy.ForcePersistentCookies)
+        _PROFILES[key] = prof
+    return _PROFILES[key]
+
+
+def _cookie_dict(c) -> dict:
+    exp = c.expirationDate()
+    return {"domain": c.domain(), "name": bytes(c.name()).decode("utf-8", "replace"),
+            "value": bytes(c.value()).decode("utf-8", "replace"), "path": c.path() or "/", "secure": c.isSecure(),
+            "http_only": c.isHttpOnly(), "expires": int(exp.toSecsSinceEpoch()) if exp.isValid() else 0}
+
+
+def collect_cookies(profile, on_done, wait_ms: int = 700) -> None:
+    """Đọc toàn bộ cookie của hồ sơ (bất đồng bộ) → on_done(list[dict])."""
+    store = profile.cookieStore()
+    items: dict[tuple, dict] = {}
+
+    def add(c) -> None:
+        d = _cookie_dict(c)
+        items[(d["domain"], d["path"], d["name"])] = d
+    store.cookieAdded.connect(add)
+    store.loadAllCookies()
+
+    def finish() -> None:
+        try:
+            store.cookieAdded.disconnect(add)
+        except (RuntimeError, TypeError):
+            pass
+        on_done(list(items.values()))
+    QTimer.singleShot(wait_ms, finish)
 
 
 class WebGrabber(QObject):
@@ -70,13 +113,8 @@ class WebGrabber(QObject):
     def _ensure(self) -> None:
         if self._page is not None:
             return
-        from PySide6.QtWebEngineCore import QWebEnginePage, QWebEngineProfile
-        self._profile = QWebEngineProfile("ktls-web", self)
-        store = self._storage or (ffmpeg_tools.data_dir() / "web")
-        store.mkdir(parents=True, exist_ok=True)
-        self._profile.setPersistentStoragePath(str(store))
-        self._profile.setCachePath(str(store / "cache"))
-        self._profile.setPersistentCookiesPolicy(QWebEngineProfile.PersistentCookiesPolicy.ForcePersistentCookies)
+        from PySide6.QtWebEngineCore import QWebEnginePage
+        self._profile = app_profile(self._storage)
         self._page = QWebEnginePage(self._profile, self)
         self._page.setAudioMuted(True)
 
@@ -202,3 +240,80 @@ class WebGrabber(QObject):
             dlg.blockSignals(True)
             dlg.close()
             dlg.deleteLater()
+
+
+class LoginDialog(QDialog):
+    """Đăng nhập trong app: người dùng tự đăng nhập tài khoản của mình (Bilibili, Facebook, Instagram…) trong trình
+    duyệt riêng của app; đóng cửa sổ → app chép cookie ra file cho yt-dlp (tải bản chất lượng cao / video cần đăng
+    nhập). Không đụng trình duyệt của máy; "Đăng xuất tất cả" xoá sạch."""
+    done = Signal(list)  # các trang đã đăng nhập
+
+    def __init__(self, parent=None, storage: Path | None = None, start: str = "Bilibili"):
+        super().__init__(parent)
+        from PySide6.QtWebEngineCore import QWebEnginePage
+        from PySide6.QtWebEngineWidgets import QWebEngineView
+        self.setWindowTitle("Đăng nhập trong app — KT Loop Station")
+        self._profile = app_profile(storage)
+        self._out = webcookies.cookie_file() if storage is None else Path(storage) / "cookies.txt"
+        v = QVBoxLayout(self)
+        v.setContentsMargins(12, 12, 12, 12)
+        tip = QLabel("Chọn trang, đăng nhập tài khoản của bạn như trên trình duyệt thường. Xong bấm <b>Xong</b> — app "
+                     "dùng đăng nhập này để tải bản chất lượng cao (vd Bilibili 1080p) và video cần đăng nhập.")
+        tip.setWordWrap(True)
+        v.addWidget(tip)
+        row = QHBoxLayout()
+        row.setSpacing(6)
+        self.view = QWebEngineView(self)
+        self.page = QWebEnginePage(self._profile, self.view)
+        self.view.setPage(self.page)
+        self.site_buttons: dict[str, QPushButton] = {}
+        for name, url in webcookies.LOGIN_SITES:
+            b = QPushButton(name)
+            theme.tag(b, variant="ghost")
+            b.setIcon(brand.icon(name, 16))
+            b.clicked.connect(lambda _=False, u=url: self.page.load(QUrl(u)))
+            row.addWidget(b)
+            self.site_buttons[name] = b
+        row.addStretch(1)
+        v.addLayout(row)
+        v.addWidget(self.view, 1)
+        bottom = QHBoxLayout()
+        self.status = w.muted("")
+        bottom.addWidget(self.status, 1)
+        out_btn = QPushButton("Đăng xuất tất cả")
+        theme.tag(out_btn, variant="ghost")
+        out_btn.setToolTip("Xoá mọi đăng nhập / cookie của trình duyệt trong app")
+        out_btn.clicked.connect(self.logout_all)
+        ok = QPushButton("Xong")
+        theme.tag(ok, variant="primary")
+        ok.clicked.connect(self.accept)
+        bottom.addWidget(out_btn)
+        bottom.addWidget(ok)
+        v.addLayout(bottom)
+        self.resize(1100, 820)
+        url = dict(webcookies.LOGIN_SITES).get(start, webcookies.LOGIN_SITES[0][1])
+        self.page.load(QUrl(url))
+
+    def logout_all(self) -> None:
+        self._profile.cookieStore().deleteAllCookies()
+        self._out.unlink(missing_ok=True)
+        self.status.setText("Đã đăng xuất tất cả.")
+
+    def done_export(self, on_done=None) -> None:
+        """Chép cookie ra file cho yt-dlp, báo các trang đã đăng nhập."""
+        def write(items: list) -> None:
+            sites = webcookies.logged_in(items)
+            if items:
+                webcookies.write(items, self._out)
+            self.done.emit(sites)
+            if on_done:
+                on_done(sites)
+        collect_cookies(self._profile, write)
+
+    def accept(self) -> None:
+        self.done_export()
+        super().accept()
+
+    def reject(self) -> None:
+        self.done_export()
+        super().reject()

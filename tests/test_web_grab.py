@@ -79,3 +79,33 @@ def test_ignores_decoy_video_takes_main_player(tmp_path):
                     encoding="utf-8")
     out = run_probe(page)
     assert out["grabbed"]["srcs"] == ["https://v.zjcdn.com/main.mp4"]
+
+
+def test_collect_cookies_from_app_profile(tmp_path):
+    """Đăng nhập trong app: cookie trang đặt trong hồ sơ trình duyệt của app được đọc ra (để ghi file cho yt-dlp)."""
+    import http.server
+    import threading
+
+    class H(http.server.BaseHTTPRequestHandler):
+        def do_GET(self):  # noqa: N802
+            self.send_response(200)
+            self.send_header("Set-Cookie", "SESSDATA=abc123; Path=/; Max-Age=3600; HttpOnly")
+            self.send_header("Content-Type", "text/html")
+            self.end_headers()
+            self.wfile.write(b"<html><body>ok</body></html>")
+
+        def log_message(self, *a):
+            pass
+    srv = http.server.HTTPServer(("127.0.0.1", 0), H)
+    threading.Thread(target=srv.serve_forever, daemon=True).start()
+    try:
+        env = dict(os.environ, QT_QPA_PLATFORM="offscreen", PYTHONIOENCODING="utf-8")
+        r = subprocess.run([sys.executable, str(PROBE), f"http://127.0.0.1:{srv.server_port}/", "0", "0", "cookies"],
+                           capture_output=True, text=True, encoding="utf-8", errors="replace", env=env, timeout=120)
+    finally:
+        srv.shutdown()
+    lines = [ln for ln in r.stdout.splitlines() if ln.startswith("{")]
+    assert lines, r.stderr[-800:]
+    items = json.loads(lines[-1])["cookies"]
+    c = next(x for x in items if x["name"] == "SESSDATA")
+    assert c["value"] == "abc123" and c["http_only"] and c["expires"] > 0 and "127.0.0.1" in c["domain"]

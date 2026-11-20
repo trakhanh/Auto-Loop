@@ -685,9 +685,11 @@ topic("taivideo", "Công cụ", "download", "Tải video", hero(
     ("Nâng cao", "phụ đề, mẫu tên file (có <b>Số thứ tự – Tiêu đề</b> cho danh sách phát), thư mục con theo kênh, "
                  "tải cùng lúc 2–3 video, giới hạn tốc độ, số video mỗi lần đọc kênh, bỏ tick video quá dài. "
                  "Chuột phải một video → <b>Chỉ tải đoạn…</b>."),
-    ("Đăng nhập", "Facebook, Instagram (đôi khi X) bắt đăng nhập: chọn <b>Đăng nhập: Firefox</b> (chắc chắn nhất). "
-                  "Chrome / Edge hay bị Windows chặn → cài tiện ích trình duyệt <i>Get cookies.txt LOCALLY</i>, "
-                  "mở trang đã đăng nhập, xuất file <code>cookies.txt</code>, rồi chọn <b>File đăng nhập…</b>."),
+    ("Đăng nhập", "Facebook, Instagram (đôi khi X) bắt đăng nhập; <b>Bilibili</b> chưa đăng nhập chỉ cho tới 720p "
+                  "(đăng nhập: 1080p; 1080p+ / 4K cần hội viên 大会员). Bấm <b>Đăng nhập…</b> ở cột Cài đặt tải → "
+                  "đăng nhập tài khoản của bạn trong trình duyệt của app → <b>Xong</b>; app tự dùng đăng nhập đó "
+                  "(ô Đăng nhập: <i>Trình duyệt trong app</i>). <b>Đăng xuất tất cả</b> để xoá. Hoặc dùng Firefox / "
+                  "file <code>cookies.txt</code>."),
     ("Công cụ tải", "lần đầu bấm <b>Cài công cụ tải</b> (~65 MB). App tự cập nhật mỗi ngày vì các trang hay đổi "
                     "cách chặn. Cài đặt → Giới thiệu → Công cụ tải: kiểm tra bản mới / gỡ.")]) + box(
     "warn", "Chỉ tải nội dung công ty có quyền dùng — tải video người khác để đăng lại có thể vi phạm điều khoản "

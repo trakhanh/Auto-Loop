@@ -18,6 +18,26 @@ app = QApplication([])
 from loopstation.ui.web_grab import WebGrabber  # noqa: E402
 
 store = Path(tempfile.mkdtemp(prefix="ktls_web_"))
+if len(sys.argv) > 4 and sys.argv[4] == "cookies":  # nạp trang (đặt cookie) trong hồ sơ app rồi đọc lại cookie
+    from PySide6.QtWebEngineCore import QWebEnginePage
+    from loopstation.ui.web_grab import app_profile, collect_cookies
+    prof = app_profile(Path(tempfile.mkdtemp(prefix="ktls_web_")))
+    pg = QWebEnginePage(prof)
+    loaded = []
+    pg.loadFinished.connect(lambda ok: loaded.append(ok))
+    pg.load(QUrl(sys.argv[1]))
+    t = time.time()
+    while not loaded and time.time() - t < 30:
+        app.processEvents()
+        time.sleep(0.02)
+    got = []
+    collect_cookies(prof, got.append)
+    t = time.time()
+    while not got and time.time() - t < 10:
+        app.processEvents()
+        time.sleep(0.02)
+    print(json.dumps({"cookies": got[0] if got else None}, ensure_ascii=False))
+    sys.exit(0)
 show = len(sys.argv) > 4 and sys.argv[4] == "verify"
 g = WebGrabber(storage=store, verify_after=float(sys.argv[2]), give_up=float(sys.argv[3]), show_verify=show,
                poll_ms=300)

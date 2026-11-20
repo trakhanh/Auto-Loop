@@ -593,3 +593,28 @@ def test_douyin_stale_src_regrabs(page, monkeypatch):
     page.start()
     assert wait(lambda: not page.is_busy(), 20)
     assert page.queue.entries[0].status == "done" and len(made[0].calls) == 2
+
+
+# ---------- Đăng nhập trong app ----------
+def test_app_login_choice(page, monkeypatch):
+    from loopstation.core import webcookies
+    opened = []
+    monkeypatch.setattr(page, "open_login", lambda *a, **k: opened.append(1))
+    webcookies.cookie_file().unlink(missing_ok=True)
+    page.login_box.setCurrentIndex(page.login_box.findData("app"))
+    assert opened == [1]  # chưa đăng nhập lần nào: mở cửa sổ đăng nhập ngay
+    assert page.login() == ("app", "")
+    webcookies.write([{"domain": ".bilibili.com", "name": "SESSDATA", "value": "v"}], webcookies.cookie_file())
+    assert page.login() == ("app", str(webcookies.cookie_file()))
+    page.login_btn.click()
+    assert opened == [1, 1]
+
+
+def test_login_done_selects_app_and_shows_sites(page):
+    page.login_box.setCurrentIndex(page.login_box.findData(""))
+    page._on_login_done(["Bilibili", "Instagram"])
+    assert page.login_box.currentData() == "app"
+    assert "Bilibili" in page.login_status.text() and "Instagram" in page.login_status.text()
+    assert page.settings.value("download/app_logins") == "Bilibili, Instagram"
+    page._on_login_done([])
+    assert "Chưa đăng nhập" in page.login_status.text()
