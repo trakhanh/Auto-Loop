@@ -79,7 +79,17 @@ def page(settings):
     if p.is_busy():
         p.stop()
         wait(lambda: not p.is_busy())
-    p.close()
+    dispose(p)
+
+
+def dispose(*widgets):
+    """Xoá hẳn widget (không chỉ đóng): widget còn sống làm các test đổi bộ màu sau chạy rất chậm."""
+    from PySide6.QtCore import QCoreApplication, QEvent
+    for wd in widgets:
+        wd.close()
+        wd.deleteLater()
+    QCoreApplication.sendPostedEvents(None, QEvent.Type.DeferredDelete)
+    pump(0.05)
 
 
 def add_ready(page, *paths):
@@ -122,6 +132,7 @@ def test_files_remembered(settings, env):
     a.save()
     b = CutPage(settings)
     assert [Path(p).name for p in b.files()] == ["mua.mp4"]
+    dispose(a, b)
 
 
 def test_estimate_and_invalid_blocks_start(page, env):
@@ -169,6 +180,7 @@ def test_settings_persist(settings):
     assert b.split.mode == "random" and b.split.rmin == 15 and b.split.rmax == 60
     assert b.split.aspect == "1:1" and b.split.fit == "crop" and b.mode_radio["random"].isChecked()
     assert b.frames.mode == "scene" and b.frames.scene == 25 and b.rmin_edit.text() == "00:00:15"
+    dispose(a, b)
 
 
 def test_empty_list_cannot_start(page):
