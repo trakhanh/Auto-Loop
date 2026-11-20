@@ -311,7 +311,7 @@ def unique_stem(folder: Path, stem: str, ext: str) -> str:
     k = 1
     while True:
         cand = stem if k == 1 else f"{stem} ({k})"
-        if not folder.is_dir() or not any(folder.glob(f"{glob_escape(cand)}_*.{ext}")):
+        if not own_files(folder, cand, ext):
             return cand
         k += 1
 
@@ -323,3 +323,120 @@ def glob_escape(text: str) -> str:
 
 def digits(n: int, minimum: int) -> int:
     return max(minimum, len(str(max(0, int(n)))))
+
+
+def own_files(folder: Path, stem: str, ext: str) -> list[Path]:
+    """Các file "<stem>_<số>.<ext>" trong thư mục (đúng tên gốc này, không lẫn video khác)."""
+    folder = Path(folder)
+    if not folder.is_dir():
+        return []
+    pat = re.compile(re.escape(stem) + r"_\d+\." + re.escape(ext) + r"$", re.IGNORECASE)
+    return sorted(p for p in folder.iterdir() if pat.match(p.name))
+
+
+# ---------- chạy thật ----------
+@dataclass
+class RunResult:
+    files: list[Path]
+    errors: list[str]
+    folder: Path
+
+
+def _out_seconds(block: dict) -> float | None:
+    raw = block.get("out_time_us") or block.get("out_time_ms") or ""
+    try:
+        return int(raw) / 1e6  # cả hai trường đều là micro giây
+    except ValueError:
+        return None
+
+
+def _last_line(err: Exception) -> str:
+    lines = [x for x in str(err).strip().splitlines() if x.strip()]
+    return lines[-1].strip() if lines else "lỗi không rõ"
+
+
+def split_video(runner, src: str, info: MediaInfo, s: SplitSettings, folder: Path, encoder: str,
+                segments: list[Segment], on_progress=None, on_file=None,
+                reuse: tuple[Path, str] | None = None) -> RunResult:
+    """Cắt `segments` của một video ra <thư mục>/<tên gốc>_01.mp4…; đoạn lỗi ghi vào errors rồi chạy tiếp.
+    `reuse` = (thư mục, tên gốc) của lượt bị Dừng trước đó: ghi lại đúng chỗ đó (ghi đè file của chính app).
+    Bị Dừng → xoá file đang ghi dở, ném CancelledError có thuộc tính `files` (các đoạn đã xong)."""
+    from .ffmpeg_tools import CancelledError, FFmpegError
+    ext = ".mp4" if s.exact else (Path(src).suffix.lower() or ".mp4")
+    if reuse:
+        d, stem = Path(reuse[0]), reuse[1]
+    else:
+        d = out_dir(folder, src, s.per_video)
+        stem = unique_stem(d, Path(src).stem, ext[1:])
+    d.mkdir(parents=True, exist_ok=True)
+    n = len(segments)
+    nd = digits(n, 2)
+    total = sum(x.dur for x in segments) or 1.0
+    files: list[Path] = []
+    errors: list[str] = []
+    done = 0.0
+    for i, seg in enumerate(segments):
+        text = f"đoạn {i + 1}/{n}"
+        out = d / f"{stem}_{i + 1:0{nd}d}{ext}"
+        if on_progress:
+            on_progress(min(1.0, done / total), text)
+
+        def prog(block, base=done, seg=seg, text=text):
+            t = _out_seconds(block)
+            if t is not None and on_progress:
+                on_progress(min(1.0, (base + min(max(t, 0.0), seg.dur)) / total), text)
+        try:
+            runner.ffmpeg(split_args(src, seg, out, info, s, encoder), on_progress=prog)
+        except CancelledError as e:
+            out.unlink(missing_ok=True)
+            e.files = files
+            raise
+        except FFmpegError as e:
+            out.unlink(missing_ok=True)
+            errors.append(f"Đoạn {i + 1}: {_last_line(e)}")
+        else:
+            files.append(out)
+            if on_file:
+                on_file(out)
+        done += seg.dur
+    if on_progress:
+        on_progress(1.0, f"đoạn {n}/{n}")
+    return RunResult(files, errors, d)
+
+
+def extract_frames(runner, src: str, info: MediaInfo, s: FrameSettings, folder: Path,
+                   on_progress=None, reuse: tuple[Path, str] | None = None) -> RunResult:
+    """Xuất ảnh ra <thư mục>/<tên gốc>_0001.jpg…; bị Dừng → CancelledError có `files` (ảnh đã ra)."""
+    from .ffmpeg_tools import CancelledError, FFmpegError
+    ext = "png" if s.fmt == "png" else "jpg"
+    if reuse:
+        d, stem = Path(reuse[0]), reuse[1]
+    else:
+        d = out_dir(folder, src, s.per_video)
+        stem = unique_stem(d, Path(src).stem, ext)
+    d.mkdir(parents=True, exist_ok=True)
+    nd = digits(frame_estimate(info, s) or 9999, 4)
+    # mẫu tên của FFmpeg: mọi "%" có sẵn trong đường dẫn (cả tên thư mục) phải viết thành "%%"
+    pattern = Path(str(d / stem).replace("%", "%%") + f"_%0{nd}d.{ext}")
+    total = max(info.duration, 0.001)
+
+    def prog(block):
+        t = _out_seconds(block)
+        if t is not None and on_progress:
+            on_progress(min(1.0, max(t, 0.0) / total), "")
+    if on_progress:
+        on_progress(0.0, "")
+    errors: list[str] = []
+    try:
+        runner.ffmpeg(frame_args(src, info, s, pattern), on_progress=prog)
+    except CancelledError as e:
+        e.files = own_files(d, stem, ext)
+        raise
+    except FFmpegError as e:
+        errors.append(_last_line(e))
+    files = own_files(d, stem, ext)
+    if on_progress:
+        on_progress(1.0, "")
+    if not files and not errors:
+        errors.append("Không lấy được ảnh nào")
+    return RunResult(files, errors, d)
