@@ -172,3 +172,18 @@ def test_uninstall(monkeypatch):
     _installed(monkeypatch)
     dl_tools.uninstall()
     assert not dl_tools.ytdlp_path().exists() and not dl_tools.installed()
+
+
+def test_update_lock_skips_concurrent(monkeypatch):
+    """I3 (soát cuối): đang có một lượt cập nhật / cài thì lượt thứ hai bỏ qua, không ghi chồng yt-dlp.exe."""
+    _installed(monkeypatch)
+    monkeypatch.delenv("KTLS_NO_UPDATE")
+    monkeypatch.delenv("QT_QPA_PLATFORM", raising=False)
+    calls = serve(monkeypatch, {dl_tools.YTDLP_API: json.dumps(yt_api(data=b"NEW")).encode(),
+                                GH + "yt/yt-dlp.exe": b"NEW"})
+    assert dl_tools._lock.acquire(blocking=False)
+    try:
+        assert dl_tools.update_if_newer(lambda: False, date.today(), force=True) == []
+        assert calls == []
+    finally:
+        dl_tools._lock.release()

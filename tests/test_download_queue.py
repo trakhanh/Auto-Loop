@@ -99,3 +99,24 @@ def test_load_corrupt_file_empty(tmp_path):
     f.write_text("{hỏng", encoding="utf-8")
     assert DownloadQueue.load(f).entries == []
     assert DownloadQueue.load(tmp_path / "khong-co.json").entries == []
+
+
+def test_unread_rows_never_downloaded():
+    """I4 (soát cuối): dòng "đọc link lỗi" giữ link gốc (có thể là cả kênh) — không bao giờ được đem đi tải."""
+    q = DownloadQueue()
+    e = q.add_unread("https://y/@kenh", "Cần đăng nhập")
+    assert e.unread and e.status == "error" and not e.checked and e.message == "Cần đăng nhập"
+    e.checked, e.status = True, "pending"
+    assert q.next_pending() is None and q.remaining() == 0
+    assert q.add_unread("https://y/@kenh", "x") is None  # cùng link: không thêm trùng
+
+
+def test_group_complete_unknown_count():
+    """I6 (soát cuối): không biết tổng số video → còn "Hiện thêm" khi lượt đọc trả đủ một trang."""
+    q = DownloadQueue()
+    q.add_group(Group(url="g", title="G", count=0, items=[it(i) for i in range(50)]), page=50)
+    assert not q.groups["g"].complete
+    q.extend_group("g", [it(i) for i in range(50, 60)], page=50)
+    assert q.groups["g"].complete
+    q.add_group(Group(url="h", title="H", count=3, items=[it(i) for i in range(100, 103)]), page=50)
+    assert q.groups["h"].complete

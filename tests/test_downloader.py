@@ -176,7 +176,7 @@ def test_find_existing(tmp_path):
     (sub / "c [k2].mp3").write_bytes(b"1")
     assert dl.find_existing(str(tmp_path), "7") == tmp_path / "TikTok - a [7].mp4"
     assert dl.find_existing(str(tmp_path), "9") is None
-    assert dl.find_existing(str(tmp_path), "k2") == sub / "c [k2].mp3"
+    assert dl.find_existing(str(tmp_path), "k2", "mp3") == sub / "c [k2].mp3"  # theo định dạng (soát cuối I5)
     assert dl.find_existing(str(tmp_path / "khong-co"), "7") is None
 
 
@@ -231,3 +231,87 @@ def test_missing_exe_friendly(tmp_path):
     with pytest.raises(dl.DownloadError) as ei:
         dl.read_info([str(tmp_path / "khong-co.exe")], ["-J", "https://y/x"])
     assert "diệt virus" in ei.value.friendly
+
+
+# ---------- soát cuối (review) ----------
+def test_unicode_path_reported(tmp_path, mode, monkeypatch):
+    """I1: tên có dấu / tiếng Trung — đường dẫn yt-dlp báo về phải đúng (yt-dlp mặc định in theo mã ANSI)."""
+    mode("ok")
+    monkeypatch.setenv("FAKE_YTDLP_TITLE", "Mưa rừng 中文")
+    res = dl.run_download(FAKE, args_for_dir(tmp_path, "https://y/u1"), lambda p: None, lambda s: None,
+                          threading.Event())
+    assert Path(res.path).is_file() and "Mưa rừng 中文" in res.path
+    a = args_for()
+    assert pair(a, "--encoding") == "utf-8" and "--ignore-config" in a  # M2: bỏ qua file cấu hình riêng
+    i = dl.info_args("https://y/x", 1, 50, "", "", "deno")
+    assert pair(i, "--encoding") == "utf-8" and "--ignore-config" in i
+
+
+def _alive(pid: int) -> bool:
+    import ctypes
+    k32 = ctypes.windll.kernel32
+    h = k32.OpenProcess(0x1000, False, pid)  # PROCESS_QUERY_LIMITED_INFORMATION
+    if not h:
+        return False
+    code = ctypes.c_ulong()
+    k32.GetExitCodeProcess(h, ctypes.byref(code))
+    k32.CloseHandle(h)
+    return code.value == 259  # STILL_ACTIVE
+
+
+@pytest.mark.skipif(os.name != "nt", reason="Windows")
+def test_cancel_kills_child_processes(tmp_path, mode, monkeypatch):
+    """I2: Dừng phải tắt cả tiến trình con (ffmpeg do yt-dlp mở), không chỉ yt-dlp."""
+    mode("hang_child")
+    pidf = tmp_path / "child.pid"
+    monkeypatch.setenv("FAKE_YTDLP_CHILDPID", str(pidf))
+    cancel = threading.Event()
+    threading.Timer(1.5, cancel.set).start()
+    with pytest.raises(dl.CancelledError):
+        dl.run_download(FAKE, args_for_dir(tmp_path / "o"), lambda p: None, lambda s: None, cancel)
+    pid = int(pidf.read_text())
+    t = time.time()
+    while _alive(pid) and time.time() - t < 3:
+        time.sleep(0.1)
+    assert not _alive(pid)
+
+
+def test_find_existing_respects_format(tmp_path):
+    """I5: đã có MP4 không có nghĩa đã có MP3; nguồn .webm dở của lần tách tiếng không tính."""
+    (tmp_path / "YouTube - a [f1].mp4").write_bytes(b"1")
+    (tmp_path / "YouTube - b [f2].webm").write_bytes(b"1")
+    assert dl.find_existing(str(tmp_path), "f1", "mp4") is not None
+    assert dl.find_existing(str(tmp_path), "f1", "mp3") is None
+    assert dl.find_existing(str(tmp_path), "f2", "mp3") is None
+    (tmp_path / "YouTube - a [f1].mp3").write_bytes(b"1")
+    assert dl.find_existing(str(tmp_path), "f1", "mp3").suffix == ".mp3"
+
+
+def test_section_has_own_name():
+    """I5: tải đoạn có tên riêng — không trùng / không bị nhận là bản tải cả video."""
+    tpl = pair(args_for(section="60-150"), "-o")
+    assert tpl.endswith(" [%(id)s] 1m00-2m30.%(ext)s")
+    assert pair(args_for(), "-o").endswith(" [%(id)s].%(ext)s")
+
+
+def test_playlist_without_count_is_unknown():
+    """I6: kênh YouTube đọc lười không có playlist_count → số video chưa biết (0), không lấy số đã đọc."""
+    g = dl.parse_info({"_type": "playlist", "title": "K", "entries": [{"id": "a", "url": "https://y/a"}]}, "u")
+    assert g.count == 0
+
+
+def test_network_error_friendly():
+    """I7: mất mạng không bị báo nhầm là 'trang chặn tải'."""
+    m = dl.friendly_error("ERROR: Unable to download webpage: <urlopen error [Errno 11001] getaddrinfo failed>", "")
+    assert m == dl.NETWORK_ERROR and not dl.is_blocked_error(
+        "Unable to download webpage: <urlopen error [Errno 11001] getaddrinfo failed>")
+    assert dl.friendly_error("ERROR: Read timed out.", "") == dl.NETWORK_ERROR
+
+
+def test_trim_filenames_by_folder():
+    """I8: thư mục sâu + thư mục con theo kênh → cắt tên file để đường dẫn không quá 260 ký tự."""
+    short = int(pair(args_for(), "--trim-filenames"))
+    long_folder = "D:/" + "a" * 120
+    a = dl.download_args("https://y/x", long_folder, Options(subdir="uploader", name="uploader"), "", "", "f", "d")
+    n = int(pair(a, "--trim-filenames"))
+    assert n < short and len(long_folder) + 61 + n + 20 <= 260 and n >= 40

@@ -26,6 +26,7 @@ YTDLP_ASSET = "yt-dlp.exe"
 DENO_ASSET = "deno-x86_64-pc-windows-msvc.zip"
 CHECK_DAYS = {"yt-dlp": 1, "deno": 7}
 _UA = "KTLoopStation-Tools"
+_lock = threading.Lock()  # một lượt cài / cập nhật một lúc (hai lượt ghi chồng làm hỏng yt-dlp.exe)
 
 
 @dataclass
@@ -148,7 +149,7 @@ def _download_verified(rel: ToolRelease, out: Path, progress: Callable[[int], No
         raise ValueError("Link tải công cụ không phải của GitHub.")
     if not rel.sha256:
         raise ValueError(f"Bản {rel.name} không có mã SHA-256 để kiểm tra.")
-    part = out.with_name(out.name + ".part")
+    part = out.with_name(f"{out.name}.{os.getpid()}-{threading.get_ident()}.part")
     h = hashlib.sha256()
     done = 0
     req = urllib.request.Request(rel.url, headers={"User-Agent": _UA})
@@ -179,6 +180,11 @@ def _download_verified(rel: ToolRelease, out: Path, progress: Callable[[int], No
 def install(rels: list[ToolRelease], progress: Callable[[int, int], None] | None = None,
             cancel: threading.Event | None = None) -> None:
     """Tải + đặt các công cụ (tiến độ cộng dồn mọi file). Deno: giải nén lấy đúng deno.exe."""
+    with _lock:
+        _install(rels, progress, cancel)
+
+
+def _install(rels: list[ToolRelease], progress, cancel) -> None:
     d = tools_dir()
     total = sum(r.size for r in rels)
     got = [0]
@@ -214,8 +220,15 @@ def install(rels: list[ToolRelease], progress: Callable[[int, int], None] | None
 def update_if_newer(busy: Callable[[], bool], today: date, force: bool = False) -> list[str]:
     """Kiểm tra (theo hạn, hoặc ngay khi force) và thay công cụ đã cài bằng bản mới hơn — chỉ khi không có video nào
     đang tải. Trả về các dòng "yt-dlp 2026.11.19…" đã cập nhật. Lỗi mạng: im lặng, trả []."""
-    if not updater.enabled():
-        return []
+    if not updater.enabled() or not _lock.acquire(blocking=False):
+        return []  # đang có lượt cài / cập nhật khác
+    try:
+        return _update(busy, today, force)
+    finally:
+        _lock.release()
+
+
+def _update(busy: Callable[[], bool], today: date, force: bool) -> list[str]:
     done: list[str] = []
     have = {"yt-dlp": ytdlp_path().is_file(), "deno": deno_path().is_file()}
     for name in ("yt-dlp", "deno"):
@@ -226,7 +239,7 @@ def update_if_newer(busy: Callable[[], bool], today: date, force: bool = False) 
             if updater.is_newer(rel.version, versions().get(name, "0")):
                 if busy():
                     continue  # đang tải: để lần sau (không ghi đã kiểm tra)
-                install([rel])
+                _install([rel], None, None)
                 done.append(f"{name} {rel.version}")
             mark_checked(name, today)
         except Exception:  # noqa: BLE001 — mạng / GitHub lỗi: thử lại lần sau

@@ -29,14 +29,16 @@ class Entry:
     path: str = ""
     codec: str = ""
     section: str = ""  # "60-150" = chỉ tải đoạn 1:00–2:30
+    unread: bool = False  # dòng "đọc link lỗi": url là link gốc (có thể cả kênh) — chỉ được đọc lại, không tải
 
 
 @dataclass
 class GroupInfo:
     url: str
     title: str
-    count: int
+    count: int  # 0 = chưa biết (kênh đọc lười không báo tổng)
     loaded: int
+    complete: bool = False  # đã đọc hết (không còn "Hiện thêm")
 
 
 @dataclass
@@ -58,24 +60,40 @@ class DownloadQueue:
         self.entries.append(e)
         return e
 
-    def add_group(self, g: Group) -> list[Entry]:
-        self.groups[g.url] = GroupInfo(g.url, g.title, g.count, len(g.items))
+    @staticmethod
+    def _complete(gi: GroupInfo, got: int, page: int) -> bool:
+        return (gi.count > 0 and gi.loaded >= gi.count) or got < page
+
+    def add_group(self, g: Group, page: int = GROUP_PAGE) -> list[Entry]:
+        gi = GroupInfo(g.url, g.title, g.count, len(g.items))
+        gi.complete = self._complete(gi, len(g.items), page)
+        self.groups[g.url] = gi
         return [e for e in (self.add_item(i, g.url, True) for i in g.items) if e is not None]
 
-    def extend_group(self, url: str, items: list[Item]) -> list[Entry]:
+    def extend_group(self, url: str, items: list[Item], page: int = GROUP_PAGE) -> list[Entry]:
         gi = self.groups.get(url)
         if gi is not None:
             gi.loaded += len(items)
+            gi.complete = self._complete(gi, len(items), page)
         return [e for e in (self.add_item(i, url, False) for i in items) if e is not None]
 
+    def add_unread(self, link: str, message: str) -> Entry | None:
+        """Dòng báo "đọc link lỗi" (không tick, không bao giờ được tải; Thử lại = đọc lại link)."""
+        if any(e.unread and e.url == link for e in self.entries):
+            return None
+        e = Entry(url=link, vid=link, title=link, platform="", duration=0, thumbnail="", checked=False,
+                  status="error", message=message, unread=True)
+        self.entries.append(e)
+        return e
+
     def next_pending(self) -> Entry | None:
-        return next((e for e in self.entries if e.checked and e.status == "pending"), None)
+        return next((e for e in self.entries if e.checked and e.status == "pending" and not e.unread), None)
 
     def running(self) -> list[Entry]:
         return [e for e in self.entries if e.status == "running"]
 
     def remaining(self) -> int:
-        return sum(1 for e in self.entries if e.checked and e.status in ("pending", "running"))
+        return sum(1 for e in self.entries if e.checked and e.status in ("pending", "running") and not e.unread)
 
     def done_count(self) -> int:
         return sum(1 for e in self.entries if e.status in ("done", "exists"))

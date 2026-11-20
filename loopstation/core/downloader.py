@@ -3,6 +3,7 @@ thành câu dễ hiểu, chạy tiến trình có thể dừng (dọn file dở)
 from __future__ import annotations
 
 import json
+import os
 import re
 import shlex
 import subprocess
@@ -158,9 +159,20 @@ def summary(o: Options) -> str:
     return " · ".join(parts)
 
 
-def out_template(o: Options) -> str:
-    return SUBDIR_PREFIX.get(o.subdir, "") + NAME_TEMPLATES.get(o.name, NAME_TEMPLATES["platform"]) + \
-        " [%(id)s].%(ext)s"
+def section_tag(section: str) -> str:
+    """"60-150" → "1m00-2m30" (dùng trong tên file: không có dấu ':')."""
+    return "-".join(f"{int(x) // 60}m{int(x) % 60:02d}" for x in section.split("-"))
+
+
+def out_template(o: Options, section: str = "") -> str:
+    tail = f" [%(id)s] {section_tag(section)}.%(ext)s" if section else " [%(id)s].%(ext)s"
+    return SUBDIR_PREFIX.get(o.subdir, "") + NAME_TEMPLATES.get(o.name, NAME_TEMPLATES["platform"]) + tail
+
+
+def trim_len(folder: str, o: Options) -> int:
+    """Độ dài tối đa của tên file để cả đường dẫn (kể cả thư mục con + đuôi tạm .f137.mp4.part) ≤ 260 ký tự."""
+    room = 260 - len(folder) - 1 - (61 if o.subdir else 0) - 20
+    return max(40, min(200, room))
 
 
 def split_extra(text: str) -> list[str]:
@@ -222,7 +234,7 @@ def parse_info(data: dict, source_url: str) -> Item | Group:
         key = str(data.get("extractor_key") or "")
         items = [_item(e, str(e.get("url") or ""), key) for e in entries]
         return Group(url=source_url, title=str(data.get("title") or source_url),
-                     count=int(data.get("playlist_count") or len(items)), items=items)
+                     count=int(data.get("playlist_count") or 0), items=items)  # 0 = chưa biết
     return _item(data, source_url)
 
 
@@ -247,15 +259,16 @@ def login_args(login: str, cookies_file: str) -> list[str]:
 
 
 def info_args(url: str, start: int, end: int, login: str, cookies_file: str, deno: str) -> list[str]:
-    return ["-J", "--flat-playlist", "--playlist-start", str(start), "--playlist-end", str(end),
-            "--js-runtimes", f"deno:{deno}", *login_args(login, cookies_file), url]
+    return ["--ignore-config", "--encoding", "utf-8", "-J", "--flat-playlist", "--playlist-start", str(start),
+            "--playlist-end", str(end), "--js-runtimes", f"deno:{deno}", *login_args(login, cookies_file), url]
 
 
 def download_args(url: str, folder: str, opts: Options, login: str, cookies_file: str, ffmpeg: str, deno: str,
                   section: str = "") -> list[str]:
-    a = ["--no-playlist", "--newline", "--progress", "--windows-filenames", "--no-mtime",
+    a = ["--ignore-config", "--encoding", "utf-8", "--no-playlist", "--newline", "--progress",
+         "--windows-filenames", "--trim-filenames", str(trim_len(folder, opts)), "--no-mtime",
          "--ffmpeg-location", ffmpeg, "--js-runtimes", f"deno:{deno}",
-         "-P", folder, "-o", out_template(opts),
+         "-P", folder, "-o", out_template(opts, section),
          "--progress-template", PROGRESS_TEMPLATE, "--progress-template", PP_TEMPLATE, "--print", FILE_TEMPLATE]
     if opts.fmt in ("mp3", "m4a"):
         a += ["-f", "ba/b", "-x", "--audio-format", opts.fmt, "--audio-quality", "0"]
@@ -350,9 +363,20 @@ _BLOCKED = ("http error 403", "403: forbidden", "http error 429", "unable to ext
             "nsig", "signature extraction", "requested format is not available")
 
 
+NETWORK_ERROR = "Mất kết nối mạng — đã tạm dừng, kiểm tra mạng rồi bấm Tải đã chọn"
+_NETWORK = ("getaddrinfo", "errno 11001", "timed out", "connection reset", "connection aborted", "connection refused",
+            "network is unreachable", "no route to host", "temporary failure in name resolution",
+            "remote end closed", "failed to resolve", "name or service not known")
+
+
+def is_network_error(stderr: str) -> bool:
+    s = (stderr or "").lower()
+    return any(k in s for k in _NETWORK)
+
+
 def is_blocked_error(stderr: str) -> bool:
     s = (stderr or "").lower()
-    return any(k in s for k in _BLOCKED)
+    return any(k in s for k in _BLOCKED) and not is_network_error(s)
 
 
 def friendly_error(stderr: str, login: str) -> str:
@@ -373,6 +397,8 @@ def friendly_error(stderr: str, login: str) -> str:
         return "Bị chặn ở Việt Nam (theo quốc gia)"
     if "unsupported url" in s:
         return "Link này chưa hỗ trợ"
+    if is_network_error(s):
+        return NETWORK_ERROR
     if is_blocked_error(s):
         return "Trang chặn tải — đang thử cập nhật công cụ"
     return "Lỗi tải (rê chuột vào ⓘ xem chi tiết)"
@@ -388,16 +414,20 @@ def _is_partial(name: str) -> bool:
             or re.search(r"\.f\d+[\w-]*\.\w+$", n) is not None)
 
 
-def find_existing(folder: str, vid: str) -> Path | None:
-    """File đã tải của video `vid` (tên có "[id].") trong thư mục lưu hoặc một cấp thư mục con."""
+FORMAT_EXTS = {"mp4": (".mp4", ".mkv", ".webm", ".mov"), "mp3": (".mp3",), "m4a": (".m4a",)}
+
+
+def find_existing(folder: str, vid: str, fmt: str = "mp4") -> Path | None:
+    """File đã tải của video `vid` (tên có "[id].") đúng định dạng đang chọn, trong thư mục lưu hoặc một cấp con."""
     base = Path(folder)
+    exts = FORMAT_EXTS.get(fmt, FORMAT_EXTS["mp4"])
     if not vid or not base.is_dir():
         return None
     token = f"[{vid}]."
     try:
         level = list(base.iterdir())
         for p in level + [c for d in level if d.is_dir() for c in d.iterdir()]:
-            if p.is_file() and token in p.name and not p.name.lower().endswith(_SIDECAR) and not _is_partial(p.name):
+            if p.is_file() and token in p.name and p.suffix.lower() in exts and not _is_partial(p.name):
                 return p
     except OSError:
         return None
@@ -409,7 +439,10 @@ def _clean_partials(folder: str, vid: str) -> None:
     if not vid or not base.is_dir():
         return
     token = f"[{vid}]"
-    level = list(base.iterdir())
+    try:
+        level = list(base.iterdir())
+    except OSError:
+        return
     for p in level + [c for d in level if d.is_dir() for c in d.iterdir()]:
         if p.is_file() and token in p.name and _is_partial(p.name):
             try:
@@ -424,8 +457,9 @@ TOOL_BLOCKED = "Công cụ tải bị phần mềm diệt virus chặn hoặc đ
 
 def _popen(cmd: list[str]) -> subprocess.Popen:
     try:
+        env = dict(os.environ, PYTHONIOENCODING="utf-8", PYTHONUTF8="1")  # đường dẫn có dấu / tiếng Trung
         proc = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, stdin=subprocess.DEVNULL,
-                                text=True, encoding="utf-8", errors="replace", bufsize=1,
+                                text=True, encoding="utf-8", errors="replace", bufsize=1, env=env,
                                 creationflags=ffmpeg_tools.CREATE_NO_WINDOW)
     except OSError as e:
         raise DownloadError(TOOL_BLOCKED, str(e)) from e
@@ -445,11 +479,25 @@ def _pump(stream, sink: Callable[[str], None]) -> threading.Thread:
     return t
 
 
+def _kill_tree(proc: subprocess.Popen) -> None:
+    """Tắt yt-dlp và mọi tiến trình con của nó (ffmpeg ghép / cắt đoạn / tách tiếng)."""
+    if os.name == "nt":
+        try:
+            subprocess.run(["taskkill", "/T", "/F", "/PID", str(proc.pid)], capture_output=True, timeout=10,
+                           creationflags=ffmpeg_tools.CREATE_NO_WINDOW)
+        except (OSError, subprocess.SubprocessError):
+            pass
+    try:
+        proc.kill()
+    except OSError:
+        pass
+
+
 def _wait(proc: subprocess.Popen, cancel: threading.Event | None, timeout: float | None) -> None:
     t0 = time.monotonic()
     while proc.poll() is None:
         if (cancel is not None and cancel.is_set()) or (timeout is not None and time.monotonic() - t0 > timeout):
-            proc.kill()
+            _kill_tree(proc)
             try:
                 proc.wait(timeout=5)
             except subprocess.TimeoutExpired:
@@ -514,8 +562,13 @@ def run_download(exe: list[str], args: list[str], on_progress: Callable[[Progres
             if m:
                 found["vid"] = m.group(1)
 
+    def on_err(line: str) -> None:
+        if line.startswith(PP_PREFIX):
+            on_line(line)
+        err.append(line)
+
     proc = _popen(exe + args)
-    th = [_pump(proc.stdout, on_line), _pump(proc.stderr, err.append)]
+    th = [_pump(proc.stdout, on_line), _pump(proc.stderr, on_err)]
     try:
         _wait(proc, cancel, None)
     except CancelledError:
@@ -531,7 +584,8 @@ def run_download(exe: list[str], args: list[str], on_progress: Callable[[Progres
     if result:
         path, vcodec = result[-1]
         return Result(path, codec_label(vcodec))
-    existing = find_existing(folder, found["vid"])
+    fmt = _opt(args, "--audio-format") or "mp4"
+    existing = find_existing(folder, found["vid"], fmt)
     if existing is not None:
         return Result(str(existing), "")
     raise DownloadError("Lỗi tải (rê chuột vào ⓘ xem chi tiết)", stderr or "yt-dlp không báo file đã tải.")

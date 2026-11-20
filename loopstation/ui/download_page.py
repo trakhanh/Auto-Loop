@@ -82,6 +82,8 @@ class DownloadPage(QWidget):
         self._reading = False
         self._updating_tree = False
         self._want_update = False
+        self._tool_broken = False  # yt-dlp.exe không chạy được (hỏng / bị diệt virus chặn) → hiện lại thẻ cài
+        self._halt = ""  # lý do tạm dừng lượt tải (mất mạng / công cụ hỏng)
         self._install_cancel: threading.Event | None = None
         self._thumbs_wanted: set[str] = set()
         self.b = _Bridge()
@@ -199,6 +201,7 @@ class DownloadPage(QWidget):
         self.more_btn.setIcon(icons.icon("more", 15))
         self.more_btn.setToolTip("Thêm")
         m = QMenu(self.more_btn)
+        m.addAction("Thử lại các video lỗi", self.retry_errors)
         m.addAction("Xoá danh sách (không xoá file)", self.clear_list)
         self.more_btn.setMenu(m)
         bar.addWidget(self.start_btn)
@@ -251,7 +254,7 @@ class DownloadPage(QWidget):
         self.embed_chk = QCheckBox("Ghi tiêu đề, kênh, ảnh bìa vào file")
         self.embed_chk.setChecked(self.opts.embed)
         self.extra_edit = QLineEdit(self.opts.extra)
-        self.extra_edit.setPlaceholderText("Tham số thêm cho yt-dlp (cho người rành) — vd --no-part")
+        self.extra_edit.setPlaceholderText('Tham số thêm cho yt-dlp (cho người rành) — vd --match-filter "duration < 600"')
         self.extra_edit.setToolTip("Nối vào cuối lệnh yt-dlp. Gõ sai có thể làm tải lỗi — để trống nếu không chắc.")
         self.reset_opts_btn = QPushButton("Về mặc định")
         theme.tag(self.reset_opts_btn, variant="ghost")
@@ -351,11 +354,12 @@ class DownloadPage(QWidget):
         return self._exe_override or [str(dl_tools.ytdlp_path())]
 
     def ready(self) -> bool:
-        return bool(self._exe_override) or dl_tools.installed()
+        return not self._tool_broken and (bool(self._exe_override) or dl_tools.installed())
 
     def _refresh_ready(self) -> None:
         ok = self.ready()
         self.install_card.setVisible(not ok)
+        self.install_btn.setText("Cài lại công cụ tải" if self._tool_broken else "Cài công cụ tải")
         self.read_btn.setEnabled(ok and not self._reading)
         self.start_btn.setEnabled(ok)
 
@@ -420,6 +424,7 @@ class DownloadPage(QWidget):
         self.install_cancel_btn.hide()
         self.install_msg.setText(err)
         if not err:
+            self._tool_broken = False
             self.notice.emit("Đã cài công cụ tải — dán link để bắt đầu", "ok")
         self._refresh_ready()
         self._update_tool_label()
@@ -437,11 +442,14 @@ class DownloadPage(QWidget):
         links = downloader.split_links(text)
         bad = downloader.count_non_links(text)
         self.info_label.setText(f"Bỏ qua {bad} dòng không phải link." if bad else "")
-        if not links or not self.ready():
+        if not links or not self.ready() or self._reading:
             return
+        self.links_edit.clear()
+        self._read(links)
+
+    def _read(self, links: list[str]) -> None:
         self._reading = True
         self.read_btn.setEnabled(False)
-        self.links_edit.clear()
         login, cookies = self.login()
         exe, deno, page = self._exe(), str(dl_tools.deno_path()), self.opts.page
 
@@ -457,6 +465,8 @@ class DownloadPage(QWidget):
                     self.b.info.emit(link, downloader.parse_info(data, src), "")
                 except downloader.DownloadError as e:
                     self.b.info.emit(link, None, e.friendly + "\n" + e.stderr)
+                    if e.friendly == downloader.TOOL_BLOCKED:
+                        break
                 except Exception as e:  # noqa: BLE001
                     self.b.info.emit(link, None, f"Lỗi tải (rê chuột vào ⓘ xem chi tiết)\n{e}")
             self.b.read_done.emit()
@@ -466,7 +476,7 @@ class DownloadPage(QWidget):
         if isinstance(res, downloader.Group):
             if res.url in self.queue.groups:
                 return
-            self.queue.add_group(res)
+            self.queue.add_group(res, self.opts.page)
             for e in self.queue.entries:
                 if e.group == res.url:
                     self._add_row(e)
@@ -476,11 +486,12 @@ class DownloadPage(QWidget):
                 self._add_row(e)
         else:
             friendly, _, detail = err.partition("\n")
-            item = downloader.Item(url=link, vid=link, title=link, platform="", duration=0, thumbnail="")
-            e = self.queue.add_item(item, checked=False)
+            if friendly == downloader.TOOL_BLOCKED and not self._tool_broken:
+                self._tool_broken = True
+                self._refresh_ready()
+            e = self.queue.add_unread(link, friendly)
             if e is None:
                 return
-            e.status, e.message = "error", friendly
             self._add_row(e, detail)
         self._changed()
 
@@ -514,7 +525,7 @@ class DownloadPage(QWidget):
         if items is None:
             self.notice.emit(f"Không đọc thêm được: {err}", "warn")
             return
-        for e in self.queue.extend_group(group_url, items):
+        for e in self.queue.extend_group(group_url, items, self.opts.page):
             self._add_row(e)
         self._refresh_group(group_url)
         self._changed()
@@ -544,9 +555,10 @@ class DownloadPage(QWidget):
         if row is None or gi is None:
             return
         self._updating_tree = True
-        row.setText(0, f"{gi.title} — {gi.count} video")
+        n = f"{gi.count}" if gi.count else (f"{gi.loaded}+" if not gi.complete else f"{gi.loaded}")
+        row.setText(0, f"{gi.title} — {n} video")
         more = next((row.child(i) for i in range(row.childCount()) if row.child(i).data(0, ROLE) == MORE), None)
-        if gi.loaded < gi.count:
+        if not gi.complete:
             if more is None:
                 more = QTreeWidgetItem([f"Hiện thêm {self.opts.page} video…"])
                 more.setData(0, ROLE, MORE)
@@ -555,7 +567,8 @@ class DownloadPage(QWidget):
                 more.setToolTip(0, "Bấm đúp để đọc thêm (mục thêm vào chưa được tick)")
             else:
                 row.removeChild(more)
-            more.setText(0, f"Hiện thêm {self.opts.page} video…  (đã đọc {gi.loaded} / {gi.count})")
+            more.setText(0, f"Hiện thêm {self.opts.page} video…  (đã đọc {gi.loaded}"
+                            + (f" / {gi.count})" if gi.count else ")"))
             row.addChild(more)
         elif more is not None:
             row.removeChild(more)
@@ -563,7 +576,8 @@ class DownloadPage(QWidget):
 
     def _add_row(self, e: dq.Entry, detail: str = "") -> None:
         row = QTreeWidgetItem([e.title, e.platform, w.fmt_dur(e.duration) if e.duration else "—", ""])
-        row.setFlags(row.flags() | Qt.ItemFlag.ItemIsUserCheckable)
+        if not e.unread:
+            row.setFlags(row.flags() | Qt.ItemFlag.ItemIsUserCheckable)
         row.setData(0, ROLE, ("entry", id(e)))
         row.setToolTip(0, e.url)
         if detail:
@@ -595,7 +609,8 @@ class DownloadPage(QWidget):
         if row is None:
             return
         self._updating_tree = True
-        row.setCheckState(0, Qt.CheckState.Checked if e.checked else Qt.CheckState.Unchecked)
+        if not e.unread:
+            row.setCheckState(0, Qt.CheckState.Checked if e.checked else Qt.CheckState.Unchecked)
         sec = f" · {downloader.section_label(e.section)}" if e.section else ""
         tone = "text_2"
         if e.status == "pending":
@@ -650,7 +665,10 @@ class DownloadPage(QWidget):
         d = row.data(0, ROLE)
         if e is not None:
             if e.status == "error":
-                m.addAction("Thử lại", lambda: self._retry(e))
+                sel = [x for x in (self._entry_of(r) for r in self.tree.selectedItems()) if x is not None]
+                targets = [x for x in sel if x.status == "error"] if e in sel else [e]
+                m.addAction("Thử lại" + (f" ({len(targets)} video)" if len(targets) > 1 else ""),
+                            lambda: self.retry(targets))
             if e.status in ("pending", "error"):
                 m.addAction("Chỉ tải đoạn…", lambda: self._ask_section(e))
                 if e.section:
@@ -667,10 +685,21 @@ class DownloadPage(QWidget):
         if not m.isEmpty():
             m.exec(self.tree.viewport().mapToGlobal(pos))
 
-    def _retry(self, e: dq.Entry) -> None:
-        self.queue.retry(e)
-        self._paint(e)
+    def retry(self, entries: list[dq.Entry]) -> None:
+        """Thử lại: dòng tải lỗi → Chờ; dòng đọc-link-lỗi → bỏ dòng và đọc lại link."""
+        relink = [e.url for e in entries if e.unread]
+        self._remove([e for e in entries if e.unread])
+        for e in entries:
+            if not e.unread and e.status == "error":
+                self.queue.retry(e)
+                self._paint(e)
         self._changed()
+        if relink:
+            self._tool_broken = False if self._exe_override else self._tool_broken
+            self._read(relink)
+
+    def retry_errors(self) -> None:
+        self.retry([e for e in self.queue.entries if e.status == "error"])
 
     def _remove(self, entries: list[dq.Entry]) -> None:
         for e in entries:
@@ -808,7 +837,7 @@ class DownloadPage(QWidget):
             e = self.queue.next_pending()
             if e is None:
                 break
-            found = downloader.find_existing(folder, e.vid) if not e.section else None
+            found = downloader.find_existing(folder, e.vid, self.opts.fmt) if not e.section else None
             if found is not None:
                 e.status, e.checked, e.path = "exists", False, str(found)
                 self._paint(e)
@@ -868,7 +897,11 @@ class DownloadPage(QWidget):
             row = self._row(e)
             if row is not None:
                 row.setToolTip(3, "\n".join(stderr.strip().splitlines()[-6:]) or friendly)
-            if friendly == downloader.TOOL_BLOCKED and not self._exe_override:
+            if friendly in (downloader.TOOL_BLOCKED, downloader.NETWORK_ERROR) and not self._stopping:
+                self._halt = friendly  # không chạy tiếp: các video sau sẽ lỗi y hệt
+                self._stopping = True
+            if friendly == downloader.TOOL_BLOCKED:
+                self._tool_broken = True
                 self._refresh_ready()
             if downloader.is_blocked_error(stderr) and dl_tools.due("yt-dlp", date.today()):
                 self._want_update = True
@@ -888,10 +921,15 @@ class DownloadPage(QWidget):
                 self._paint(e)
         was = self._busy
         stopped = self._stopping
+        halt, self._halt = self._halt, ""
         self._stopping = False
         self._set_busy(False)
+        self._refresh_ready()
         self._changed()
-        if was and not stopped:
+        if halt:
+            self.notice.emit(halt if halt != downloader.TOOL_BLOCKED else
+                             "Công cụ tải bị chặn hoặc hỏng — bấm Cài lại công cụ tải", "warn")
+        elif was and not stopped:
             done = sum(1 for e in self.queue.entries if e.status == "done")
             bad = sum(1 for e in self.queue.entries if e.status == "error" and e.checked)
             self.notice.emit(f"Tải xong: {done} video" + (f", {bad} lỗi" if bad else ""), "warn" if bad else "ok")

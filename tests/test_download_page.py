@@ -207,3 +207,64 @@ def test_list_restored_on_open(page):
     p2 = DownloadPage(page.settings, exe_override=FAKE)
     assert len(p2.queue.entries) == 1 and p2.tree.topLevelItemCount() == 1
     p2.close()
+
+
+# ---------- soát cuối (review) ----------
+def _add(page, vid):
+    from loopstation.core.downloader import Item
+    e = page.queue.add_item(Item(f"https://y/{vid}", vid, vid, "YouTube", 1, ""))
+    page._add_row(e)
+    return e
+
+
+def test_broken_tool_shows_install_card(env, tmp_path):
+    """I3: yt-dlp.exe hỏng / bị chặn → hiện lại thẻ cài, dừng lượt tải (không biến cả hàng thành lỗi)."""
+    from PySide6.QtCore import QSettings
+    from loopstation.ui.download_page import DownloadPage
+    s = QSettings(str(tmp_path / "s.ini"), QSettings.Format.IniFormat)
+    s.setValue("download/folder", str(tmp_path / "out"))
+    p = DownloadPage(s, exe_override=[str(tmp_path / "hong.exe")])
+    p.show()
+    a, b = _add(p, "t1"), _add(p, "t2")
+    p.start()
+    assert wait(lambda: not p.is_busy())
+    assert a.status == "error" and b.status == "pending"
+    assert p.install_card.isVisible() and "Cài lại" in p.install_btn.text()
+    p.close()
+
+
+def test_network_error_pauses_run(page, monkeypatch):
+    """I7: mất mạng → tạm dừng lượt tải, video sau vẫn Chờ; "Thử lại các video lỗi" đưa về Chờ."""
+    monkeypatch.setenv("FAKE_YTDLP_MODE", "fail_net")
+    a, b = _add(page, "n1"), _add(page, "n2")
+    page.start()
+    assert wait(lambda: not page.is_busy())
+    assert a.status == "error" and "Mất kết nối mạng" in a.message and b.status == "pending"
+    page.retry_errors()
+    assert a.status == "pending" and a.checked
+
+
+def test_retry_unread_row_reads_again(page, monkeypatch):
+    """I4: Thử lại dòng đọc-link-lỗi = đọc lại link (không đem link kênh đi tải)."""
+    monkeypatch.setenv("FAKE_YTDLP_MODE", "fail_login")
+    read(page, "https://y/q1")
+    e = page.queue.entries[0]
+    assert e.unread and e.status == "error"
+    monkeypatch.setenv("FAKE_YTDLP_MODE", "info")
+    page.retry([e])
+    assert wait(lambda: not page._reading and len(page.queue.entries) == 1 and not page.queue.entries[0].unread)
+    assert page.queue.entries[0].vid == "q1" and page.tree.topLevelItemCount() == 1
+
+
+def test_group_unknown_count_keeps_show_more(page, monkeypatch):
+    """I6: kênh không báo tổng số video → vẫn có dòng "Hiện thêm"."""
+    monkeypatch.setenv("FAKE_YTDLP_NOCOUNT", "1")
+    read(page, "https://y/list7")
+    g = page.tree.topLevelItem(0)
+    assert "50+" in g.text(0)
+    assert any(g.child(i).text(0).startswith("Hiện thêm") for i in range(g.childCount()))
+
+
+def test_extra_placeholder_not_risky(page):
+    """M3: chữ gợi ý không được là cờ làm hỏng nhận file dở (--no-part)."""
+    assert "--no-part" not in page.extra_edit.placeholderText()
