@@ -58,6 +58,8 @@ def main() -> int:
     branding.set_windows_app_id()
     # màn hình 125% / 150%: vẽ đúng tỉ lệ, chữ và icon sắc nét
     QGuiApplication.setHighDpiScaleFactorRoundingPolicy(Qt.HighDpiScaleFactorRoundingPolicy.PassThrough)
+    # trình duyệt trong app (tải Douyin) dùng QtWebEngine: bắt buộc bật trước khi tạo QApplication
+    QGuiApplication.setAttribute(Qt.ApplicationAttribute.AA_ShareOpenGLContexts)
     app = QApplication(sys.argv)
     app.setApplicationName(theme.APP_NAME)
     app.setWindowIcon(branding.app_icon())

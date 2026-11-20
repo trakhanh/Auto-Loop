@@ -28,7 +28,7 @@ from PySide6.QtWidgets import (
     QTreeWidget, QTreeWidgetItem, QVBoxLayout, QWidget,
 )
 
-from ..core import dl_tools, downloader, ffmpeg_tools, updater
+from ..core import dl_tools, douyin, downloader, ffmpeg_tools, updater
 from ..core import download_queue as dq
 from ..core.downloader import Options
 from . import icons, theme
@@ -297,6 +297,10 @@ class DownloadPage(QWidget):
         self._read_total = self._read_count = 0
         self.flashed: list[str] = []  # video vừa xong (dòng loé xanh)
         self._flash_anims: dict[int, QVariantAnimation] = {}
+        self._read_jobs = 0  # việc đọc link còn dở (luồng yt-dlp + từng link Douyin)
+        self._dy_wait: dict[str, object] = {}  # link Douyin → "read" | Entry đang chờ trình duyệt lấy link file
+        self._grabber = None
+        self.grabber_factory = None  # test: thay trình duyệt thật bằng bản giả
         self._anim = QTimer(self)  # vẽ lại thanh tiến độ cho vệt sáng chạy (chỉ chạy khi đang tải)
         self._anim.setInterval(40)
         self._h264_enc = "libx264"  # cửa sổ chính đổi sang encoder card đồ hoạ khi dò xong (set_encoders)
@@ -862,6 +866,18 @@ class DownloadPage(QWidget):
         self.read_btn.setEnabled(False)
         self._read_total, self._read_count = len(links), 0
         self._show_reading()
+        dy = [lk for lk in links if douyin.is_douyin(lk)]
+        links = [lk for lk in links if lk not in dy]
+        self._read_jobs = len(dy) + (1 if links else 0)
+        for lk in dy:  # Douyin: trình duyệt trong app (yt-dlp không tải được)
+            if douyin.is_user_page(lk):
+                QTimer.singleShot(0, lambda lk=lk: (self._on_info(lk, None, "Kênh Douyin chưa hỗ trợ — dán link từng "
+                                                                       "video\n"), self._job_done()))
+            else:
+                self._dy_wait[lk] = "read"
+                self.grabber().grab(lk)
+        if not links:
+            return
         login, cookies = self.login()
         exe, deno, page = self._exe(), str(dl_tools.deno_path()), self.opts.page
 
@@ -924,7 +940,49 @@ class DownloadPage(QWidget):
             self._add_row(e, detail)
         self._changed()
 
+    def grabber(self):
+        """Trình duyệt ẩn lấy video Douyin (tạo khi cần lần đầu)."""
+        if self._grabber is None:
+            if self.grabber_factory is not None:
+                self._grabber = self.grabber_factory(self)
+            else:
+                from .web_grab import WebGrabber
+                self._grabber = WebGrabber(self)
+            self._grabber.grabbed.connect(self._on_grab)
+            self._grabber.failed.connect(self._on_grab_fail)
+        return self._grabber
+
+    def _on_grab(self, link: str, data: dict) -> None:
+        who = self._dy_wait.pop(link, None)
+        if who == "read":
+            vid = data.get("vid") or link
+            item = downloader.Item(url=douyin.canonical_url(data["vid"]) if data.get("vid") else link, vid=vid,
+                                   title=data.get("title") or link, platform="Douyin",
+                                   duration=float(data.get("duration") or 0), thumbnail=data.get("poster") or "",
+                                   uploader=data.get("author") or "")
+            self._on_info(link, item, "")
+            self._job_done()
+        elif isinstance(who, dq.Entry):
+            self._dy_start(who, data)
+
+    def _on_grab_fail(self, link: str, msg: str) -> None:
+        who = self._dy_wait.pop(link, None)
+        if who == "read":
+            self._on_info(link, None, msg + "\n")
+            self._job_done()
+        elif isinstance(who, dq.Entry):
+            self.b.finished.emit(who, None, msg, msg)
+
     def _on_read_done(self) -> None:
+        self._job_done()
+
+    def _job_done(self) -> None:
+        self._read_jobs -= 1
+        if self._read_jobs <= 0:
+            self._read_jobs = 0
+            self._finish_read()
+
+    def _finish_read(self) -> None:
         self._reading = False
         if self.info_label.text().startswith("Đang đọc"):
             self.info_label.setText(getattr(self, "_skip_note", ""))
@@ -943,6 +1001,7 @@ class DownloadPage(QWidget):
         exe, deno = self._exe(), str(dl_tools.deno_path())
         start, end = gi.loaded + 1, gi.loaded + self.opts.page
         self._read_total, self._read_count = 1, 0
+        self._read_jobs = 1
         self._show_reading()
 
         def run() -> None:
@@ -1311,6 +1370,12 @@ class DownloadPage(QWidget):
         self._stopping = True
         for ev in self._cancels.values():
             ev.set()
+        for link, who in list(self._dy_wait.items()):  # Douyin còn chờ trình duyệt: dừng luôn
+            if isinstance(who, dq.Entry):
+                self._dy_wait.pop(link, None)
+                if self._grabber is not None:
+                    self._grabber.cancel(link)
+                self.b.finished.emit(who, None, CANCELLED, "")
         if not self._cancels:
             self._finish_run()
 
@@ -1332,12 +1397,49 @@ class DownloadPage(QWidget):
         if not self._cancels:
             self._finish_run()
 
+    def _dy_launch(self, e: dq.Entry, folder: str) -> None:
+        """Douyin: mở lại trang (link file có hạn) rồi tải trực tiếp."""
+        self._cancels[id(e)] = threading.Event()
+        self._dy_folder = folder
+        self._on_stage(e, "Đang mở trang Douyin…")
+        self._dy_wait[e.url] = e
+        self.grabber().grab(e.url)
+
+    def _dy_start(self, e: dq.Entry, data: dict) -> None:
+        cancel = self._cancels.get(id(e))
+        if cancel is None or cancel.is_set() or e.status != "running":
+            return
+        opts = Options(**vars(self.opts))
+        folder = Path(getattr(self, "_dy_folder", self.folder()))
+        if opts.subdir == "platform":
+            folder = folder / "Douyin"
+        elif opts.subdir == "uploader":
+            folder = folder / (douyin.out_name(e.uploader or "Douyin", "x", Options(name="title"))[:-8] or "Douyin")
+        enc = self._h264_enc
+        meta = {"title": e.title, "uploader": e.uploader, "webpage_url": e.url, "description": data.get("title", "")}
+
+        def run() -> None:
+            try:
+                res = dy_download(e, data, opts, folder, cancel, enc, meta,
+                                  lambda p: self.b.progress.emit(e, p), lambda s: self.b.stage.emit(e, s))
+                self.b.finished.emit(e, res, "", "")
+            except downloader.CancelledError:
+                self.b.finished.emit(e, None, CANCELLED, "")
+            except Exception as err:  # noqa: BLE001
+                msg = str(err) if isinstance(err, ValueError) else "Lỗi tải Douyin (rê chuột vào ⓘ xem chi tiết)"
+                self.b.finished.emit(e, None, msg, str(err))
+        threading.Thread(target=run, daemon=True).start()
+
     def _launch(self, e: dq.Entry, folder: str) -> None:
         e.status, e.message = "running", ""
         self._paint(e)
         row = self._row(e)
         if row is not None:
             row.setData(3, PROG_ROLE, -1.0)  # đang bắt đầu: khúc sáng chạy qua lại
+        if douyin.is_douyin(e.url):
+            self._changed()
+            self._dy_launch(e, folder)
+            return
         self._changed()
         cancel = threading.Event()
         self._cancels[id(e)] = cancel
@@ -1515,3 +1617,74 @@ class DownloadPage(QWidget):
             self.side_scroll.setMinimumHeight(0)
             self._fit_side()
         self.tree.setColumnHidden(2, width < theme.px(760))
+
+
+def _ff(args: list[str], cancel: threading.Event) -> None:
+    if cancel.is_set():
+        raise downloader.CancelledError()
+    r = ffmpeg_tools.run([ffmpeg_tools.ffmpeg(), "-hide_banner", "-v", "error", "-y", *args])
+    if r.returncode != 0:
+        raise RuntimeError(r.stderr.strip()[-400:])
+
+
+def _video_codec(path: Path) -> str:
+    r = ffmpeg_tools.run([ffmpeg_tools.ffprobe(), "-v", "error", "-select_streams", "v:0", "-show_entries",
+                          "stream=codec_name", "-of", "csv=p=0", str(path)])
+    return r.stdout.strip()
+
+
+def dy_download(e, data: dict, opts: Options, folder: Path, cancel: threading.Event, enc: str, meta: dict,
+                on_progress, on_stage) -> downloader.Result:
+    """Một video Douyin: tải file gốc → (cắt đoạn) → định dạng (MP3 / M4A / MKV) → H.264 nếu cần → mô tả / ảnh bìa."""
+    folder.mkdir(parents=True, exist_ok=True)
+    out = folder / douyin.out_name(e.title, e.vid, opts, e.index, str(folder))
+    t0, last = time.monotonic(), [0]
+
+    def prog(done: int, total: int) -> None:
+        dt = max(0.001, time.monotonic() - t0)
+        speed = done / dt
+        on_progress(downloader.Progress(done, total, speed, int((total - done) / speed) if total and speed else 0))
+        last[0] = done
+
+    src = data["srcs"][0]
+    douyin.download(src, out, data.get("ua", ""), prog, cancel)
+    if e.section:
+        a, b = e.section.split("-")
+        on_stage("Đang cắt đoạn…")
+        tmp = out.with_name(out.stem + ".cut.mp4")
+        _ff(["-ss", a, "-to", b, "-i", str(out), "-c", "copy", "-movflags", "+faststart", str(tmp)], cancel)
+        tmp.replace(out)
+    path, codec = out, ""
+    if opts.fmt in ("mp3", "m4a"):
+        on_stage("Đang tách tiếng…")
+        dst = out.with_suffix("." + opts.fmt)
+        codec_args = ["-c:a", "libmp3lame", "-b:a", f"{opts.audio_q}k"] if opts.fmt == "mp3" else ["-c:a", "copy"]
+        _ff(["-i", str(out), "-vn", *codec_args, str(dst)], cancel)
+        out.unlink(missing_ok=True)
+        path = dst
+    elif opts.fmt == "mkv":
+        dst = out.with_suffix(".mkv")
+        _ff(["-i", str(out), "-c", "copy", str(dst)], cancel)
+        out.unlink(missing_ok=True)
+        path = dst
+    else:
+        codec = downloader.codec_label(_video_codec(out))
+        if downloader.needs_h264(opts, codec):
+            on_stage("Đang chuyển sang H.264…")
+            downloader.convert_to_h264(str(out), enc, cancel,
+                                       lambda f: on_stage(f"Đang chuyển sang H.264… {int(f * 100)}%"))
+            codec = ""
+    if opts.desc:
+        try:
+            downloader.write_meta_txt(str(path), meta)
+        except OSError:
+            pass
+    poster = data.get("poster") or ""
+    if opts.thumb and poster.lower().startswith(("http://", "https://")):
+        try:
+            raw = douyin.download(poster, path.with_name(path.stem + ".poster"), data.get("ua", ""), None, cancel)
+            _ff(["-i", str(raw), "-frames:v", "1", str(path.with_suffix(".jpg"))], cancel)
+            raw.unlink(missing_ok=True)
+        except Exception:  # noqa: BLE001 — không có ảnh bìa thì thôi
+            pass
+    return downloader.Result(str(path), codec)

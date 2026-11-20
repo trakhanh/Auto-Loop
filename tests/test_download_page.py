@@ -451,3 +451,89 @@ def test_advanced_combos_show_full_text(page):
                page.max_box, page.login_box):
         longest = max(cb.fontMetrics().horizontalAdvance(cb.itemText(i)) for i in range(cb.count()))
         assert longest <= cb.width() - 24, (cb.currentText(), longest, cb.width())
+
+
+# ---------- 2e: Douyin qua trình duyệt trong app ----------
+DY = "https://www.douyin.com/video/7445552550692031763"
+
+
+def _fake_grabber(fail: str = ""):
+    from PySide6.QtCore import QObject, QTimer, Signal
+
+    class FakeGrabber(QObject):
+        grabbed = Signal(str, dict)
+        failed = Signal(str, str)
+
+        def __init__(self, parent=None):
+            super().__init__(parent)
+            self.calls = []
+
+        def grab(self, link):
+            self.calls.append(link)
+            from loopstation.core import douyin
+            data = douyin.parse_grab({"title": "Bài Douyin - 抖音", "srcs": ["https://v.zjcdn.com/x.mp4"],
+                                      "duration": 12, "poster": "", "author": "Kênh D", "ua": "UA"}, link)
+            QTimer.singleShot(20, (lambda: self.failed.emit(link, fail)) if fail else
+                              (lambda: self.grabbed.emit(link, data)))
+
+        def cancel(self, link):
+            pass
+
+        def busy(self):
+            return False
+
+        def shutdown(self):
+            pass
+    return FakeGrabber
+
+
+def _fake_dy_download(monkeypatch):
+    from loopstation.core import douyin, ffmpeg_tools
+
+    def fake(url, out, ua, on_progress, cancel):
+        ffmpeg_tools.run([ffmpeg_tools.ffmpeg(), "-v", "error", "-y", "-f", "lavfi", "-i",
+                          "testsrc=size=160x120:rate=25:duration=1", "-f", "lavfi", "-i", "sine=duration=1",
+                          "-c:v", "libx264", "-c:a", "aac", "-shortest", str(out)])
+        if on_progress:
+            on_progress(10, 10)
+        return out
+    monkeypatch.setattr(douyin, "download", fake)
+
+
+def test_douyin_read_and_download(page, monkeypatch):
+    page.grabber_factory = _fake_grabber()
+    _fake_dy_download(monkeypatch)
+    read(page, DY)
+    e = page.queue.entries[0]
+    assert e.platform == "Douyin" and e.title == "Bài Douyin" and e.vid == "7445552550692031763"
+    assert e.uploader == "Kênh D" and e.duration == 12
+    page.start()
+    assert wait(lambda: not page.is_busy(), 20)
+    assert e.status == "done" and Path(e.path).name == "Douyin - Bài Douyin [7445552550692031763].mp4"
+    assert Path(e.path).is_file()
+
+
+def test_douyin_mp3(page, monkeypatch):
+    page.grabber_factory = _fake_grabber()
+    _fake_dy_download(monkeypatch)
+    page.fmt_box.setCurrentIndex(page.fmt_box.findData("mp3"))
+    read(page, DY)
+    page.start()
+    assert wait(lambda: not page.is_busy(), 20)
+    e = page.queue.entries[0]
+    assert e.status == "done" and e.path.endswith(".mp3") and Path(e.path).is_file()
+    assert not Path(e.path).with_suffix(".mp4").exists()
+
+
+def test_douyin_user_page_unsupported(page):
+    page.grabber_factory = _fake_grabber()
+    read(page, "https://www.douyin.com/user/MS4wLjABAAAA")
+    e = page.queue.entries[0]
+    assert e.unread and "Kênh Douyin chưa hỗ trợ" in e.message
+
+
+def test_douyin_grab_fail_row(page):
+    page.grabber_factory = _fake_grabber(fail="Không lấy được video Douyin — thử lại")
+    read(page, DY)
+    e = page.queue.entries[0]
+    assert e.unread and e.status == "error" and "Không lấy được video Douyin" in e.message

@@ -1,0 +1,52 @@
+"""Trình duyệt ẩn trong app (QtWebEngine) đọc link video từ trang — chạy trong tiến trình riêng, trang HTML trên máy."""
+import json
+import os
+import subprocess
+import sys
+from pathlib import Path
+
+import pytest
+
+ROOT = Path(__file__).resolve().parents[1]
+PROBE = ROOT / "tests" / "web_grab_probe.py"
+pytest.importorskip("PySide6.QtWebEngineWidgets")
+
+
+def run_probe(html_file: Path, verify_after="15", give_up="20"):
+    env = dict(os.environ, QT_QPA_PLATFORM="offscreen", PYTHONIOENCODING="utf-8")
+    r = subprocess.run([sys.executable, str(PROBE), str(html_file), verify_after, give_up], capture_output=True,
+                       text=True, encoding="utf-8", errors="replace", env=env, timeout=120)
+    lines = [ln for ln in r.stdout.splitlines() if ln.startswith("{")]
+    assert lines, r.stderr[-800:]
+    return json.loads(lines[-1])
+
+
+def test_grabs_video_src_title_poster(tmp_path):
+    page = tmp_path / "video" / "7445552550692031763.html"  # đuôi .html: trình duyệt hiểu là trang web
+    page.parent.mkdir()
+    page.write_text('<html><head><meta charset="utf-8"><title>Bài A - 抖音</title></head><body>'
+                    '<video src="https://v.zjcdn.com/abc.mp4" poster="https://p/c.jpg"></video></body></html>',
+                    encoding="utf-8")
+    out = run_probe(page)
+    d = out["grabbed"]
+    assert d["title"] == "Bài A" and d["srcs"] == ["https://v.zjcdn.com/abc.mp4"] and d["poster"] == "https://p/c.jpg"
+    assert d["vid"] == "7445552550692031763" and "Mozilla" in d["ua"]
+
+
+def test_gives_up_without_video(tmp_path):
+    page = tmp_path / "trong.html"
+    page.write_text("<html><title>Xác minh</title><body>verify</body></html>", encoding="utf-8")
+    out = run_probe(page, "1", "2")
+    assert "Không lấy được video Douyin" in out["failed"]
+
+
+def test_waits_for_late_title_and_duration(tmp_path):
+    """Thử thật Douyin: thẻ <video> có link trước khi trang kịp có tiêu đề → phải chờ tiêu đề (tối đa vài giây)."""
+    page = tmp_path / "video" / "7000000000000000001.html"
+    page.parent.mkdir()
+    page.write_text('<html><head><meta charset="utf-8"><title></title></head><body>'
+                    '<video src="https://v.zjcdn.com/late.mp4"></video>'
+                    '<script>setTimeout(() => { document.title = "Tiêu đề muộn - 抖音"; }, 1500);</script>'
+                    '</body></html>', encoding="utf-8")
+    out = run_probe(page, "20", "30")
+    assert out["grabbed"]["title"] == "Tiêu đề muộn"
