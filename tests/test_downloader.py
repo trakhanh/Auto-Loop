@@ -315,3 +315,63 @@ def test_trim_filenames_by_folder():
     a = dl.download_args("https://y/x", long_folder, Options(subdir="uploader", name="uploader"), "", "", "f", "d")
     n = int(pair(a, "--trim-filenames"))
     assert n < short and len(long_folder) + 61 + n + 20 <= 260 and n >= 40
+
+
+# ---------- 2c: tuỳ chọn mới + luôn ra H.264 ----------
+def test_mkv_args():
+    a = args_for(fmt="mkv", quality="1080")
+    assert pair(a, "--merge-output-format") == "mkv" and pair(a, "-S") == "res:1080"
+
+
+def test_audio_quality_arg():
+    assert pair(args_for(fmt="mp3", audio_q="192"), "--audio-quality") == "192K"
+    assert pair(args_for(fmt="mp3"), "--audio-quality") == "320K"
+
+
+def test_thumb_and_desc_args():
+    a = args_for(thumb=True, desc=True)
+    assert "--write-thumbnail" in a and pair(a, "--convert-thumbnails") == "jpg"
+    assert any(x.startswith("after_move:KTLS_META|") for x in a)
+    a = args_for()
+    assert "--write-thumbnail" not in a and not any(x.startswith("after_move:KTLS_META|") for x in a)
+
+
+def test_out_template_index():
+    assert dl.out_template(Options(name="index"), index=7) == "007 - %(title).150B [%(id)s].%(ext)s"
+    assert dl.out_template(Options(name="index")) == "%(title).150B [%(id)s].%(ext)s"  # video lẻ: không số
+    a = dl.download_args("https://y/x", "D:/o", Options(name="index"), "", "", "f", "d", index=12)
+    assert pair(a, "-o").startswith("012 - ")
+
+
+def test_run_download_meta_and_txt(tmp_path, mode, monkeypatch):
+    mode("ok")
+    monkeypatch.setenv("FAKE_YTDLP_TITLE", "Mưa")
+    a = dl.download_args("https://y/m1", str(tmp_path), Options(desc=True), "", "", "f", "d")
+    res = dl.run_download(FAKE, a, lambda p: None, lambda s: None, threading.Event())
+    assert res.meta["title"] == "Mưa" and "mô tả" in res.meta["description"]
+    txt = dl.write_meta_txt(res.path, res.meta)
+    body = txt.read_text(encoding="utf-8")
+    assert txt.suffix == ".txt" and Path(res.path).stem == txt.stem
+    assert "Mưa" in body and "mô tả" in body and "https://y/m1" in body
+
+
+def test_needs_h264():
+    assert dl.needs_h264(Options(), "H.265") and dl.needs_h264(Options(), "AV1")
+    assert not dl.needs_h264(Options(), "")
+    assert not dl.needs_h264(Options(h264=False), "H.265")
+    assert not dl.needs_h264(Options(fmt="mkv"), "AV1") and not dl.needs_h264(Options(fmt="mp3"), "H.265")
+
+
+def test_convert_to_h264_real_ffmpeg(tmp_path):
+    """Trang chỉ có H.265 → tải xong tự chuyển sang H.264 (mở được mọi phần mềm). Dùng ffmpeg thật."""
+    from loopstation.core import ffmpeg_tools
+    src = tmp_path / "YouTube - a [h1].mp4"
+    ffmpeg_tools.run([ffmpeg_tools.ffmpeg(), "-v", "error", "-f", "lavfi", "-i", "testsrc=size=320x240:rate=25:duration=1",
+                      "-f", "lavfi", "-i", "sine=duration=1", "-c:v", "libx265", "-x265-params", "log-level=error",
+                      "-c:a", "aac", "-shortest", str(src)])
+    assert src.is_file()
+    out = dl.convert_to_h264(str(src), "libx264", threading.Event())
+    codec = ffmpeg_tools.run([ffmpeg_tools.ffprobe(), "-v", "error", "-select_streams", "v:0", "-show_entries",
+                              "stream=codec_name", "-of", "csv=p=0", out]).stdout.strip()
+    assert out == str(src) and codec == "h264"
+    assert not list(tmp_path.glob("*.h264tmp*"))

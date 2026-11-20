@@ -75,4 +75,7 @@ sys.stderr.write("KTLS_PP|Merger|started\n")  # yt-dlp (--print → im lặng) i
 sys.stderr.flush()
 time.sleep(0.1)
 (folder / name).write_bytes(b"video")
+if any(a.startswith("after_move:KTLS_META|") for a in args):
+    print("KTLS_META|" + json.dumps({"title": title, "uploader": "Kênh A", "webpage_url": url, "upload_date": "20261120",
+                                     "description": "Dòng mô tả 1\nmô tả dòng 2"}, ensure_ascii=False), flush=True)
 print(f"KTLS_FILE|{folder / name}|avc1.640028", flush=True)

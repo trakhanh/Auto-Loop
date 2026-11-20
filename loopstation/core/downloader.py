@@ -9,7 +9,7 @@ import shlex
 import subprocess
 import threading
 import time
-from dataclasses import dataclass, fields
+from dataclasses import dataclass, field, fields
 from pathlib import Path
 from typing import Callable
 
@@ -48,6 +48,7 @@ class Progress:
 class Result:
     path: str
     codec: str  # "" = H.264 (mở được mọi phần mềm), khác: "AV1", "VP9"…
+    meta: dict = field(default_factory=dict)  # tiêu đề, kênh, link, ngày đăng, mô tả (khi bật "Lưu tiêu đề + mô tả")
 
 
 class DownloadError(Exception):
@@ -62,16 +63,21 @@ class CancelledError(Exception):
 
 
 # ---------- Tuỳ chỉnh ----------
-FORMAT_LABELS = (("mp4", "Video MP4"), ("mp3", "Chỉ tiếng MP3"), ("m4a", "Chỉ tiếng M4A"))
-QUALITY_LABELS = (("best", "Cao nhất (2K/4K)"), ("1080", "1080p — mở được mọi phần mềm"), ("720", "720p"),
-                  ("480", "480p — file nhẹ"))
+FORMAT_LABELS = (("mp4", "MP4"), ("mkv", "MKV gốc"), ("mp3", "MP3"), ("m4a", "M4A"))
+FORMAT_TIPS = {"mp4": "Video MP4 — mở được mọi phần mềm dựng, điện thoại",
+               "mkv": "Giữ nguyên định dạng gốc của trang (nét nhất, có thể là AV1 / VP9) — không chuyển mã",
+               "mp3": "Chỉ lấy tiếng, file MP3", "m4a": "Chỉ lấy tiếng, file M4A (AAC) — thường không phải chuyển mã"}
+AUDIO_Q_LABELS = (("320", "320 kbps"), ("192", "192 kbps"), ("128", "128 kbps"))
+MAX_MIN_LABELS = ((0, "Không"), (10, "10 phút"), (30, "30 phút"), (60, "60 phút"))
+QUALITY_LABELS = (("best", "Cao nhất"), ("1080", "1080p"), ("720", "720p"), ("480", "480p"))
 QUALITIES = {"best": "res,vcodec:h264,acodec:aac", "1080": "res:1080,vcodec:h264,acodec:aac",
              "720": "res:720,vcodec:h264,acodec:aac", "480": "res:480,vcodec:h264,acodec:aac"}
 SUBS_LABELS = (("", "Không"), ("file", "Tải kèm file .srt"), ("embed", "Gắn vào video"))
 NAME_LABELS = (("platform", "Nền tảng – Tiêu đề"), ("title", "Tiêu đề"), ("date", "Ngày đăng – Tiêu đề"),
-               ("uploader", "Kênh – Tiêu đề"))
+               ("uploader", "Kênh – Tiêu đề"), ("index", "Số thứ tự – Tiêu đề"))
 NAME_TEMPLATES = {"platform": "%(extractor_key)s - %(title).150B", "title": "%(title).150B",
-                  "date": "%(upload_date>%Y-%m-%d)s - %(title).150B", "uploader": "%(uploader).60B - %(title).150B"}
+                  "date": "%(upload_date>%Y-%m-%d)s - %(title).150B", "uploader": "%(uploader).60B - %(title).150B",
+                  "index": "%(title).150B"}  # "index": số thứ tự do app ghi vào trước (out_template)
 SUBDIR_LABELS = (("", "Không"), ("platform", "Theo nền tảng"), ("uploader", "Theo kênh"))
 SUBDIR_PREFIX = {"": "", "platform": "%(extractor_key)s/", "uploader": "%(uploader).60B/"}
 CONCURRENT = (1, 2, 3)
@@ -87,6 +93,8 @@ PROGRESS_TEMPLATE = ("download:KTLS|%(progress.downloaded_bytes)s|%(progress.tot
                      "|%(progress.speed)s|%(progress.eta)s")
 PP_TEMPLATE = "postprocess:KTLS_PP|%(progress.postprocessor)s|%(progress.status)s"
 FILE_TEMPLATE = "after_move:KTLS_FILE|%(filepath)s|%(vcodec)s"
+META_PREFIX = "KTLS_META|"
+META_TEMPLATE = "after_move:KTLS_META|%(.{title,uploader,webpage_url,upload_date,description})j"
 
 
 def _keys(pairs) -> tuple:
@@ -105,12 +113,19 @@ class Options:
     page: int = 50
     embed: bool = False
     extra: str = ""
+    audio_q: str = "320"
+    thumb: bool = False
+    desc: bool = False
+    open_after: bool = False
+    max_minutes: int = 0
+    h264: bool = True  # MP4: trang chỉ có H.265 / AV1 / VP9 → tải xong tự chuyển sang H.264
 
     @classmethod
     def from_settings(cls, s) -> "Options":
         d = cls()
         allowed = {"fmt": _keys(FORMAT_LABELS), "quality": tuple(QUALITIES), "subs": _keys(SUBS_LABELS),
-                   "name": tuple(NAME_TEMPLATES), "subdir": tuple(SUBDIR_PREFIX), "rate": _keys(RATE_LABELS)}
+                   "name": tuple(NAME_TEMPLATES), "subdir": tuple(SUBDIR_PREFIX), "rate": _keys(RATE_LABELS),
+                   "audio_q": _keys(AUDIO_Q_LABELS)}
         out = {}
         for f in fields(cls):
             raw = s.value(f"download/opt/{f.name}", None)
@@ -124,12 +139,13 @@ class Options:
                     out[f.name] = min(max(int(raw), 1), CONCURRENT[-1])
                 except (TypeError, ValueError):
                     out[f.name] = default
-            elif f.name == "page":
+            elif f.name in ("page", "max_minutes"):
+                ok = PAGE_SIZES if f.name == "page" else _keys(MAX_MIN_LABELS)
                 try:
-                    out[f.name] = int(raw) if int(raw) in PAGE_SIZES else default
+                    out[f.name] = int(raw) if int(raw) in ok else default
                 except (TypeError, ValueError):
                     out[f.name] = default
-            elif f.name == "embed":
+            elif f.name in ("embed", "thumb", "desc", "open_after", "h264"):
                 out[f.name] = raw is True or str(raw).lower() in ("true", "1")
             else:
                 out[f.name] = str(raw)
@@ -147,8 +163,10 @@ def _label(pairs, key) -> str:
 def summary(o: Options) -> str:
     """Dòng tóm tắt khi khung Tuỳ chỉnh đang gấp."""
     parts = [o.fmt.upper()]
-    if o.fmt == "mp4":
+    if o.fmt in ("mp4", "mkv"):
         parts.append("Cao nhất" if o.quality == "best" else f"{o.quality}p")
+    if o.fmt == "mp3":
+        parts.append(f"{o.audio_q} kbps")
     parts.append("phụ đề: " + {"": "không", "file": "file .srt", "embed": "gắn vào video"}[o.subs])
     parts.append("tên: " + _label(NAME_LABELS, o.name))
     if o.subdir:
@@ -164,9 +182,10 @@ def section_tag(section: str) -> str:
     return "-".join(f"{int(x) // 60}m{int(x) % 60:02d}" for x in section.split("-"))
 
 
-def out_template(o: Options, section: str = "") -> str:
+def out_template(o: Options, section: str = "", index: int = 0) -> str:
     tail = f" [%(id)s] {section_tag(section)}.%(ext)s" if section else " [%(id)s].%(ext)s"
-    return SUBDIR_PREFIX.get(o.subdir, "") + NAME_TEMPLATES.get(o.name, NAME_TEMPLATES["platform"]) + tail
+    head = f"{index:03d} - " if o.name == "index" and index > 0 else ""
+    return SUBDIR_PREFIX.get(o.subdir, "") + head + NAME_TEMPLATES.get(o.name, NAME_TEMPLATES["platform"]) + tail
 
 
 def trim_len(folder: str, o: Options) -> int:
@@ -264,14 +283,18 @@ def info_args(url: str, start: int, end: int, login: str, cookies_file: str, den
 
 
 def download_args(url: str, folder: str, opts: Options, login: str, cookies_file: str, ffmpeg: str, deno: str,
-                  section: str = "") -> list[str]:
+                  section: str = "", index: int = 0) -> list[str]:
     a = ["--ignore-config", "--encoding", "utf-8", "--no-playlist", "--newline", "--progress",
          "--windows-filenames", "--trim-filenames", str(trim_len(folder, opts)), "--no-mtime",
          "--ffmpeg-location", ffmpeg, "--js-runtimes", f"deno:{deno}",
-         "-P", folder, "-o", out_template(opts, section),
+         "-P", folder, "-o", out_template(opts, section, index),
          "--progress-template", PROGRESS_TEMPLATE, "--progress-template", PP_TEMPLATE, "--print", FILE_TEMPLATE]
     if opts.fmt in ("mp3", "m4a"):
-        a += ["-f", "ba/b", "-x", "--audio-format", opts.fmt, "--audio-quality", "0"]
+        a += ["-f", "ba/b", "-x", "--audio-format", opts.fmt,
+              "--audio-quality", f"{opts.audio_q}K" if opts.fmt == "mp3" else "0"]
+    elif opts.fmt == "mkv":  # giữ định dạng gốc: chỉ chọn theo độ phân giải, không ép H.264
+        a += ["-f", "bv*+ba/b", "-S", "res" if opts.quality == "best" else f"res:{opts.quality}",
+              "--merge-output-format", "mkv"]
     else:
         a += ["-f", "bv*+ba/b", "-S", QUALITIES.get(opts.quality, QUALITIES["1080"]), "--merge-output-format", "mp4"]
     if opts.subs:
@@ -282,6 +305,10 @@ def download_args(url: str, folder: str, opts: Options, login: str, cookies_file
         a += ["-r", opts.rate]
     if opts.embed:
         a += ["--embed-metadata", "--embed-thumbnail"]
+    if opts.thumb:
+        a += ["--write-thumbnail", "--convert-thumbnails", "jpg"]
+    if opts.desc:
+        a += ["--print", META_TEMPLATE]
     if section:
         a += ["--download-sections", f"*{section}", "--force-keyframes-at-cuts"]
     a += login_args(login, cookies_file)
@@ -414,7 +441,7 @@ def _is_partial(name: str) -> bool:
             or re.search(r"\.f\d+[\w-]*\.\w+$", n) is not None)
 
 
-FORMAT_EXTS = {"mp4": (".mp4", ".mkv", ".webm", ".mov"), "mp3": (".mp3",), "m4a": (".m4a",)}
+FORMAT_EXTS = {"mp4": (".mp4", ".mov"), "mkv": (".mkv", ".webm", ".mp4"), "mp3": (".mp3",), "m4a": (".m4a",)}
 
 
 def find_existing(folder: str, vid: str, fmt: str = "mp4") -> Path | None:
@@ -541,6 +568,7 @@ def run_download(exe: list[str], args: list[str], on_progress: Callable[[Progres
     folder = _opt(args, "-P") or "."
     found: dict[str, str] = {"vid": vid}
     result: list[tuple[str, str]] = []
+    meta: dict = {}
     err: list[str] = []
 
     def on_line(line: str) -> None:
@@ -551,6 +579,12 @@ def run_download(exe: list[str], args: list[str], on_progress: Callable[[Progres
         f = parse_file_line(line)
         if f is not None:
             result.append(f)
+            return
+        if line.startswith(META_PREFIX):
+            try:
+                meta.update(json.loads(line[len(META_PREFIX):]))
+            except ValueError:
+                pass
             return
         if line.startswith(PP_PREFIX):
             pp = line.split("|")[1] if "|" in line else ""
@@ -583,9 +617,69 @@ def run_download(exe: list[str], args: list[str], on_progress: Callable[[Progres
         raise DownloadError(friendly_error(stderr, login or _login_of(args)), stderr)
     if result:
         path, vcodec = result[-1]
-        return Result(path, codec_label(vcodec))
+        return Result(path, codec_label(vcodec), meta)
     fmt = _opt(args, "--audio-format") or "mp4"
     existing = find_existing(folder, found["vid"], fmt)
     if existing is not None:
         return Result(str(existing), "")
     raise DownloadError("Lỗi tải (rê chuột vào ⓘ xem chi tiết)", stderr or "yt-dlp không báo file đã tải.")
+
+
+# ---------- sau khi tải ----------
+def write_meta_txt(media_path: str, meta: dict) -> Path:
+    """Ghi "<tên file>.txt" cạnh video: tiêu đề, kênh, ngày đăng, link, mô tả (để đăng lại / tham khảo)."""
+    out = Path(media_path).with_suffix(".txt")
+    d = str(meta.get("upload_date") or "")
+    date_s = f"{d[6:8]}/{d[4:6]}/{d[:4]}" if len(d) == 8 and d.isdigit() else d
+    lines = [str(meta.get("title") or ""), ""]
+    for label, val in (("Kênh", meta.get("uploader")), ("Ngày đăng", date_s), ("Link", meta.get("webpage_url"))):
+        if val:
+            lines.append(f"{label}: {val}")
+    lines += ["", "Mô tả:", str(meta.get("description") or "(không có)")]
+    out.write_text("\n".join(lines) + "\n", encoding="utf-8")
+    return out
+
+
+def needs_h264(o: Options, codec: str) -> bool:
+    """MP4 + "Luôn ra H.264" mà trang chỉ có H.265 / AV1 / VP9 → cần chuyển mã sau khi tải."""
+    return o.fmt == "mp4" and o.h264 and bool(codec)
+
+
+def convert_to_h264(path: str, encoder: str, cancel: threading.Event,
+                    on_progress: Callable[[float], None] | None = None) -> str:
+    """Chuyển video sang H.264 (card đồ hoạ nếu có), giữ tiếng; ghi file tạm rồi thay file gốc. Trả về đường dẫn."""
+    from . import encoders, probe
+    src = Path(path)
+    tmp = src.with_name(src.stem + ".h264tmp" + src.suffix)
+    dur = probe.probe(str(src)).duration or 0.0
+    args = ["-v", "error", "-i", str(src), "-map", "0:v:0", "-map", "0:a?", *encoders.encoder_args(encoder, "high", 250),
+            "-pix_fmt", encoders.pix_fmt(encoder), "-c:a", "copy", "-movflags", "+faststart", str(tmp)]
+    runner = ffmpeg_tools.Runner()
+    stop = threading.Event()
+
+    def watch() -> None:
+        while not stop.wait(0.2):
+            if cancel.is_set():
+                runner.cancel()
+                return
+    threading.Thread(target=watch, daemon=True).start()
+
+    def prog(d: dict) -> None:
+        if on_progress and dur > 0:
+            try:
+                on_progress(min(1.0, int(d.get("out_time_us", "0")) / 1e6 / dur))
+            except ValueError:
+                pass
+    try:
+        runner.ffmpeg(args, prog)
+        if cancel.is_set():
+            raise CancelledError()
+        os.replace(tmp, src)
+        return str(src)
+    except BaseException as e:
+        tmp.unlink(missing_ok=True)
+        if cancel.is_set():
+            raise CancelledError() from e
+        raise
+    finally:
+        stop.set()

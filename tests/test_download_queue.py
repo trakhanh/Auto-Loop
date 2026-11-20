@@ -120,3 +120,15 @@ def test_group_complete_unknown_count():
     assert q.groups["g"].complete
     q.add_group(Group(url="h", title="H", count=3, items=[it(i) for i in range(100, 103)]), page=50)
     assert q.groups["h"].complete
+
+
+def test_group_index_and_long_untick():
+    """2c: mục trong nhóm có số thứ tự (cho tên "Số thứ tự – Tiêu đề"); video dài hơn giới hạn được bỏ tick sẵn."""
+    q = DownloadQueue()
+    items = [Item(f"https://y/l{i}", f"l{i}", f"L{i}", "YouTube", 7200 if i % 2 else 60, "") for i in range(4)]
+    es = q.add_group(Group(url="g", title="G", count=0, items=items), page=50, max_sec=1800)
+    assert [e.index for e in es] == [1, 2, 3, 4]
+    assert [e.checked for e in es] == [True, False, True, False]
+    more = q.extend_group("g", [Item("https://y/l9", "l9", "L9", "YouTube", 10, "")], page=50, max_sec=1800)
+    assert more[0].index == 5 and not more[0].checked  # mục Hiện thêm vẫn chưa tick
+    assert q.add_item(Item("https://y/s", "s", "S", "YouTube", 10, "")).index == 0

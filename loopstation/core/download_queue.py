@@ -29,6 +29,7 @@ class Entry:
     path: str = ""
     codec: str = ""
     section: str = ""  # "60-150" = chỉ tải đoạn 1:00–2:30
+    index: int = 0  # vị trí trong nhóm (1, 2, 3…; 0 = video lẻ) — cho tên file "Số thứ tự – Tiêu đề"
     unread: bool = False  # dòng "đọc link lỗi": url là link gốc (có thể cả kênh) — chỉ được đọc lại, không tải
 
 
@@ -64,18 +65,29 @@ class DownloadQueue:
     def _complete(gi: GroupInfo, got: int, page: int) -> bool:
         return (gi.count > 0 and gi.loaded >= gi.count) or got < page
 
-    def add_group(self, g: Group, page: int = GROUP_PAGE) -> list[Entry]:
+    def _add_numbered(self, items: list[Item], url: str, start: int, tick: bool, max_sec: float) -> list[Entry]:
+        out = []
+        for n, i in enumerate(items, start):
+            e = self.add_item(i, url, tick and not (max_sec and i.duration > max_sec))
+            if e is not None:
+                e.index = n
+                out.append(e)
+        return out
+
+    def add_group(self, g: Group, page: int = GROUP_PAGE, max_sec: float = 0) -> list[Entry]:
+        """Nhóm mới: tick sẵn lượt đọc đầu, trừ video dài hơn `max_sec` (gợi ý — người dùng tick lại được)."""
         gi = GroupInfo(g.url, g.title, g.count, len(g.items))
         gi.complete = self._complete(gi, len(g.items), page)
         self.groups[g.url] = gi
-        return [e for e in (self.add_item(i, g.url, True) for i in g.items) if e is not None]
+        return self._add_numbered(g.items, g.url, 1, True, max_sec)
 
-    def extend_group(self, url: str, items: list[Item], page: int = GROUP_PAGE) -> list[Entry]:
+    def extend_group(self, url: str, items: list[Item], page: int = GROUP_PAGE, max_sec: float = 0) -> list[Entry]:
         gi = self.groups.get(url)
+        start = (gi.loaded + 1) if gi is not None else 1
         if gi is not None:
             gi.loaded += len(items)
             gi.complete = self._complete(gi, len(items), page)
-        return [e for e in (self.add_item(i, url, False) for i in items) if e is not None]
+        return self._add_numbered(items, url, start, False, max_sec)
 
     def add_unread(self, link: str, message: str) -> Entry | None:
         """Dòng báo "đọc link lỗi" (không tick, không bao giờ được tải; Thử lại = đọc lại link)."""
