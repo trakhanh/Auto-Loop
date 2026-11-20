@@ -33,3 +33,28 @@ def keep_awake(on: bool) -> bool:
 
 def is_active() -> bool:
     return _active
+
+
+_holders: set[str] = set()
+
+
+def hold(owner: str, on: bool) -> None:
+    """Giữ máy thức theo từng việc ("export", "download"…): còn ít nhất một việc giữ thì máy không ngủ."""
+    before = bool(_holders)
+    if on:
+        _holders.add(owner)
+    else:
+        _holders.discard(owner)
+    if bool(_holders) != before:
+        keep_awake(bool(_holders))
+
+
+def release_all() -> None:
+    """Đóng app: nhả mọi việc đang giữ máy thức."""
+    if _holders:
+        _holders.clear()
+        keep_awake(False)
+
+
+def holders() -> frozenset[str]:
+    return frozenset(_holders)

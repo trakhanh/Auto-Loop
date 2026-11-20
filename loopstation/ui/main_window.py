@@ -2757,7 +2757,7 @@ class MainWindow(QMainWindow):
     def _start_job(self, job: RenderJob, kind: str, clear_log: bool = True, seconds: float = 0.0) -> None:
         self.job, self._job_kind = job, kind
         self._job_t0, self._job_secs = time.time(), seconds  # đo tốc độ máy để ước tính giờ xong hàng đợi
-        power.keep_awake(True)  # máy không tự ngủ khi đang xuất (hàng đợi qua đêm)
+        power.hold("export", True)  # máy không tự ngủ khi đang xuất (hàng đợi qua đêm)
         self.settings_page.set_job_running(True)
         if self._size_runner:  # dừng đo dung lượng đang chạy: không tranh card đồ hoạ (giới hạn phiên NVENC)
             self._size_runner.cancel()
@@ -2802,7 +2802,7 @@ class MainWindow(QMainWindow):
         """Hết việc (không còn xuất, hàng đợi đã dừng) → trả lại chế độ ngủ bình thường của Windows."""
         if self.job is None and not self._queue_running:
             QTimer.singleShot(500, self._check_disk)  # xuất xong: ổ đĩa có thể vừa đầy thêm
-            power.keep_awake(False)
+            power.hold("export", False)
             self.settings_page.set_job_running(False)
             threading.Thread(target=ffmpeg_tools.prune_cache, daemon=True).start()  # bộ nhớ đệm quá lớn → dọn bớt
 
@@ -2890,7 +2890,7 @@ class MainWindow(QMainWindow):
         self._closing = True
         self._mark_queue_running(False)  # người dùng tự đóng (kể cả lúc nghỉ giữa hai mục): lần sau không hỏi chạy tiếp
         self._timer.stop()
-        power.keep_awake(False)
+        power.release_all()
         self.music_tab.mixer.stop()
         self.viewer.shutdown()
         if self._audio_prev_runner:
