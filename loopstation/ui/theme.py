@@ -589,6 +589,14 @@ QCheckBox::indicator:disabled {{ background: {t['panel']}; border-color: {t['lin
 QCheckBox::indicator:checked:disabled, QTreeView::indicator:checked:disabled {{ background: {rgba(t['accent'], 0.35)};
     border-color: {rgba(t['accent'], 0.35)}; }}
 QTreeView:disabled {{ color: {t['text_disabled']}; }}
+/* nút chọn một (tròn): vòng trống luôn thấy, chọn = vòng màu nhấn dày */
+QRadioButton {{ spacing: 8px; background: transparent; }}
+QRadioButton::indicator {{ width: 16px; height: 16px; border-radius: 9px; border: 1px solid {t['line_control']};
+    background: {t['field']}; }}
+QRadioButton::indicator:hover {{ border-color: {t['accent_text']}; }}
+QRadioButton::indicator:checked {{ border: 5px solid {t['accent']}; background: {t['text']}; width: 8px;
+    height: 8px; }}
+QRadioButton:disabled {{ color: {t['text_disabled']}; }}
 """
 
 

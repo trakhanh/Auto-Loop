@@ -281,6 +281,7 @@ class CutPage(QWidget):
         e = QLineEdit()
         e.setPlaceholderText("00:00:30")
         e.setToolTip(tip)
+        e.setMinimumWidth(theme.px(78))  # đủ chỗ cho "00:00:30", không cắt chữ
         e.setMaximumWidth(theme.px(96))
         e.textChanged.connect(self._settings_changed)
         return e
