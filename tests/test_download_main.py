@@ -94,6 +94,7 @@ def test_resume_prompt_after_crash(win, monkeypatch):
     monkeypatch.setattr(QMessageBox, "question",
                         staticmethod(lambda *a, **k: asked.append(a[2]) or QMessageBox.StandardButton.Yes))
     monkeypatch.setattr(page, "start", lambda: started.append(1))
+    win._dl_resume_asked = False  # lần hỏi tự động lúc mở cửa sổ (hẹn giờ) có thể đã chạy trước test này
     win._maybe_resume_downloads()
     assert started == [1] and "1 video" in asked[0]
     assert not win.settings.value("download/was_running")
