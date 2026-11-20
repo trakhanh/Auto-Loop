@@ -164,6 +164,48 @@ def test_reuse_folder_after_stop(media, tmp_path):
     s = cutter.SplitSettings(mode="parts", parts=2)
     segs, _ = cutter.plan_segments(info.duration, s)
     first = cutter.split_video(ffmpeg_tools.Runner(), str(sample), info, s, tmp_path, "libx264", segs)
+    for f in first.files:  # trang Cắt video dọn file của lượt bị Dừng trước khi chạy lại
+        f.unlink()
     again = cutter.split_video(ffmpeg_tools.Runner(), str(sample), info, s, tmp_path, "libx264", segs,
                                reuse=(first.folder, sample.stem))
     assert again.folder == first.folder and [p.name for p in again.files] == [p.name for p in first.files]
+
+
+def test_odd_size_keep_exact(tmp_path):
+    from loopstation.core import ffmpeg_tools
+    src = tmp_path / "odd.mp4"
+    r = ffmpeg_tools.run([ffmpeg_tools.ffmpeg(), "-v", "error", "-y", "-f", "lavfi", "-i",
+                          "testsrc=size=321x181:rate=25:duration=4", "-c:v", "libx264", "-pix_fmt", "yuv444p", str(src)])
+    assert r.returncode == 0, r.stderr
+    res = run_split(src, tmp_path / "out", mode="parts", parts=2)
+    assert len(res.files) == 2 and not res.errors
+
+
+def test_reuse_never_overwrites_other_results(media, tmp_path):
+    """Lượt dừng dùng lại tên gốc, nhưng thư mục đã có kết quả của lượt khác cùng kiểu → ra tên mới, không ghi đè."""
+    import os
+    from loopstation.core import cutter, ffmpeg_tools, probe
+    sample, _ = media
+    info = probe.probe(str(sample))
+    s = cutter.SplitSettings(mode="parts", parts=2, per_video=False)
+    segs, _ = cutter.plan_segments(info.duration, s)
+    first = cutter.split_video(ffmpeg_tools.Runner(), str(sample), info, s, tmp_path, "libx264", segs)
+    stamps = {p: os.path.getmtime(p) for p in first.files}
+    again = cutter.split_video(ffmpeg_tools.Runner(), str(sample), info, s, tmp_path, "libx264", segs,
+                               reuse=(tmp_path, sample.stem))
+    assert not set(again.files) & set(first.files)
+    assert all(os.path.getmtime(p) == t for p, t in stamps.items())
+
+
+def test_frames_cancel_lists_only_new_files(media, tmp_path):
+    from loopstation.core import cutter, ffmpeg_tools, probe
+    sample, _ = media
+    info = probe.probe(str(sample))
+    s = cutter.FrameSettings(mode="count", count=3, fmt="png", per_video=False)
+    first = cutter.extract_frames(ffmpeg_tools.Runner(), str(sample), info, s, tmp_path)
+    runner = ffmpeg_tools.Runner()
+    with pytest.raises(ffmpeg_tools.CancelledError) as ei:
+        cutter.extract_frames(runner, str(sample), info, s, tmp_path, on_progress=lambda f, t: runner.cancel(),
+                              reuse=(tmp_path, sample.stem))
+    assert not set(ei.value.files) & set(first.files)
+    assert all(p.exists() for p in first.files)

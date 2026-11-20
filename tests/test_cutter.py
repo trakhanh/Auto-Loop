@@ -195,3 +195,37 @@ def test_names(tmp_path):
     assert c.unique_stem(tmp_path, "a", "jpg") == "a"
     assert c.unique_stem(tmp_path, "b", "mp4") == "b"
     assert c.digits(9, 2) == 2 and c.digits(120, 2) == 3 and c.digits(50, 4) == 4
+
+
+# ---------- sửa sau đọc soát ----------
+@pytest.mark.parametrize("a,b,d", [(10, 15, 600), (20, 30, 754), (60, 90, 3600), (10, 45, 600), (5, 6, 61)])
+def test_random_tight_bounds_stay_inside(a, b, d):
+    for seed in range(200):
+        out, _ = c.plan_segments(d, c.SplitSettings(mode="random", rmin=a, rmax=b), random.Random(seed))
+        assert abs(sum(x.dur for x in out) - d) < 1e-6 and out[0].start == 0
+        assert all(a - 1e-6 <= x.dur <= b + 1e-6 for x in out), (seed, [round(x.dur, 2) for x in out])
+
+
+def test_random_impossible_range_falls_back():
+    out, _ = c.plan_segments(25, c.SplitSettings(mode="random", rmin=20, rmax=22), random.Random(1))
+    assert abs(sum(x.dur for x in out) - 25) < 1e-6
+
+
+def test_split_args_start_zero_has_no_seek():
+    a = c.split_args("a.flv", c.Segment(0, 5), Path("o.mp4"), INFO, c.SplitSettings(), "libx264")
+    assert "-ss" not in a
+    f = c.split_args("a.flv", c.Segment(0, 5), Path("o.flv"), INFO, c.SplitSettings(exact=False), "libx264")
+    assert "-ss" not in f
+
+
+def test_split_args_odd_size_keep_makes_even():
+    odd = MediaInfo(path="a.mp4", duration=10, has_video=True, width=641, height=361, fps=Fraction(30))
+    a = c.split_args("a.mp4", c.Segment(1, 5), Path("o.mp4"), odd, c.SplitSettings(), "libx264")
+    assert vf(a) == "scale=trunc(iw/2)*2:trunc(ih/2)*2"
+
+
+def test_last_line_skips_generic_ffmpeg_tail():
+    err = Exception("ffmpeg lỗi (mã 1):\n[libx264 @ 0x1] width not divisible by 2 (641x361)\n"
+                    "Error while opening encoder - maybe incorrect parameters\nConversion failed!")
+    assert "Error while opening encoder" in c._last_line(err) or "641x361" in c._last_line(err)
+    assert c._last_line(err) != "Conversion failed!"

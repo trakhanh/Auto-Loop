@@ -60,6 +60,7 @@ class _Bridge(QObject):
     progress = Signal(str, float, str)  # (đường dẫn, 0..1, chữ)
     video_done = Signal(str, object, str, object)  # (đường dẫn, RunResult | None, lỗi / "stop", file đã tạo)
     all_done = Signal(str)  # lý do dừng sớm ("" = chạy hết)
+    note = Signal(str)  # một dòng nhật ký từ luồng nền
 
 
 def _load(settings: QSettings, prefix: str, obj):
@@ -122,6 +123,7 @@ class CutPage(QWidget):
         self.b.progress.connect(self._on_progress)
         self.b.video_done.connect(self._on_video_done)
         self.b.all_done.connect(self._on_all_done)
+        self.b.note.connect(self._log)
         self._run: dict = {}
         self._anim = QTimer(self)  # vẽ lại thanh tiến độ trong danh sách (vệt sáng chạy) khi đang chạy
         self._anim.setInterval(40)
@@ -819,39 +821,57 @@ class CutPage(QWidget):
         threading.Thread(target=self._work, args=args, daemon=True).start()
 
     def _work(self, runner, tab, todo, job, folder, encoder, infos, reuse) -> None:
-        """Luồng nền: lần lượt từng video. Không đụng giao diện — chỉ phát tín hiệu."""
-        for p in todo:
-            if runner.cancelled:
-                break
-            if 0 <= ffmpeg_tools.disk_free(folder) < MIN_FREE:
-                self.b.all_done.emit("disk")
-                return
-            self.b.progress.emit(p, -1.0, "")
-            old = reuse.get(p)
-            if old is not None:  # lượt trước bị Dừng: dọn file chính lượt đó tạo, chạy lại đúng chỗ cũ
-                for f in old[2]:
-                    Path(f).unlink(missing_ok=True)
-            spot = (old[0], old[1]) if old is not None else None
+        """Luồng nền: lần lượt từng video. Không đụng giao diện — chỉ phát tín hiệu. Luôn báo all_done (kể cả lỗi lạ)
+        để trang không kẹt ở trạng thái đang chạy."""
+        reason = ""
+        try:
+            for p in todo:
+                if runner.cancelled:
+                    break
+                if 0 <= ffmpeg_tools.disk_free(folder) < MIN_FREE:
+                    reason = "disk"
+                    break
+                if not self._work_one(runner, tab, p, job, folder, encoder, infos[p], reuse.get(p)):
+                    break
+        finally:
+            self.b.all_done.emit(reason)
 
-            def prog(frac, text, p=p):
-                self.b.progress.emit(p, frac, text)
-            try:
-                if tab == "split":
-                    segs, _note = cutter.plan_segments(infos[p].duration, job)
-                    res = cutter.split_video(runner, p, infos[p], job, folder, encoder, segs, on_progress=prog,
-                                             reuse=spot)
-                else:
-                    res = cutter.extract_frames(runner, p, infos[p], job, folder, on_progress=prog, reuse=spot)
-                self.b.video_done.emit(p, res, "", None)
-            except ffmpeg_tools.CancelledError as e:
-                self.b.video_done.emit(p, None, "stop", (getattr(e, "folder", folder), getattr(e, "stem", ""),
-                                                         list(getattr(e, "files", [])), getattr(e, "total", None)))
-                break
-            except ValueError as e:
-                self.b.video_done.emit(p, None, str(e), None)
-            except Exception as e:  # noqa: BLE001 — lỗi lạ của một video không làm hỏng cả lượt
-                self.b.video_done.emit(p, None, f"Lỗi: {e}", None)
-        self.b.all_done.emit("")
+    def _work_one(self, runner, tab, p, job, folder, encoder, info, old) -> bool:
+        """Một video. False = bị Dừng (không làm video sau)."""
+        self.b.progress.emit(p, -1.0, "")
+
+        def prog(frac, text):
+            self.b.progress.emit(p, frac, text)
+        try:
+            spot = None
+            if old is not None:  # lượt trước bị Dừng: dọn file chính lượt đó tạo, chạy lại đúng chỗ cũ
+                kept = 0
+                for f in old[2]:
+                    try:
+                        Path(f).unlink(missing_ok=True)
+                    except OSError:  # file đang mở (trình phát…) → để nguyên, lượt này ra tên mới
+                        kept += 1
+                if kept:
+                    self.b.note.emit(f"{Path(p).name}: {kept} file của lượt bị dừng đang mở, không xoá được — "
+                                     "lượt này ra tên mới")
+                spot = (old[0], old[1])
+            if tab == "split":
+                segs, note = cutter.plan_segments(info.duration, job)
+                if note:
+                    self.b.note.emit(f"{Path(p).name}: {note}")
+                res = cutter.split_video(runner, p, info, job, folder, encoder, segs, on_progress=prog, reuse=spot)
+            else:
+                res = cutter.extract_frames(runner, p, info, job, folder, on_progress=prog, reuse=spot)
+            self.b.video_done.emit(p, res, "", None)
+        except ffmpeg_tools.CancelledError as e:
+            self.b.video_done.emit(p, None, "stop", (getattr(e, "folder", folder), getattr(e, "stem", ""),
+                                                     list(getattr(e, "files", [])), getattr(e, "total", None)))
+            return False
+        except ValueError as e:
+            self.b.video_done.emit(p, None, str(e), None)
+        except Exception as e:  # noqa: BLE001 — lỗi lạ của một video không làm hỏng cả lượt
+            self.b.video_done.emit(p, None, f"Lỗi: {e}", None)
+        return True
 
     def stop(self) -> None:
         if self._busy and self._runner is not None:

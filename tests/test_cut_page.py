@@ -282,3 +282,29 @@ def test_unwritable_folder_warns(page, env, tmp_path, settings):
     finally:
         QFileDialog.getExistingDirectory = orig
     assert not page.is_busy() and "warn" in notes
+
+
+def test_locked_file_on_rerun_does_not_hang(page, env, tmp_path, monkeypatch):
+    """Đoạn của lượt bị Dừng đang mở trong trình phát (Windows khoá file): chạy lại vẫn xong, không kẹt "Dừng"."""
+    import pathlib
+    add_ready(page, env / "mua.mp4")
+    page.mode_radio["parts"].setChecked(True)
+    page.parts_spin.setValue(3)
+    page.aspect_box.setCurrentIndex(page.aspect_box.findData("9:16"))
+    page.start()
+    assert wait(lambda: len(outs(tmp_path, "out", "mp4")) >= 1 or not page.is_busy(), 60)
+    page.stop()
+    assert wait(lambda: not page.is_busy(), 30)
+    stopped = page._stopped[("split", str(env / "mua.mp4"))]
+    held = Path(stopped[0]) / f"{stopped[1]}_99.mp4"  # một đoạn của lượt dừng, đang mở trong trình phát
+    held.write_bytes(b"x")
+    stopped[2].append(held)
+    real = pathlib.Path.unlink
+
+    def locked(self, missing_ok=False):
+        if self.suffix == ".mp4" and "out" in self.parts:
+            raise PermissionError(32, "file đang mở")
+        return real(self, missing_ok=missing_ok)
+    monkeypatch.setattr(pathlib.Path, "unlink", locked)
+    page.start()
+    assert wait(lambda: not page.is_busy(), 60)

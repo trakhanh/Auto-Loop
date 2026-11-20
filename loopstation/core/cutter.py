@@ -4,6 +4,7 @@ Xem docs/superpowers/specs/2026-11-20-chia-video-xuat-khung-design.md. Phần n�
 tính danh sách đoạn (5 cách), kích thước + filter đổi tỉ lệ, tham số FFmpeg, đặt tên không ghi đè, chạy thật."""
 from __future__ import annotations
 
+import math
 import random
 import re
 from dataclasses import dataclass
@@ -107,6 +108,48 @@ def _even(duration: float, n: int) -> list[Segment]:
 
 
 def _random(duration: float, rmin: float, rmax: float, rng: random.Random) -> list[Segment]:
+    """Mỗi đoạn dài ngẫu nhiên trong [rmin, rmax], phủ kín video. Chọn trước số đoạn k sao cho chia được (k × rmin ≤
+    thời lượng ≤ k × rmax), rồi rải phần dư ngẫu nhiên (mỗi đoạn thêm tối đa rmax − rmin) — tham lam từng đoạn hay
+    để lại đoạn cuối quá ngắn khi khoảng hẹp (vd 20–30 giây). Không có k nào hợp lệ → cách tham lam cũ."""
+    kmin = max(1, math.ceil(duration / rmax - EPS))
+    kmax = math.floor(duration / rmin + EPS)
+    if kmin <= kmax:
+        k = rng.randint(kmin, kmax)
+        rest, cap = duration - k * rmin, rmax - rmin
+        extra = _spread(rest, k, cap, rng)
+        out, t = [], 0.0
+        for e in extra:
+            out.append(Segment(t, rmin + e))
+            t += rmin + e
+        out[-1].dur = duration - out[-1].start  # khử sai số cộng dồn
+        return out
+    return _greedy(duration, rmin, rmax, rng)
+
+
+def _spread(total: float, k: int, cap: float, rng: random.Random) -> list[float]:
+    """k số ngẫu nhiên ≥ 0, mỗi số ≤ cap, tổng = total (giả định total ≤ k × cap)."""
+    if total <= EPS:
+        return [0.0] * k
+    w = [rng.random() + 1e-9 for _ in range(k)]
+    out = [0.0] * k
+    free = list(range(k))
+    left = total
+    while left > EPS and free:
+        sw = sum(w[i] for i in free)
+        over = []
+        for i in free:
+            out[i] += left * w[i] / sw
+        left = 0.0
+        for i in free:
+            if out[i] > cap:
+                left += out[i] - cap
+                out[i] = cap
+                over.append(i)
+        free = [i for i in free if i not in over]
+    return out
+
+
+def _greedy(duration: float, rmin: float, rmax: float, rng: random.Random) -> list[Segment]:
     out: list[Segment] = []
     t = 0.0
     while duration - t > EPS:
@@ -225,10 +268,14 @@ def aspect_filter(w: int, h: int, aspect: str, fit: str) -> str:
 
 def split_args(src: str, seg: Segment, out: Path, info: MediaInfo, s: SplitSettings, encoder: str) -> list[str]:
     """Tham số FFmpeg cắt một đoạn (không gồm tên chương trình). Nhanh = chép nguyên (-c copy), bỏ qua đổi tỉ lệ."""
-    head = ["-ss", f"{seg.start:.3f}", "-i", src, "-t", f"{seg.dur:.3f}", "-map", "0:v:0", "-map", "0:a?"]
+    # đoạn đầu: không tua (-ss 0 làm hỏng đoạn đầu của file .flv — mất hình / thiếu giây)
+    seek = ["-ss", f"{seg.start:.3f}"] if seg.start > EPS else []
+    head = [*seek, "-i", src, "-t", f"{seg.dur:.3f}", "-map", "0:v:0", "-map", "0:a?"]
     if not s.exact:
         return [*head, "-c", "copy", "-avoid_negative_ts", "make_zero", str(out)]
     flt = aspect_filter(info.width, info.height, s.aspect, s.fit)
+    if not flt and (info.width % 2 or info.height % 2):  # H.264 4:2:0 không nhận cạnh lẻ (quay màn hình, clip đã cắt)
+        flt = "scale=trunc(iw/2)*2:trunc(ih/2)*2"
     gop = max(1, round(float(info.fps or 30) * 2))
     return [*head, *(["-vf", flt] if flt else []), *encoders.encoder_args(encoder, "high", gop),
             "-pix_fmt", encoders.pix_fmt(encoder), "-c:a", "aac", "-b:a", "192k", "-movflags", "+faststart",
@@ -319,11 +366,6 @@ def unique_stem(folder: Path, stem: str, ext: str) -> str:
         k += 1
 
 
-def glob_escape(text: str) -> str:
-    """Ký tự đặc biệt của glob ([ ] * ?) trong tên file → khớp đúng chữ."""
-    return "".join(f"[{ch}]" if ch in "[]*?" else ch for ch in text)
-
-
 def digits(n: int, minimum: int) -> int:
     return max(minimum, len(str(max(0, int(n)))))
 
@@ -354,24 +396,39 @@ def _out_seconds(block: dict) -> float | None:
         return None
 
 
+_GENERIC = ("Conversion failed", "Terminating thread", "Task finished", "Nothing was written", "ffmpeg lỗi (mã")
+
+
 def _last_line(err: Exception) -> str:
-    lines = [x for x in str(err).strip().splitlines() if x.strip()]
-    return lines[-1].strip() if lines else "lỗi không rõ"
+    """Dòng lỗi có ích nhất của FFmpeg (bỏ các dòng chung chung như "Conversion failed!")."""
+    lines = [x.strip() for x in str(err).strip().splitlines() if x.strip()]
+    useful = [x for x in lines if not any(g in x for g in _GENERIC)]
+    for x in reversed(useful):
+        if any(k in x for k in ("Error", "Invalid", "No such", "Could not", "not divisible", "Permission")):
+            return x
+    return useful[-1] if useful else (lines[-1] if lines else "lỗi không rõ")
+
+
+def _place(folder: Path, src: str, per_video: bool, ext: str, reuse: tuple[Path, str] | None) -> tuple[Path, str]:
+    """(thư mục, tên gốc) cho lượt chạy. `reuse` (chỗ của lượt bị Dừng, file của lượt đó đã được dọn) chỉ dùng lại khi
+    ở đó không còn file cùng tên gốc + cùng kiểu — tức không có kết quả của lượt khác → không bao giờ ghi đè."""
+    if reuse:
+        d, stem = Path(reuse[0]), reuse[1]
+        if stem and not own_files(d, stem, ext):
+            return d, stem
+    d = out_dir(folder, src, per_video)
+    return d, unique_stem(d, Path(src).stem, ext)
 
 
 def split_video(runner, src: str, info: MediaInfo, s: SplitSettings, folder: Path, encoder: str,
                 segments: list[Segment], on_progress=None, on_file=None,
                 reuse: tuple[Path, str] | None = None) -> RunResult:
     """Cắt `segments` của một video ra <thư mục>/<tên gốc>_01.mp4…; đoạn lỗi ghi vào errors rồi chạy tiếp.
-    `reuse` = (thư mục, tên gốc) của lượt bị Dừng trước đó: ghi lại đúng chỗ đó (ghi đè file của chính app).
+    `reuse` = (thư mục, tên gốc) của lượt bị Dừng trước đó (đã dọn): ghi lại đúng chỗ đó nếu không đụng file khác.
     Bị Dừng → xoá file đang ghi dở, ném CancelledError có thuộc tính `files` (các đoạn đã xong)."""
     from .ffmpeg_tools import CancelledError, FFmpegError
     ext = ".mp4" if s.exact else (Path(src).suffix.lower() or ".mp4")
-    if reuse:
-        d, stem = Path(reuse[0]), reuse[1]
-    else:
-        d = out_dir(folder, src, s.per_video)
-        stem = unique_stem(d, Path(src).stem, ext[1:])
+    d, stem = _place(folder, src, s.per_video, ext[1:], reuse)
     d.mkdir(parents=True, exist_ok=True)
     n = len(segments)
     nd = digits(n, 2)
@@ -413,11 +470,7 @@ def extract_frames(runner, src: str, info: MediaInfo, s: FrameSettings, folder: 
     """Xuất ảnh ra <thư mục>/<tên gốc>_0001.jpg…; bị Dừng → CancelledError có `files` (ảnh đã ra)."""
     from .ffmpeg_tools import CancelledError, FFmpegError
     ext = "png" if s.fmt == "png" else "jpg"
-    if reuse:
-        d, stem = Path(reuse[0]), reuse[1]
-    else:
-        d = out_dir(folder, src, s.per_video)
-        stem = unique_stem(d, Path(src).stem, ext)
+    d, stem = _place(folder, src, s.per_video, ext, reuse)
     d.mkdir(parents=True, exist_ok=True)
     nd = digits(frame_estimate(info, s) or 9999, 4)
     # mẫu tên của FFmpeg: mọi "%" có sẵn trong đường dẫn (cả tên thư mục) phải viết thành "%%"
