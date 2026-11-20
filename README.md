@@ -6,7 +6,7 @@
 
 **Ghép và loop clip + nhạc thành video YouTube dài hàng giờ — xem trước ngay trong app, xuất nhanh bằng card đồ hoạ.**
 
-<sub>By Khánh Trà · Ứng dụng Windows · Giao diện tiếng Việt · Bản mới nhất: <b>1.9.6</b></sub>
+<sub>By Khánh Trà · Ứng dụng Windows · Giao diện tiếng Việt · Bản mới nhất: <b>2.0.0</b></sub>
 
 <br>
 
@@ -32,6 +32,10 @@
 </div>
 
 <br>
+
+## Có gì mới ở 2.0
+
+> **2.0.0** · <b>Tải video</b> (mục riêng ngay dưới Bắt đầu): dán link YouTube, TikTok, <b>Douyin</b>, Bilibili, X, Facebook, Instagram… — app tự đọc, hiện ảnh bìa, tên, thời lượng; link kênh / danh sách phát hiện thành nhóm. Chọn MP4 / MKV gốc / MP3 / M4A, chất lượng Cao nhất · 1080p · 720p · 480p, <b>Luôn ra H.264</b> (trang chỉ có H.265 / AV1 thì app tự chuyển bằng card đồ hoạ — mở được Premiere, CapCut), lưu kèm ảnh bìa / mô tả, phụ đề, chỉ tải đoạn, tải cùng lúc 2–3 video. Công cụ tải (yt-dlp) cài một lần và tự cập nhật; Douyin tải qua trình duyệt riêng trong app. <b>Cắt video</b>: chia video thành nhiều đoạn (số phần, thời lượng cố định / ngẫu nhiên, danh sách mốc, khoảng A–B) và <b>xuất khung hình</b> (theo số ảnh, khoảng thời gian, số khung, chuyển cảnh), một file hay hàng loạt. Chỉ tải nội dung bạn có quyền dùng.
 
 ## Có gì mới ở 1.9
 

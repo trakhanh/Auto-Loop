@@ -65,8 +65,25 @@ def run(win, report_path: str) -> None:
         from .core import denoise
         cleaned = denoise.denoised_copy(ft.Runner(), str(clip), "medium")
         out["denoise"] = Path(cleaned).stat().st_size if Path(cleaned).is_file() else 0
+        # trình duyệt trong app (tải Douyin): QtWebEngine phải có đủ trong bản đóng gói
+        from .ui.web_grab import WebGrabber
+        page = tmp / "video" / "7000000000000000002.html"
+        page.parent.mkdir(parents=True, exist_ok=True)
+        page.write_text('<html><head><meta charset="utf-8"><title>Selftest - 抖音</title></head><body>'
+                        '<video src="https://example.com/selftest.mp4"></video></body></html>', encoding="utf-8")
+        grabbed: dict = {}
+        g = WebGrabber(storage=tmp / "web", verify_after=40, give_up=45, show_verify=False, poll_ms=400)
+        g.grabbed.connect(lambda _l, d: grabbed.update(d))
+        g.failed.connect(lambda _l, m: grabbed.update(error=m))
+        g.grab(QUrl.fromLocalFile(str(page)).toString())
+        end = time.monotonic() + 50
+        while not grabbed and time.monotonic() < end:
+            pump(0.2)
+        g.shutdown()
+        out["webengine"] = grabbed.get("title", "") == "Selftest" and bool(grabbed.get("srcs"))
+        out["webengine_detail"] = grabbed.get("error", "")
         out["ok"] = bool(out["make_clip"] and out["player_frames"] > 0 and out["render_size"] > 0
-                         and out["denoise"] > 0)
+                         and out["denoise"] > 0 and out["webengine"])
         shutil.rmtree(tmp, ignore_errors=True)
     except Exception:  # noqa: BLE001
         out["error"] = traceback.format_exc()
