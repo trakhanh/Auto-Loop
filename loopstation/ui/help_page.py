@@ -672,12 +672,16 @@ topic("taivideo", "Công cụ", "download", "Tải video", hero(
     ("Dán link", "một hoặc nhiều link, mỗi dòng một link. Link danh sách phát / kênh cũng được."),
     ("Bấm Đọc link", "xem trước tên, thời lượng. Kênh hiện thành một nhóm, tick sẵn 50 video đầu "
                      "(bấm đúp <b>Hiện thêm…</b> để đọc thêm)."),
-    ("Bấm Tải đã chọn", "tải lần lượt; video lỗi báo đỏ kèm lý do (rê chuột vào ⓘ), video khác vẫn tải tiếp. "
-                        "Video đã có trong thư mục được bỏ qua.")]) + legend([
-    ("Chất lượng", "<b>1080p</b> mở được mọi phần mềm dựng. <b>Cao nhất (2K/4K)</b> của YouTube là VP9 / AV1 — "
-                   "Premiere cũ, CapCut có thể không mở được."),
-    ("Tuỳ chỉnh", "chỉ lấy tiếng (MP3 / M4A), phụ đề, mẫu tên file, thư mục con theo kênh, tải cùng lúc 2–3 video, "
-                  "giới hạn tốc độ, số video mỗi lần đọc kênh. Chuột phải một video → <b>Chỉ tải đoạn…</b>."),
+    ("Bấm Tải N video", "tải lần lượt, thanh tiến độ chạy ở từng video và thanh tổng phía dưới; video lỗi báo đỏ "
+                        "kèm lý do (rê chuột vào ⓘ), video khác vẫn tải tiếp. Video đã có trong thư mục được bỏ qua.")]) + legend([
+    ("Định dạng & chất lượng", "cột <b>Cài đặt tải</b> bên phải: MP4 · MKV gốc · MP3 · M4A; Cao nhất / 1080p / "
+                               "720p / 480p (MP3: 320 / 192 / 128 kbps). Bật <b>Luôn ra H.264</b> (mặc định): trang "
+                               "chỉ có H.265 / AV1 (TikTok, Bilibili, YouTube 2K/4K) thì app tự chuyển sang H.264 "
+                               "bằng card đồ hoạ — mở được Premiere, CapCut."),
+    ("Lưu kèm", "ảnh bìa (.jpg), tiêu đề + mô tả (.txt) cạnh video; tự mở thư mục khi xong."),
+    ("Nâng cao", "phụ đề, mẫu tên file (có <b>Số thứ tự – Tiêu đề</b> cho danh sách phát), thư mục con theo kênh, "
+                 "tải cùng lúc 2–3 video, giới hạn tốc độ, số video mỗi lần đọc kênh, bỏ tick video quá dài. "
+                 "Chuột phải một video → <b>Chỉ tải đoạn…</b>."),
     ("Đăng nhập", "Facebook, Instagram (đôi khi X) bắt đăng nhập: chọn <b>Đăng nhập: Firefox</b> (chắc chắn nhất). "
                   "Chrome / Edge hay bị Windows chặn → cài tiện ích trình duyệt <i>Get cookies.txt LOCALLY</i>, "
                   "mở trang đã đăng nhập, xuất file <code>cookies.txt</code>, rồi chọn <b>File đăng nhập…</b>."),
