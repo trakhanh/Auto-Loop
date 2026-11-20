@@ -150,3 +150,9 @@ def test_help_topic_present():
     from loopstation.ui import help_page
     t = {x[0]: x for x in help_page.TOPICS}
     assert "taivideo" in t and "bản quyền" in t["taivideo"][4] and "cookies.txt" in t["taivideo"][4]
+
+
+def test_help_topic_group_listed():
+    """Soát cuối (help_check): nhóm của chủ đề Tải video phải có trong danh sách nhóm của trang Hướng dẫn."""
+    from loopstation.ui import help_page
+    assert {t[1] for t in help_page.TOPICS} <= set(help_page.GROUPS)

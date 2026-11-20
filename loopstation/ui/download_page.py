@@ -49,6 +49,9 @@ def default_folder() -> str:
 
 def combo(pairs, current) -> QComboBox:
     c = QComboBox()
+    # chữ dài ("1080p — mở được mọi phần mềm") không được ép cả trang rộng ra: ô co lại, danh sách thả xuống vẫn đủ chữ
+    c.setSizeAdjustPolicy(QComboBox.SizeAdjustPolicy.AdjustToMinimumContentsLengthWithIcon)
+    c.setMinimumContentsLength(8)
     for key, label in pairs:
         c.addItem(label, key)
     i = c.findData(current)
@@ -187,7 +190,6 @@ class DownloadPage(QWidget):
         self.login_box.currentIndexChanged.connect(self._login_changed)
         bar.addWidget(QLabel("Đăng nhập:"))
         bar.addWidget(self.login_box)
-        bar.addWidget(w.hairline())
         self.start_btn = QPushButton("Tải đã chọn")
         theme.tag(self.start_btn, variant="primary")
         self.start_btn.setIcon(icons.icon("download", 15, "white"))
@@ -204,9 +206,6 @@ class DownloadPage(QWidget):
         m.addAction("Thử lại các video lỗi", self.retry_errors)
         m.addAction("Xoá danh sách (không xoá file)", self.clear_list)
         self.more_btn.setMenu(m)
-        bar.addWidget(self.start_btn)
-        bar.addWidget(self.open_btn)
-        bar.addWidget(self.more_btn)
         lay.addLayout(bar)
 
         orow = QHBoxLayout()
@@ -215,10 +214,13 @@ class DownloadPage(QWidget):
         self.opts_btn.setCheckable(True)
         self.opts_btn.setIcon(icons.icon("sliders", 14))
         self.opts_btn.toggled.connect(self._toggle_opts)
-        self.opts_summary = w.muted("")
-        self.opts_summary.setWordWrap(False)
+        self.opts_summary = w.ElidedLabel("")
+        self.opts_summary.setObjectName("muted")
         orow.addWidget(self.opts_btn)
         orow.addWidget(self.opts_summary, 1)
+        orow.addWidget(self.start_btn)
+        orow.addWidget(self.open_btn)
+        orow.addWidget(self.more_btn)
         lay.addLayout(orow)
         self.opts_panel = self._build_opts()
         lay.addWidget(self.opts_panel)
@@ -251,7 +253,8 @@ class DownloadPage(QWidget):
         self.rate_box.setToolTip("Giới hạn tốc độ mỗi video — để mạng văn phòng không bị nghẽn")
         self.page_box = combo([(n, f"{n} video") for n in downloader.PAGE_SIZES], self.opts.page)
         self.page_box.setToolTip("Link kênh / danh sách phát: mỗi lần đọc (và mỗi lần Hiện thêm) lấy bao nhiêu video")
-        self.embed_chk = QCheckBox("Ghi tiêu đề, kênh, ảnh bìa vào file")
+        self.embed_chk = QCheckBox("Ghi thông tin vào file")
+        self.embed_chk.setToolTip("Ghi tiêu đề, kênh, mô tả và ảnh bìa vào trong file video / nhạc")
         self.embed_chk.setChecked(self.opts.embed)
         self.extra_edit = QLineEdit(self.opts.extra)
         self.extra_edit.setPlaceholderText('Tham số thêm cho yt-dlp (cho người rành) — vd --match-filter "duration < 600"')
@@ -262,13 +265,13 @@ class DownloadPage(QWidget):
         cells = (("Định dạng", self.fmt_box), ("Phụ đề", self.subs_box), ("Tên file", self.name_box),
                  ("Thư mục con", self.subdir_box), ("Tải cùng lúc", self.conc_box), ("Giới hạn tốc độ", self.rate_box),
                  ("Mỗi lần đọc kênh", self.page_box))
-        for i, (label, wid) in enumerate(cells):
-            r, c = divmod(i, 4)
+        for i, (label, wid) in enumerate(cells):  # 3 cột: vừa cả cửa sổ hẹp, không tràn ngang
+            r, c = divmod(i, 3)
             g.addWidget(QLabel(label), r * 2, c)
             g.addWidget(wid, r * 2 + 1, c)
-        g.addWidget(self.embed_chk, 3, 3)
-        g.addWidget(self.extra_edit, 4, 0, 1, 3)
-        g.addWidget(self.reset_opts_btn, 4, 3)
+        g.addWidget(self.embed_chk, 5, 1, 1, 2)
+        g.addWidget(self.extra_edit, 6, 0, 1, 2)
+        g.addWidget(self.reset_opts_btn, 6, 2)
         for name, cb in (("fmt", self.fmt_box), ("subs", self.subs_box), ("name", self.name_box),
                           ("subdir", self.subdir_box), ("concurrent", self.conc_box), ("rate", self.rate_box),
                           ("page", self.page_box)):

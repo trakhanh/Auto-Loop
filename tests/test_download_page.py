@@ -268,3 +268,10 @@ def test_group_unknown_count_keeps_show_more(page, monkeypatch):
 def test_extra_placeholder_not_risky(page):
     """M3: chữ gợi ý không được là cờ làm hỏng nhận file dở (--no-part)."""
     assert "--no-part" not in page.extra_edit.placeholderText()
+
+
+def test_page_fits_without_horizontal_scroll(page):
+    """Soát ảnh: thanh dưới / khung Tuỳ chỉnh không được đòi rộng hơn vùng trang (cửa sổ 1280, thanh bên 236)."""
+    page.opts_btn.setChecked(True)
+    pump()
+    assert page.minimumSizeHint().width() <= 960

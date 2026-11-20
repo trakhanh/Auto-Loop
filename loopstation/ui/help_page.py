@@ -786,7 +786,7 @@ topic("phim", "Khác", "zap", "Phím tắt", hero("Phím tắt", "Thao tác nhan
     ("Tab · ↑ ↓", "Sang ô giờ / phút / giây kế tiếp · tăng / giảm 1"),
     ("Lăn chuột", "Chỉ cuộn trang, không bao giờ đổi số trong ô (tránh lỡ tay). Đổi số: gõ số, hoặc bấm mũi tên ▲▼ bên ô / phím ↑ ↓")], ("Phím", "Tác dụng")))
 
-GROUPS = ["Bắt đầu", "Làm video", "Âm thanh", "Xuất file", "Khác"]
+GROUPS = ["Bắt đầu", "Làm video", "Âm thanh", "Xuất file", "Công cụ", "Khác"]
 HUB = "__hub"  # mục "Tổng quan" đầu mục lục
 
 
