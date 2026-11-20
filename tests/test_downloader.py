@@ -375,3 +375,20 @@ def test_convert_to_h264_real_ffmpeg(tmp_path):
                               "stream=codec_name", "-of", "csv=p=0", out]).stdout.strip()
     assert out == str(src) and codec == "h264"
     assert not list(tmp_path.glob("*.h264tmp*"))
+
+
+def test_parse_item_meta():
+    """2d: thông tin cho ảnh xem trước — kênh, ngày đăng, lượt xem."""
+    it = dl.parse_info({"id": "a", "title": "T", "uploader": "Kênh A", "upload_date": "20261120", "view_count": 12345,
+                        "webpage_url": "https://y/a"}, "https://y/a")
+    assert (it.uploader, it.upload_date, it.views) == ("Kênh A", "20261120", 12345)
+    flat = dl.parse_info({"_type": "playlist", "entries": [{"id": "b", "url": "https://y/b", "channel": "K"}]}, "g")
+    assert flat.items[0].uploader == "K" and flat.items[0].views == 0
+
+
+def test_fresh_cookies_error_douyin():
+    """Douyin (thử thật 2026-11-20): yt-dlp báo cần cookie mới của trình duyệt (không cần đăng nhập)."""
+    err = ("WARNING: [Douyin] 731: Failed to download web detail JSON: HTTP Error 403: Forbidden\n"
+           "ERROR: [Douyin] 731: Fresh cookies (not necessarily logged in) are needed")
+    m = dl.friendly_error(err, "")
+    assert "Firefox" in m and "cookie" in m.lower() and "Không lấy được đăng nhập" not in m

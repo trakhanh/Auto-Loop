@@ -610,6 +610,24 @@ QTextBrowser {{ background: {t['panel']}; border: none; border-radius: {R['lg']}
 QPlainTextEdit {{ background: {t['field']}; border: 1px solid {t['line']}; border-radius: {R['lg']}px;
     padding: 8px; font-family: Consolas, 'Cascadia Mono', monospace; font-size: {f['small']}; color: {t['text_2']}; }}
 QPlainTextEdit#linkBox {{ font-family: 'Segoe UI'; font-size: {f['body']}; color: {t['text']}; padding: 10px; }}
+QWidget#segTrack {{ background: {t['field']}; border: 1px solid {t['line']}; border-radius: {R['lg']}px; }}
+QPushButton[seg="true"] {{ background: transparent; border: none; border-radius: {R['md']}px; padding: 5px 10px;
+    color: {t['text_2']}; font-weight: 600; }}
+QPushButton[seg="true"]:hover {{ color: {t['text']}; background: {rgba(t['accent'], 0.10)}; }}
+QPushButton[seg="true"]:checked {{ background: {rgba(t['accent'], 0.28)}; color: {t['text']}; }}
+QPushButton[seg="true"]:disabled {{ color: {t['text_disabled']}; }}
+QLabel#fieldLabel {{ color: {t['text_muted']}; font-size: {f['small']}; font-weight: 600; background: transparent; }}
+QLabel#pathBox {{ background: {t['field']}; border: 1px solid {t['line']}; border-radius: {R['md']}px;
+    padding: 6px 8px; color: {t['text_2']}; }}
+QPushButton#sectionToggle {{ background: transparent; border: none; text-align: left; padding: 6px 0;
+    color: {t['text']}; font-weight: 600; }}
+QPushButton#sectionToggle:hover {{ color: {t['accent_text']}; }}
+QFrame#sideSep {{ background: {t['line']}; border: none; max-height: 1px; }}
+QProgressBar#thinBar {{ background: {t['line']}; border: none; border-radius: 3px; min-height: 0; max-height: 6px; }}
+QProgressBar#thinBar::chunk {{ background: {t['accent']}; border-radius: 3px; }}
+QPushButton[variant="stop"] {{ background: {rgba(t['danger'], 0.20)}; color: {t['danger_text']}; border: none;
+    border-radius: {R['lg']}px; font-weight: 600; padding: 6px 14px; }}
+QPushButton[variant="stop"]:hover {{ background: {rgba(t['danger'], 0.30)}; }}
 
 QProgressBar {{ background: {t['field']}; border: 1px solid {t['line']}; border-radius: {R['lg']}px;
     min-height: 20px; text-align: center; color: {t['text']}; font-weight: 600; }}

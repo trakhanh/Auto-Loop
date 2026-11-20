@@ -273,6 +273,7 @@ def test_extra_placeholder_not_risky(page):
 def test_page_fits_without_horizontal_scroll(page):
     """Soát ảnh: thanh dưới / khung Tuỳ chỉnh không được đòi rộng hơn vùng trang (cửa sổ 1280, thanh bên 236)."""
     page.opts_btn.setChecked(True)
+    page.adapt(960)  # vùng trang ~960 px: không đủ chỗ 2 cột thì cột Cài đặt xuống dưới — không tràn ngang
     pump()
     assert page.minimumSizeHint().width() <= 960
 
@@ -397,3 +398,56 @@ def test_done_row_flashes(page):
     page.start()
     assert wait(lambda: not page.is_busy())
     assert page.queue.entries[0].vid in page.flashed
+
+
+# ---------- 2d: xem trước + cột Cài đặt gọn ----------
+def test_paste_auto_reads(page):
+    from PySide6.QtCore import QMimeData
+    md = QMimeData()
+    md.setText("https://y/p1\nhttps://y/p2")
+    page.links_edit.insertFromMimeData(md)
+    assert wait(lambda: len(page.queue.entries) == 2 and not page._reading)
+
+
+def test_preview_tooltip(page):
+    from loopstation.ui.download_page import preview_html
+    read(page, "https://y/q7")
+    e = page.queue.entries[0]
+    assert e.uploader == "Kênh A" and e.views == 12345
+    html = preview_html(e, "C:/x/anh.jpg")
+    assert "<img" in html and "Kênh A" in html and "12.345 lượt xem" in html and "20/11/2026" in html
+    assert "<img" not in preview_html(e, "")
+    assert "Demo q7" in page._row(e).toolTip(0)
+
+
+def test_double_click_opens_browser(page, monkeypatch):
+    import loopstation.ui.download_page as dp
+    opened = []
+    monkeypatch.setattr(dp.QDesktopServices, "openUrl", staticmethod(lambda u: opened.append(u.toString()) or True))
+    read(page, "https://y/d8")
+    e = page.queue.entries[0]
+    page._on_double(page._row(e), 0)
+    assert opened == ["https://y/d8"]
+
+
+def test_side_controls_not_clipped(page):
+    page.opts_btn.setChecked(True)
+    page.adapt(1300)
+    pump(0.2)
+    for seg in (page.fmt_box, page.quality_box):
+        for i in range(len(seg._data)):
+            b = seg.button(i)
+            assert b.width() >= b.minimumSizeHint().width() - 1, b.text()
+    assert page.side_card.minimumSizeHint().width() <= page.side_scroll.viewport().width()
+    assert page.run_bar.maximumHeight() <= 8
+
+
+def test_advanced_combos_show_full_text(page):
+    """Soát ảnh 2d: ô chọn trong Nâng cao không cắt chữ ("Nền tảng – Tiê…", "Không giới hạ…")."""
+    page.opts_btn.setChecked(True)
+    page.adapt(1300)
+    pump(0.2)
+    for cb in (page.subs_box, page.name_box, page.subdir_box, page.conc_box, page.rate_box, page.page_box,
+               page.max_box, page.login_box):
+        longest = max(cb.fontMetrics().horizontalAdvance(cb.itemText(i)) for i in range(cb.count()))
+        assert longest <= cb.width() - 24, (cb.currentText(), longest, cb.width())

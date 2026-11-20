@@ -43,7 +43,8 @@ if "-J" in args:
         print(json.dumps(data))
     else:
         print(json.dumps({"id": vid, "title": "Demo " + vid, "extractor_key": "Youtube", "duration": 42.0,
-                          "thumbnail": "", "webpage_url": url}))
+                          "thumbnail": "", "webpage_url": url, "uploader": "Kênh A", "upload_date": "20261120",
+                          "view_count": 12345}))
     sys.exit(0)
 
 folder = Path(opt("-P", "."))

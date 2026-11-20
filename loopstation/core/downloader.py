@@ -26,6 +26,9 @@ class Item:
     platform: str
     duration: float
     thumbnail: str
+    uploader: str = ""
+    upload_date: str = ""  # "20261120"
+    views: int = 0
 
 
 @dataclass
@@ -242,9 +245,15 @@ def _item(d: dict, fallback_url: str, key: str = "") -> Item:
     url = str(d.get("webpage_url") or d.get("url") or fallback_url)
     if not url.lower().startswith("http"):
         url = fallback_url
+    try:
+        views = int(d.get("view_count") or 0)
+    except (TypeError, ValueError):
+        views = 0
     return Item(url=url, vid=str(d.get("id") or ""), title=str(d.get("title") or url),
                 platform=platform_name(str(d.get("extractor_key") or d.get("ie_key") or key)),
-                duration=float(d.get("duration") or 0), thumbnail=_thumb(d))
+                duration=float(d.get("duration") or 0), thumbnail=_thumb(d),
+                uploader=str(d.get("uploader") or d.get("channel") or ""), upload_date=str(d.get("upload_date") or ""),
+                views=views)
 
 
 def parse_info(data: dict, source_url: str) -> Item | Group:
@@ -410,8 +419,10 @@ def friendly_error(stderr: str, login: str) -> str:
     s = (stderr or "").lower()
     if "no space left" in s or "errno 28" in s or "not enough space" in s:
         return "Ổ đĩa hết chỗ"
+    if "fresh cookies" in s:  # Douyin…: cần cookie trình duyệt (không cần đăng nhập)
+        return "Trang cần cookie trình duyệt — mở trang này bằng Firefox một lần, rồi chọn Đăng nhập: Firefox"
     if "cookie" in s and any(k in s for k in ("could not find", "database", "decrypt", "could not copy",
-                                              "permission denied", "failed to")):
+                                              "permission denied", "failed to decrypt", "failed to load")):
         browser = _label(LOGINS, login) if login in ("firefox", "edge", "chrome") else "trình duyệt"
         return f"Không lấy được đăng nhập từ {browser} — thử Firefox hoặc file đăng nhập"
     if any(k in s for k in ("sign in to confirm", "login required", "log in", "login_required",

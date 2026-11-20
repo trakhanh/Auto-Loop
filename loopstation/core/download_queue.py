@@ -29,6 +29,9 @@ class Entry:
     path: str = ""
     codec: str = ""
     section: str = ""  # "60-150" = chỉ tải đoạn 1:00–2:30
+    uploader: str = ""
+    upload_date: str = ""
+    views: int = 0
     index: int = 0  # vị trí trong nhóm (1, 2, 3…; 0 = video lẻ) — cho tên file "Số thứ tự – Tiêu đề"
     unread: bool = False  # dòng "đọc link lỗi": url là link gốc (có thể cả kênh) — chỉ được đọc lại, không tải
 
@@ -52,7 +55,8 @@ class DownloadQueue:
 
     def _entry(self, item: Item, group: str, checked: bool) -> Entry:
         return Entry(url=item.url, vid=item.vid, title=item.title, platform=item.platform, duration=item.duration,
-                     thumbnail=item.thumbnail, group=group, checked=checked)
+                     thumbnail=item.thumbnail, group=group, checked=checked, uploader=item.uploader,
+                     upload_date=item.upload_date, views=item.views)
 
     def add_item(self, item: Item, group: str = "", checked: bool = True) -> Entry | None:
         if self._has(item):
