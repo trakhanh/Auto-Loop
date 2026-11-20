@@ -331,3 +331,85 @@ def fade_in(widget: QWidget, ms: int = 180, start: float = 0.25) -> None:
     anim.setStartValue(start)
     anim.setEndValue(1.0)
     anim.start()
+
+
+# ---------- đổi màu hoà dần (bộ màu, Sáng / Tối) ----------
+CROSSFADE_MS = 340
+_covers: list[QWidget] = []
+
+
+def _drop_covers() -> None:
+    for c in _covers:
+        anim = c.property("_fade_anim")
+        if anim is not None:
+            anim.stop()
+        c.hide()
+        c.deleteLater()
+    _covers.clear()
+
+
+def crossfade(change, ms: int = CROSSFADE_MS) -> None:
+    """Chạy `change()` (đổi bộ màu / chế độ sáng tối) mà màu hoà dần, không nháy, không thấy nửa cũ nửa mới.
+
+    Chụp từng cửa sổ đang mở, đặt ảnh chụp thành một cửa sổ phủ đúng chỗ, đổi màu ngầm bên dưới, rồi cho ảnh cũ
+    mờ dần. Độ mờ của cửa sổ phủ do Windows (DWM) hoà nên trang dài / bảng nhiều dòng cũng mượt như trang ngắn:
+    cửa sổ thật chỉ vẽ lại một lần."""
+    from PySide6.QtWidgets import QMainWindow
+    _drop_covers()  # đang hoà dở mà đổi tiếp: bắt đầu lại từ màu đang thấy
+    for win in QApplication.topLevelWidgets():
+        if not isinstance(win, (QMainWindow, QDialog)) or not win.isVisible() or win.isMinimized() \
+                or win.width() < 8 or win.height() < 8:
+            continue
+        try:
+            shot = win.grab()
+        except RuntimeError:
+            continue
+        cover = QLabel(win, Qt.WindowType.Tool | Qt.WindowType.FramelessWindowHint
+                       | Qt.WindowType.NoDropShadowWindowHint | Qt.WindowType.WindowTransparentForInput
+                       | Qt.WindowType.WindowDoesNotAcceptFocus)
+        cover.setObjectName("themeFade")
+        cover.setAttribute(Qt.WidgetAttribute.WA_ShowWithoutActivating, True)
+        cover.setAttribute(Qt.WidgetAttribute.WA_TransparentForMouseEvents, True)
+        cover.setScaledContents(True)
+        cover.setPixmap(shot)
+        cover.setGeometry(QRect(win.mapToGlobal(QPoint(0, 0)), win.size()))
+        cover.show()
+        cover.repaint()  # ảnh cũ phải lên màn hình TRƯỚC khi đổi màu bên dưới
+        _round_corners(cover)
+        _covers.append(cover)
+    change()  # cửa sổ thật đứng yên lúc đổi (không vẽ giữa chừng) và đang bị ảnh cũ che → không nháy
+    for cover in list(_covers):
+        anim = QPropertyAnimation(cover, b"windowOpacity", cover)
+        anim.setDuration(ms)
+        anim.setStartValue(1.0)
+        anim.setEndValue(0.0)
+        anim.setEasingCurve(QEasingCurve.Type.InOutQuad)
+
+        def done(c=cover):
+            if c in _covers:
+                _covers.remove(c)
+            c.hide()
+            c.deleteLater()
+
+        anim.finished.connect(done)
+        cover.setProperty("_fade_anim", anim)
+        anim.start()
+
+
+def _round_corners(widget: QWidget) -> None:
+    """Bo góc cửa sổ phủ giống cửa sổ Windows 11 (không lòi góc vuông màu cũ ở bốn góc)."""
+    import sys
+    if sys.platform != "win32" or QApplication.platformName() != "windows":
+        return
+    try:
+        import ctypes
+        corner = ctypes.c_int(2)  # DWMWA_WINDOW_CORNER_PREFERENCE = DWMWCP_ROUND
+        ctypes.windll.dwmapi.DwmSetWindowAttribute(int(widget.winId()), 33, ctypes.byref(corner),
+                                                   ctypes.sizeof(corner))
+    except (OSError, AttributeError):
+        pass
+
+
+def fading() -> bool:
+    """Đang hoà màu dở (cho test)."""
+    return bool(_covers)

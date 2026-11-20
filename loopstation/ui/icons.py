@@ -165,6 +165,14 @@ _PATHS: dict[str, str] = {
     "upload": '<path d="M4 15v4a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-4"/><polyline points="7 8 12 3 17 8"/><line x1="12" y1="3" x2="12" y2="15"/>',
     "download": '<path d="M4 15v4a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="3" x2="12" y2="15"/>',
     "edit": '<path d="M4 20h4L19 9a2.1 2.1 0 0 0-4-4L4 16z"/><line x1="13.5" y1="6.5" x2="17.5" y2="10.5"/>',
+    "sun": ('<circle cx="12" cy="12" r="4"/><line x1="12" y1="2.5" x2="12" y2="4.5"/>'
+            '<line x1="12" y1="19.5" x2="12" y2="21.5"/><line x1="2.5" y1="12" x2="4.5" y2="12"/>'
+            '<line x1="19.5" y1="12" x2="21.5" y2="12"/><line x1="5.3" y1="5.3" x2="6.7" y2="6.7"/>'
+            '<line x1="17.3" y1="17.3" x2="18.7" y2="18.7"/><line x1="5.3" y1="18.7" x2="6.7" y2="17.3"/>'
+            '<line x1="17.3" y1="6.7" x2="18.7" y2="5.3"/>'),
+    "moon": '<path d="M20 14.5A8 8 0 1 1 9.5 4a6.5 6.5 0 0 0 10.5 10.5z"/>',
+    "monitor": ('<rect x="3" y="4" width="18" height="12" rx="2"/><line x1="8" y1="20" x2="16" y2="20"/>'
+                '<line x1="12" y1="16" x2="12" y2="20"/>'),
     "eye": (
         '<path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/>'
         '<circle cx="12" cy="12" r="3"/>'
@@ -217,11 +225,37 @@ def pixmap(name: str, size: int | str = 16, color: str | int = "text_2") -> QPix
     pm = QPixmap.fromImage(img)
     pm.setDevicePixelRatio(2.0)
     _PIX_CACHE[key] = pm
+    track_pixmap(pm, lambda: pixmap(name, sz, color))
     return pm
 
 
-def icon(name: str, size: int | str = 16, color: str = "text_2", active_color: str = "white",
+# icon / ảnh đã phát ra → cách dựng lại (theo cacheKey): đổi Sáng / Tối thì `recolor_all` vẽ lại đúng token mới
+_ICON_SPEC: dict[int, object] = {}
+_PIX_SPEC: dict[int, object] = {}
+
+
+def track_icon(ic: QIcon, rebuild) -> QIcon:
+    """Ghi nhớ cách dựng lại một icon (hàm không tham số) để `recolor_all` vẽ lại khi đổi Sáng / Tối."""
+    _ICON_SPEC[ic.cacheKey()] = rebuild
+    return ic
+
+
+def track_pixmap(pm: QPixmap, rebuild) -> QPixmap:
+    _PIX_SPEC[pm.cacheKey()] = rebuild
+    return pm
+
+
+def set_label(label, pm: QPixmap) -> None:
+    """Đặt ảnh icon cho QLabel và nhớ nó là icon nào (QLabel của Qt 6 trả về bản sao khác khoá nên phải ghi lại),
+    để `recolor_all` vẽ lại khi đổi Sáng / Tối."""
+    label.setPixmap(pm)
+    label.setProperty("ktPixKey", pm.cacheKey())
+
+
+def icon(name: str, size: int | str = 16, color: str = "text_2", active_color: str = "text_hi",
          disabled_color: str = "text_disabled") -> QIcon:
+    """Icon theo token màu. Trạng thái bật / rê chuột dùng `active_color` (mặc định text_hi: trắng ở chế độ tối,
+    chữ đậm ở chế độ sáng)."""
     if isinstance(size, str):
         color = size
         size = 16
@@ -235,7 +269,55 @@ def icon(name: str, size: int | str = 16, color: str = "text_2", active_color: s
     ic.addPixmap(pixmap(name, sz, active_color), QIcon.Mode.Active, QIcon.State.Off)
     ic.addPixmap(pixmap(name, sz, disabled_color), QIcon.Mode.Disabled, QIcon.State.Off)
     _ICON_CACHE[key] = ic
+    track_icon(ic, lambda: icon(name, sz, color, active_color, disabled_color))
     return ic
+
+
+def _fresh_icon(old: QIcon) -> QIcon | None:
+    spec = _ICON_SPEC.get(old.cacheKey()) if old is not None and not old.isNull() else None
+    if spec is None:
+        return None
+    new = spec()
+    return new if new.cacheKey() != old.cacheKey() else None
+
+
+
+def recolor_all() -> None:
+    """Sau khi đổi bộ màu / Sáng ↔ Tối: vẽ lại mọi icon đã gắn (nút, nhãn, thẻ tab, ô chọn, menu) theo token mới.
+
+    Icon dựng một lần lúc tạo trang (nút "Thêm", "Mở thư mục"…) cũng đổi theo mà không cần đăng ký riêng."""
+    from PySide6.QtGui import QAction
+    from PySide6.QtWidgets import QAbstractButton, QApplication, QComboBox, QLabel, QTabBar
+    for wd in QApplication.allWidgets():
+        try:
+            if isinstance(wd, QAbstractButton):
+                new = _fresh_icon(wd.icon())
+                if new is not None:
+                    wd.setIcon(new)
+            elif isinstance(wd, QLabel):
+                key = wd.property("ktPixKey")
+                spec = _PIX_SPEC.get(key) if key is not None else None
+                if spec is not None:
+                    new = spec()
+                    if new.cacheKey() != key:
+                        set_label(wd, new)
+            elif isinstance(wd, QTabBar):
+                for i in range(wd.count()):
+                    new = _fresh_icon(wd.tabIcon(i))
+                    if new is not None:
+                        wd.setTabIcon(i, new)
+            elif isinstance(wd, QComboBox):
+                for i in range(wd.count()):
+                    new = _fresh_icon(wd.itemIcon(i))
+                    if new is not None:
+                        wd.setItemIcon(i, new)
+            for act in wd.actions():
+                if isinstance(act, QAction):
+                    new = _fresh_icon(act.icon())
+                    if new is not None:
+                        act.setIcon(new)
+        except RuntimeError:  # widget vừa bị xoá
+            continue
 
 
 def btn(button, name: str, color: str = "text_2", size: int = 15):

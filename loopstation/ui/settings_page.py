@@ -8,13 +8,13 @@ import threading
 from PySide6.QtCore import QObject, QSettings, QSize, Qt, Signal
 from PySide6.QtGui import QColor
 from PySide6.QtWidgets import (
-    QCheckBox, QComboBox, QFileDialog, QFormLayout, QGridLayout, QGroupBox, QHBoxLayout, QLabel,
+    QButtonGroup, QCheckBox, QComboBox, QFileDialog, QFormLayout, QGridLayout, QGroupBox, QHBoxLayout, QLabel,
     QLineEdit, QMessageBox, QProgressBar, QPushButton, QSizePolicy, QVBoxLayout, QWidget,
 )
 
 from ..core import encoders, sysinfo
 from ..core import ffmpeg_tools as ft
-from . import icons, theme
+from . import icons, motion, theme
 from . import widgets as w
 
 LOW_DISK = 8 * 1024 ** 3  # ổ chứa bộ nhớ đệm / thư mục lưu còn dưới mức này: cảnh báo (video 2K 1 giờ ~10 GB)
@@ -262,6 +262,39 @@ class SettingsPage(QWidget):
         f = self._form(g_ui)
         self.font_combo.setMaximumWidth(260)
         f.addRow(self._lab("Cỡ chữ ứng dụng"), self.font_combo)
+        # Sáng / Tối / Theo Windows: ba nút có khối sáng trượt, đổi là màu hoà dần sang ngay
+        self.mode_group = QButtonGroup(self)
+        self.mode_group.setExclusive(True)
+        self.mode_buttons: dict[str, QPushButton] = {}
+        cur_mode = str(settings.value("pref/theme_mode", theme.MODE) or theme.MODE)
+        cur_mode = cur_mode if cur_mode in theme.MODES else "dark"
+        for key, ic, tip in (("dark", "moon", "Nền tối, chữ sáng — dịu mắt khi làm buổi tối, xem video rõ màu"),
+                             ("light", "sun", "Nền sáng, chữ đậm — dễ đọc ở phòng nhiều ánh sáng"),
+                             ("system", "monitor", "Đi theo Windows (Cài đặt → Cá nhân hoá → Màu sắc): "
+                                                   "Windows đổi Sáng / Tối thì app đổi theo")):
+            b = QPushButton(theme.MODES[key])
+            b.setCheckable(True)
+            b.setChecked(key == cur_mode)
+            b.setIcon(icons.icon(ic, 15, "text_2", active_color="text"))
+            b.setToolTip(tip)
+            b.setAccessibleName(f"Giao diện {theme.MODES[key]}")
+            self.mode_group.addButton(b)
+            self.mode_buttons[key] = b
+            b.toggled.connect(lambda on, k=key: on and self._save("pref/theme_mode", k))
+        self.mode_box = motion.SegmentBox(list(self.mode_buttons.values()))
+        self.mode_note = QLabel("")
+        self.mode_note.setObjectName("muted")
+        mode_row = QHBoxLayout()
+        mode_row.setContentsMargins(0, 0, 0, 0)
+        mode_row.setSpacing(10)
+        mode_row.addWidget(self.mode_box)
+        mode_row.addWidget(self.mode_note)
+        mode_row.addStretch(1)
+        mode_wrap = QWidget()
+        mode_wrap.setLayout(mode_row)
+        f.addRow(self._lab("Giao diện"), mode_wrap)
+        self.mode_group.buttonToggled.connect(lambda *_: self._sync_mode_note())
+        self._sync_mode_note()
         self.palette_combo = QComboBox()
         for key, (label, accent, _a2, _text, _soft) in theme.PALETTES.items():
             self.palette_combo.addItem(_swatch(accent), label, key)
@@ -297,6 +330,7 @@ class SettingsPage(QWidget):
         f.addRow(self.palette_combo)
         self.palette_combo.currentIndexChanged.connect(self._sync_swatches)
         self._sync_swatches()
+        theme.on_change(self, lambda pg: (pg._sync_swatches(), pg._sync_mode_note()))
         welcome = QPushButton("Xem lại màn hình chào")
         welcome.setObjectName("pill")
         welcome.setIcon(icons.icon("home", 13))
@@ -408,6 +442,18 @@ class SettingsPage(QWidget):
             b.setIcon(_swatch(accent, key == cur))
             if key == cur:
                 self.palette_name.setText(label)
+
+    def _sync_mode_note(self, *_) -> None:
+        """"Theo Windows": ghi rõ Windows đang để Sáng hay Tối (biết vì sao app đang sáng / tối)."""
+        if self.mode_buttons["system"].isChecked():
+            self.mode_note.setText(f"Windows đang để {'Sáng' if theme.system_light() else 'Tối'}")
+        else:
+            self.mode_note.setText("")
+
+    def set_mode(self, mode: str) -> None:
+        """Chọn Sáng / Tối / Theo Windows từ ngoài (test, phím tắt)."""
+        if mode in self.mode_buttons:
+            self.mode_buttons[mode].setChecked(True)
 
     def _lab(self, text: str) -> QLabel:
         lb = QLabel(text)

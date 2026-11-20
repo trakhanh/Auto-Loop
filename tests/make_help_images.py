@@ -217,7 +217,7 @@ win.go_to(3)
 wait(2.5)
 sp = win.settings_page
 boxes = [b for b in sp.findChildren(QGroupBox) if b.title().startswith(("Thông số", "FFmpeg"))]
-shoot(win, [(b, k + 1) for k, b in enumerate(boxes)], "settings")
+shoot(win, [(b, k + 1) for k, b in enumerate(boxes)] + [(sp.mode_box, len(boxes) + 1)], "settings")
 
 win._closing = True
 win.close()

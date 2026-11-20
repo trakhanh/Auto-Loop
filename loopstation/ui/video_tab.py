@@ -866,7 +866,7 @@ class VideoTab(QWidget):
         self._tabs_compact = mode
         bar = self.right_tabs.tabBar()
         for k, ic in enumerate(self._tab_icons):
-            self.right_tabs.setTabIcon(k, icons.icon(ic, 15, "text", active_color="white") if mode == "full" else QIcon())
+            self.right_tabs.setTabIcon(k, icons.icon(ic, 15, "text", active_color="text_hi") if mode == "full" else QIcon())
         bar.setProperty("compact", mode)
         bar.style().unpolish(bar)
         bar.style().polish(bar)

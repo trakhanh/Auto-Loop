@@ -1,4 +1,4 @@
-"""Giao diện tối "Calm Editor": token màu / chữ / khoảng cách + QSS trung tâm áp cho toàn ứng dụng.
+"""Giao diện "Calm Editor" (Tối / Sáng / Theo Windows): token màu / chữ / khoảng cách + QSS trung tâm áp cho toàn ứng dụng.
 
 Nguyên tắc (docs/ui/DESIGN.md): bề mặt phẳng theo bậc, MỘT màu nhấn phẳng (đổi theo bộ màu ở Cài đặt),
 mỗi màn hình một nút chính. Code giao diện không ghi mã màu thô: dùng `T[...]`, `qcolor(...)` hoặc
@@ -34,9 +34,17 @@ PALETTES = {
 }
 PALETTE = "neon"
 
+# Chế độ sáng / tối: "system" = theo cài đặt Sáng / Tối của Windows (Cài đặt → Cá nhân hoá → Màu sắc)
+MODES = {"dark": "Tối", "light": "Sáng", "system": "Theo Windows"}
+MODE = "dark"  # lựa chọn của người dùng
+LIGHT = False  # chế độ đang hiển thị thật (đã đổi "system" ra sáng / tối)
+
 # Trung tính dùng chung mọi bộ màu, chỉ pha tối đa 3 % màu nhấn vào các bề mặt
 _NEUTRAL = {"bg": "#0e1015", "panel": "#14171e", "raised": "#1a1e27", "overlay": "#222733", "field": "#0b0d12"}
 _TINT = 0.03
+# chế độ sáng: nền xám rất nhạt, thẻ trắng, ô nhập xám nhạt hơn thẻ một chút
+_NEUTRAL_LIGHT = {"bg": "#eceef4", "panel": "#ffffff", "raised": "#f0f2f7", "overlay": "#ffffff", "field": "#f6f7fa"}
+_TINT_LIGHT = 0.025
 
 # Token cố định (không đổi theo bộ màu)
 _FIXED = {
@@ -53,6 +61,19 @@ _FIXED = {
     # đa phương tiện (timeline, waveform)
     "lane_clip": "#4c9be8", "lane_music": "#2fb5a4", "lane_ambient": "#8b7cf0",
     "playhead": "#f4f5f8", "seam_marker": "#e0a030", "black": "#000000", "white": "#ffffff",
+    # lớp phủ trong suốt khi rê chuột (trắng trên nền tối), chữ thẻ đang chọn, núm thanh trượt / nút tròn
+    "tint": "#ffffff", "text_hi": "#ffffff",
+}
+
+# Chế độ sáng: chỉ ghi các token khác bản tối (chữ đậm hơn, viền nhạt, màu ngữ nghĩa sẫm để đọc rõ trên nền trắng)
+_FIXED_LIGHT = {
+    "line_subtle": "#e0e3eb", "line": "#cfd4de", "line_strong": "#b1b8c6", "line_control": "#7a8398",
+    "text": "#151922", "text_2": "#394151", "text_muted": "#566075", "text_disabled": "#a2a9b7",
+    "success": "#1f9a62", "success_text": "#0d6a41",
+    "warn": "#d18b0e", "warn_text": "#7f4f00",
+    "danger": "#d9443c", "danger_text": "#ad241c",
+    "info": "#2e7dd1", "info_text": "#195aa0",
+    "tint": "#0b1020", "text_hi": "#151922",
 }
 
 T: dict[str, str] = {}  # token đang dùng (đổi theo bộ màu)
@@ -71,6 +92,14 @@ H = {"sm": 24, "md": 32, "lg": 40}
 BRAND = {"youtube": "#ff2d2d", "tiktok_a": "#25f4ee", "tiktok_b": "#fe2c55", "bilibili": "#00aeec",
          "facebook": "#1877f2", "x": "#e7e9ea", "instagram": "#e1306c", "instagram_b": "#f77737", "white": "#ffffff",
          "other": "#9aa3b2"}
+BRAND_LIGHT = {"x": "#0f1419", "other": "#6b7385"}  # logo trắng / xám nhạt không thấy trên nền sáng
+
+
+def brand_colors() -> dict[str, str]:
+    """Màu logo nền tảng theo chế độ đang hiển thị."""
+    return {**BRAND, **BRAND_LIGHT} if LIGHT else dict(BRAND)
+
+
 FS = {"caption": 8.5, "small": 9, "body": 10, "label": 10, "subtitle": 11, "title": 13, "display": 17}
 # Thời lượng chuyển động (ms)
 DUR = {"fast": 120, "base": 180, "slow": 240}
@@ -98,27 +127,95 @@ def rgba(color: str, alpha: float) -> str:
     return f"rgba({c.red()},{c.green()},{c.blue()},{alpha:g})"
 
 
-def build_tokens(key: str) -> dict[str, str]:
-    """Dựng đủ bộ token cho một bộ màu (hàm thuần, dùng cho test)."""
+def _lum(color: str) -> float:
+    c = QColor(color)
+    ch = []
+    for v in (c.redF(), c.greenF(), c.blueF()):
+        ch.append(v / 12.92 if v <= 0.03928 else ((v + 0.055) / 1.055) ** 2.4)
+    return 0.2126 * ch[0] + 0.7152 * ch[1] + 0.0722 * ch[2]
+
+
+def contrast(a: str, b: str) -> float:
+    """Tỉ lệ tương phản WCAG giữa hai màu (≥ 4.5 là chữ thường đọc rõ)."""
+    hi, lo = sorted((_lum(a), _lum(b)), reverse=True)
+    return (hi + 0.05) / (lo + 0.05)
+
+
+def _readable_on(color: str, surfaces: list[str], target: float = 4.8) -> str:
+    """Sẫm dần `color` cho tới khi đọc rõ trên mọi nền trong `surfaces` (chữ màu nhấn ở chế độ sáng)."""
+    for i in range(0, 41):
+        c = mix(color, "#000000", i * 0.02)
+        if all(contrast(c, s) >= target for s in surfaces):
+            return c
+    return mix(color, "#000000", 0.8)
+
+
+def resolve_light(mode: str) -> bool:
+    """Chế độ người dùng chọn → có hiển thị sáng không ("system" hỏi Windows)."""
+    if mode == "light":
+        return True
+    if mode == "system":
+        return system_light()
+    return False
+
+
+def system_light() -> bool:
+    """Windows đang để ứng dụng ở chế độ Sáng? (Qt hỏi hệ điều hành; không rõ thì đọc khoá AppsUseLightTheme.)"""
+    try:
+        from PySide6.QtGui import QGuiApplication
+        if QGuiApplication.instance() is not None:
+            scheme = QGuiApplication.styleHints().colorScheme()
+            if scheme == Qt.ColorScheme.Light:
+                return True
+            if scheme == Qt.ColorScheme.Dark:
+                return False
+    except Exception:  # noqa: BLE001 - Qt cũ: không có colorScheme
+        pass
+    try:
+        import winreg
+        with winreg.OpenKey(winreg.HKEY_CURRENT_USER,
+                            r"Software\Microsoft\Windows\CurrentVersion\Themes\Personalize") as k:
+            return int(winreg.QueryValueEx(k, "AppsUseLightTheme")[0]) == 1
+    except (OSError, ImportError, ValueError):
+        return False
+
+
+def build_tokens(key: str, light: bool = False) -> dict[str, str]:
+    """Dựng đủ bộ token cho một bộ màu ở chế độ tối / sáng (hàm thuần, dùng cho test)."""
     if key not in PALETTES:
         key = "neon"
     _name, accent, accent2, accent_text, accent_soft = PALETTES[key]
     t = dict(_FIXED)
-    for k, base in _NEUTRAL.items():
-        t[k] = mix(base, accent, _TINT)
+    if light:
+        t.update(_FIXED_LIGHT)
+    neutral, tint = (_NEUTRAL_LIGHT, _TINT_LIGHT) if light else (_NEUTRAL, _TINT)
+    for k, base in neutral.items():
+        t[k] = mix(base, accent, tint)
+    if light:
+        # chữ màu nhấn trên nền sáng: lấy chính màu nhấn rồi sẫm dần tới khi đọc rõ trên mọi bề mặt
+        accent_text = _readable_on(accent, [t["bg"], t["panel"], t["raised"]])
+        accent_soft = accent_text
+        t["playhead"] = t["text"]
     t.update(accent=accent, accent2=accent2, accent_text=accent_text, accent_soft=accent_soft,
              accent_hover=mix(accent, "#ffffff", 0.12), accent_pressed=mix(accent, "#000000", 0.18),
              focus=accent_text)
+    # nền nút khi rê chuột; núm thanh trượt + chấm nút tròn
+    t["hover_bg"] = mix(t["raised"], t["text"], 0.06) if light else t["overlay"]
+    t["knob"] = "#ffffff" if light else t["text"]
     return t
 
 
-def set_palette(key: str) -> None:
-    global PALETTE
+def set_palette(key: str, mode: str | None = None) -> None:
+    """Đổi bộ màu (và chế độ sáng / tối nếu truyền `mode`) — chỉ dựng lại token, chưa áp QSS."""
+    global PALETTE, MODE, LIGHT
     if key not in PALETTES:
         key = "neon"
     PALETTE = key
+    if mode is not None:
+        MODE = mode if mode in MODES else "dark"
+    LIGHT = resolve_light(MODE)
     T.clear()
-    T.update(build_tokens(key))
+    T.update(build_tokens(key, LIGHT))
 
 
 set_palette(PALETTE)
@@ -133,6 +230,8 @@ def on_change(widget, fn) -> None:
 
 
 def notify_change() -> None:
+    from . import icons
+    icons.recolor_all()  # icon đã gắn sẵn (nút, nhãn, thẻ, menu) đổi theo token mới
     alive = []
     for ref, fn in _LISTENERS:
         wd = ref()
@@ -275,7 +374,7 @@ QWidget#subHeader {{ background: {t['bg']}; border-bottom: 1px solid {t['line']}
 QWidget#timelineDock {{ background: {t['panel']}; border-top: 1px solid {t['line']}; }}
 QPushButton#dockBar {{ background: transparent; border: none; color: {t['text_muted']}; padding: 0 6px; font-size: {f['small']};
                       font-weight: 600; text-align: left; }}
-QPushButton#dockBar:hover {{ color: {t['text']}; background: {rgba('#ffffff', 0.05)}; }}
+QPushButton#dockBar:hover {{ color: {t['text']}; background: {rgba(t['tint'], 0.05)}; }}
 
 /* ---------- thẻ ---------- */
 QWidget#quickBar, QFrame#batchCard, QWidget#metricCard {{ background: {t['panel']}; border: 1px solid {t['line_subtle']};
@@ -349,9 +448,9 @@ QTabBar::tab {{ background: {t['raised']}; border: 1px solid {t['line']}; border
                color: {t['text']}; padding: 8px 14px; margin-right: {SP['xs']}px; min-height: 20px;
                font-size: {f['subtitle']}; font-weight: 600; }}
 QTabBar::tab:last {{ margin-right: 0; }}
-QTabBar::tab:hover:!selected {{ background: {t['overlay']}; border-color: {t['line_strong']}; }}
+QTabBar::tab:hover:!selected {{ background: {t['hover_bg']}; border-color: {t['line_strong']}; }}
 QTabBar::tab:selected {{ background: {rgba(t['accent'], 0.24)}; border: 1px solid {t['accent']};
-                        color: {t['text_on_accent']}; font-weight: 700; }}
+                        color: {t['text_hi']}; font-weight: 700; }}
 QTabBar::tab:disabled {{ color: {t['text_disabled']}; background: transparent; border-color: {t['line_subtle']}; }}
 /* cột hẹp: chữ nhỏ một bậc, bớt lề (biểu tượng ẩn trong code) — 3 thẻ luôn vừa, không bị cắt mép */
 QTabBar[compact="noicon"]::tab {{ padding: 8px 11px; }}
@@ -360,7 +459,7 @@ QTabBar[compact="small"]::tab {{ padding: 7px 8px; font-size: {f['body']}; }}
 /* ---------- nút bấm: secondary (mặc định) · primary · tonal · ghost · danger ---------- */
 QPushButton {{ background: {t['raised']}; border: 1px solid {t['line']}; border-radius: {R['md']}px;
               padding: 6px 14px; color: {t['text']}; font-weight: 600; }}
-QPushButton:hover {{ border-color: {t['line_strong']}; background: {t['overlay']}; }}
+QPushButton:hover {{ border-color: {t['line_strong']}; background: {t['hover_bg']}; }}
 QPushButton:pressed {{ background: {t['field']}; }}
 QPushButton:disabled {{ color: {t['text_disabled']}; border-color: {t['line_subtle']}; background: {t['panel']}; }}
 QPushButton:checked {{ background: {rgba(t['accent'], 0.20)}; border-color: {rgba(t['accent'], 0.55)}; }}
@@ -390,8 +489,8 @@ QPushButton#danger:disabled, QPushButton[variant="danger"]:disabled {{ backgroun
 
 QPushButton#ghost, QPushButton[variant="ghost"] {{ background: transparent; border: 1px solid transparent;
                           color: {t['text_2']}; padding: 5px 8px; }}
-QPushButton#ghost:hover, QPushButton[variant="ghost"]:hover {{ background: {rgba('#ffffff', 0.06)}; color: {t['text']}; }}
-QPushButton#ghost:pressed, QPushButton[variant="ghost"]:pressed {{ background: {rgba('#ffffff', 0.10)}; }}
+QPushButton#ghost:hover, QPushButton[variant="ghost"]:hover {{ background: {rgba(t['tint'], 0.06)}; color: {t['text']}; }}
+QPushButton#ghost:pressed, QPushButton[variant="ghost"]:pressed {{ background: {rgba(t['tint'], 0.10)}; }}
 QPushButton#ghost:checked, QPushButton[variant="ghost"]:checked {{ background: {rgba(t['accent'], 0.16)}; color: {t['accent_text']};
                           border-color: transparent; }}
 QPushButton#ghost[icononly="true"] {{ padding: 0; }}
@@ -427,7 +526,7 @@ QPushButton#segBtn:disabled {{ color: {t['text_disabled']}; }}
 /* ---------- thanh bên ---------- */
 QPushButton#nav {{ background: transparent; border: 1px solid transparent; border-radius: {R['md']}px; text-align: left;
                   padding: 8px 12px; color: {t['text_2']}; font-weight: 600; }}
-QPushButton#nav:hover:enabled {{ background: {rgba('#ffffff', 0.05)}; color: {t['text']}; }}
+QPushButton#nav:hover:enabled {{ background: {rgba(t['tint'], 0.05)}; color: {t['text']}; }}
 QPushButton#nav:checked {{ background: transparent; border-color: transparent; color: {t['text']}; font-weight: 600; }}
 QPushButton#nav:checked:hover {{ background: transparent; }}
 QPushButton#nav:disabled {{ color: {t['text_disabled']}; background: transparent; border-color: transparent; }}
@@ -477,7 +576,7 @@ QWidget#toast QLabel {{ background: transparent; color: {t['text']}; font-weight
 QListWidget#helpToc {{ background: {t['panel']}; border: 1px solid {t['line_subtle']}; border-radius: {R['lg']}px;
     padding: 6px; outline: none; }}
 QListWidget#helpToc::item {{ padding: 6px 8px; border-radius: {R['sm']}px; color: {t['text_2']}; }}
-QListWidget#helpToc::item:hover {{ background: {rgba('#ffffff', 0.05)}; color: {t['text']}; }}
+QListWidget#helpToc::item:hover {{ background: {rgba(t['tint'], 0.05)}; color: {t['text']}; }}
 QListWidget#helpToc::item:selected {{ background: {rgba(t['accent'], 0.20)}; color: {t['text']}; }}
 /* trang Hướng dẫn: Tổng quan (help_hub.HubPage) + thanh tiêu đề chủ đề */
 QWidget#helpHubBody {{ background: transparent; }}
@@ -574,7 +673,7 @@ QSpinBox#timeBox::up-arrow, QSpinBox#timeBox::down-arrow {{ image: none; width: 
 /* ---------- thanh trượt ---------- */
 QSlider::groove:horizontal {{ height: 4px; background: {t['line']}; border-radius: 2px; }}
 QSlider::sub-page:horizontal {{ background: {t['accent']}; border-radius: 2px; }}
-QSlider::handle:horizontal {{ background: {t['text']}; border: 2px solid {t['accent']}; width: 14px; height: 14px;
+QSlider::handle:horizontal {{ background: {t['knob']}; border: 2px solid {t['accent']}; width: 14px; height: 14px;
                             margin: -6px 0; border-radius: 8px; }}
 QSlider::handle:horizontal:hover {{ background: {t['accent_soft']}; border-color: {t['accent_text']}; }}
 QSlider::groove:horizontal:disabled {{ background: {t['line_subtle']}; }}
@@ -600,7 +699,7 @@ QRadioButton {{ spacing: 8px; background: transparent; }}
 QRadioButton::indicator {{ width: 16px; height: 16px; border-radius: 9px; border: 1px solid {t['line_control']};
     background: {t['field']}; }}
 QRadioButton::indicator:hover {{ border-color: {t['accent_text']}; }}
-QRadioButton::indicator:checked {{ border: 5px solid {t['accent']}; background: {t['text']}; width: 8px;
+QRadioButton::indicator:checked {{ border: 5px solid {t['accent']}; background: {t['knob']}; width: 8px;
     height: 8px; }}
 QRadioButton:disabled {{ color: {t['text_disabled']}; }}
 """
@@ -613,7 +712,7 @@ QTreeWidget, QTreeView {{ background: {t['panel']}; alternate-background-color: 
     border: 1px solid {t['line_subtle']}; border-radius: {R['lg']}px; padding: 2px; }}
 QTreeView::item {{ height: 32px; border: none; border-bottom: 1px solid {t['line_subtle']}; padding: 0 4px; }}
 QTreeWidget#clips::item {{ height: 56px; }}
-QTreeView::item:hover {{ background: {rgba('#ffffff', 0.04)}; }}
+QTreeView::item:hover {{ background: {rgba(t['tint'], 0.04)}; }}
 QTreeView::item:selected {{ background: {rgba(t['accent'], 0.22)}; color: {t['text']}; }}
 QHeaderView {{ background: transparent; }}
 QHeaderView::section {{ background: {t['panel']}; color: {t['text_muted']}; border: none;
@@ -670,8 +769,8 @@ QLabel#playerTime {{ color: {t['text']}; font-family: Consolas, 'Cascadia Mono',
 QLabel#playerTimeTotal {{ color: {t['text_muted']}; font-family: Consolas, 'Cascadia Mono', monospace; }}
 QPushButton#playerBtn {{ background: transparent; border: 1px solid transparent; border-radius: {R['md']}px; padding: 6px 8px;
                         color: {t['text']}; font-weight: 600; font-size: {f['caption']}; }}
-QPushButton#playerBtn:hover {{ background: {rgba('#ffffff', 0.06)}; }}
-QPushButton#playerBtn:pressed {{ background: {rgba('#ffffff', 0.10)}; }}
+QPushButton#playerBtn:hover {{ background: {rgba(t['tint'], 0.06)}; }}
+QPushButton#playerBtn:pressed {{ background: {rgba(t['tint'], 0.10)}; }}
 QPushButton#playerBtn:disabled {{ color: {t['text_disabled']}; }}
 QPushButton#playerPlay {{ background: {t['accent']}; border: none; border-radius: 21px; min-width: 42px; max-width: 42px;
                          min-height: 42px; max-height: 42px; padding: 0; }}
@@ -720,13 +819,88 @@ class ThemeStyle(QProxyStyle):
         super().drawPrimitive(element, option, painter, widget)
 
 
-def apply(app: QApplication, font_pt: int = 10, palette: str | None = None) -> None:
+# token không dùng để dò màu cũ: trùng mã với "white" ở bản tối nhưng sang bản sáng lại khác nghĩa
+_RETINT_SKIP = {"tint", "text_hi", "knob", "hover_bg", "focus", "white", "black"}
+
+
+def _retint_map(old: dict[str, str], new: dict[str, str]) -> dict[str, str]:
+    """Mã màu cũ → mã màu mới của cùng token (chỉ các token thật sự đổi)."""
+    out: dict[str, str] = {}
+    for k, v in old.items():
+        if k in _RETINT_SKIP or k not in new:
+            continue
+        a, b = v.lower(), new[k].lower()
+        if a != b and a not in out and a not in (x.lower() for x in (old["white"], old["black"])):
+            out[a] = b
+    return out
+
+
+def retint(old: dict[str, str], new: dict[str, str]) -> None:
+    """Đổi lại màu đã "nướng" sẵn lúc tạo: chữ / nền từng dòng bảng (QTreeWidget, QListWidget, QTableWidget) và
+    nhãn chữ có màu (<span style='color:…'>). Màu nào trùng một token cũ thì đổi sang token đó ở bộ màu mới."""
+    import re
+    from PySide6.QtWidgets import (QLabel, QListWidget, QTableWidget, QTreeWidget, QTreeWidgetItemIterator)
+    m = _retint_map(old, new)
+    if not m:
+        return
+    hex_re = re.compile("|".join(re.escape(k) for k in m), re.I)
+
+    def fix_brush(get, put, role_count):
+        for c in range(role_count):
+            br = get(c)
+            if br.style() == Qt.BrushStyle.NoBrush:
+                continue
+            col = br.color()
+            nc = m.get(col.name())
+            if nc is not None:
+                q = QColor(nc)
+                q.setAlpha(col.alpha())
+                put(c, q)
+
+    for wd in QApplication.allWidgets():
+        try:
+            if isinstance(wd, QTreeWidget):
+                cols = wd.columnCount()
+                it = QTreeWidgetItemIterator(wd)
+                while it.value() is not None:
+                    item = it.value()
+                    fix_brush(item.foreground, item.setForeground, cols)
+                    fix_brush(item.background, item.setBackground, cols)
+                    it += 1
+            elif isinstance(wd, QListWidget):
+                for i in range(wd.count()):
+                    item = wd.item(i)
+                    fix_brush(lambda _c, x=item: x.foreground(), lambda _c, q, x=item: x.setForeground(q), 1)
+                    fix_brush(lambda _c, x=item: x.background(), lambda _c, q, x=item: x.setBackground(q), 1)
+            elif isinstance(wd, QTableWidget):
+                for r in range(wd.rowCount()):
+                    for c in range(wd.columnCount()):
+                        item = wd.item(r, c)
+                        if item is not None:
+                            fix_brush(lambda _c, x=item: x.foreground(), lambda _c, q, x=item: x.setForeground(q), 1)
+                            fix_brush(lambda _c, x=item: x.background(), lambda _c, q, x=item: x.setBackground(q), 1)
+            elif isinstance(wd, QLabel):
+                txt = wd.text()
+                if "#" in txt and "<" in txt:
+                    new_txt = hex_re.sub(lambda mm: m[mm.group(0).lower()], txt)
+                    if new_txt != txt:
+                        wd.setText(new_txt)
+        except RuntimeError:  # widget vừa bị xoá
+            continue
+
+
+def apply(app: QApplication, font_pt: int = 10, palette: str | None = None, mode: str | None = None) -> None:
+    """Áp bộ màu / chế độ sáng tối / cỡ chữ cho toàn app (muốn hoà màu dần: gọi qua `motion.crossfade`)."""
     global FONT_PT
-    if palette is not None:
-        set_palette(palette)
+    before = dict(T)
+    if palette is not None or mode is not None:
+        set_palette(palette if palette is not None else PALETTE, mode)
     FONT_PT = font_pt
-    if not isinstance(app.style(), ThemeStyle):
+    # khi đã có QSS, app.style() trả về lớp bọc QSS chứ không phải ThemeStyle: đánh dấu để không đặt lại style
+    # (đặt lại style = Qt dựng lại toàn bộ widget, mất gần 1 giây mỗi lần đổi màu)
+    if not app.property("ktThemeStyle"):
         app.setStyle(ThemeStyle("Fusion"))
+        app.setProperty("ktThemeStyle", True)
     app.setFont(QFont("Segoe UI", font_pt))
     pal = QPalette()
     for role, color in (
@@ -736,8 +910,21 @@ def apply(app: QApplication, font_pt: int = 10, palette: str | None = None) -> N
         (QPalette.ColorRole.ButtonText, T["text"]), (QPalette.ColorRole.Highlight, T["accent"]),
         (QPalette.ColorRole.HighlightedText, T["text_on_accent"]), (QPalette.ColorRole.ToolTipBase, T["overlay"]),
         (QPalette.ColorRole.ToolTipText, T["text"]), (QPalette.ColorRole.PlaceholderText, T["text_muted"]),
+        (QPalette.ColorRole.Link, T["accent_text"]), (QPalette.ColorRole.BrightText, T["text_hi"]),
+        (QPalette.ColorRole.Light, T["line_strong"]), (QPalette.ColorRole.Midlight, T["line"]),
+        (QPalette.ColorRole.Mid, T["line"]), (QPalette.ColorRole.Dark, T["line_subtle"]),
+        (QPalette.ColorRole.Shadow, T["black"]),
     ):
         pal.setColor(role, QColor(color))
     app.setPalette(pal)
-    app.setStyleSheet(qss(font_pt))
+    sheet = qss(font_pt)
+    old = app.styleSheet()
+    if sheet != old:
+        if old:
+            # đổi thẳng QSS cũ → mới làm Qt so khớp lại cả hai bộ cho từng widget (~2 s với 1 400 widget);
+            # xoá trước rồi đặt mới chỉ ~0,3 s. Hai lệnh liền nhau, không vẽ ở giữa nên không nháy.
+            app.setStyleSheet("")
+        app.setStyleSheet(sheet)
+    if before != T:
+        retint(before, T)
     notify_change()

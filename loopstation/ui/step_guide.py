@@ -70,7 +70,8 @@ class StepGuide(QWidget):
     def _set_hint(self, hint: str, ok: bool, tip: str = "") -> None:
         if ok != getattr(self, "_ok", None):
             self._ok = ok
-            self.icon.setPixmap(icons.pixmap("check" if ok else "arrow_right", 15, "success_text" if ok else "accent_text"))
+            icons.set_label(self.icon, icons.pixmap("check" if ok else "arrow_right", 15,
+                                                  "success_text" if ok else "accent_text"))
         if (hint, tip) != (self.hint.full_text(), getattr(self, "_tip", "")):
             self._tip = tip
             self.hint.set_full_text(hint, tip)

@@ -22,26 +22,26 @@ from . import branding, icons, theme
 from .widgets import FlowLayout, sample_label
 from .theme import APP_NAME, APP_VERSION, AUTHOR
 
-T = theme.T  # token màu (đọc lúc dựng trang; trang hướng dẫn dựng một lần khi mở app)
+T = theme.T  # token màu đang dùng (nội dung chỉ ghi @c:tên@, điền màu lúc hiển thị → đổi Sáng / Tối là đúng màu)
 
 HELP_DIR = Path(__file__).resolve().parent / "assets"
-ACCENT, BADGE, CARD, CARD2 = T["accent_text"], T["warn"], T["panel"], T["raised"]
+ACCENT, BADGE, CARD, CARD2 = "@c:accent_text@", "@c:warn@", "@c:panel@", "@c:raised@"
 
-CSS_TEMPLATE = f"""
-body {{ color: {T['text']}; font-family: 'Segoe UI'; font-size: @BODY@pt; }}
-h1 {{ font-size: @H1@pt; color: {T['text']}; margin: 0 0 2px 0; }}
-h2 {{ font-size: @H2@pt; color: {T['text']}; margin: 20px 0 6px 0; }}
-h3 {{ font-size: @H3@pt; color: {T['accent_soft']}; margin: 14px 0 4px 0; }}
-p, li {{ line-height: 150%; }}
+CSS_TEMPLATE = """
+body { color: @c:text@; font-family: 'Segoe UI'; font-size: @BODY@pt; }
+h1 { font-size: @H1@pt; color: @c:text@; margin: 0 0 2px 0; }
+h2 { font-size: @H2@pt; color: @c:text@; margin: 20px 0 6px 0; }
+h3 { font-size: @H3@pt; color: @c:accent_soft@; margin: 14px 0 4px 0; }
+p, li { line-height: 150%; }
 /* đoạn chứa ảnh: giãn dòng thường — 150 % nhân cả chiều cao ảnh, để lại khoảng trống to bằng nửa ảnh bên dưới */
-p.shot {{ line-height: 100%; margin-top: 8px; margin-bottom: 8px; }}
-a {{ color: {T['info_text']}; text-decoration: none; }}
-code {{ background: {T['overlay']}; color: {T['warn_text']}; font-family: Consolas; }}
-td {{ vertical-align: top; }}
-.k {{ color: {T['warn_text']}; font-family: Consolas; white-space: nowrap; }}
-.muted {{ color: {T['text_muted']}; }}
-.cap {{ color: {T['text_muted']}; font-size: @SMALL@pt; }}
-.big {{ font-size: @H3@pt; font-weight: 700; color: {T['text']}; }}
+p.shot { line-height: 100%; margin-top: 8px; margin-bottom: 8px; }
+a { color: @c:info_text@; text-decoration: none; }
+code { background: @c:overlay@; color: @c:warn_text@; font-family: Consolas; }
+td { vertical-align: top; }
+.k { color: @c:warn_text@; font-family: Consolas; white-space: nowrap; }
+.muted { color: @c:text_muted@; }
+.cap { color: @c:text_muted@; font-size: @SMALL@pt; }
+.big { font-size: @H3@pt; font-weight: 700; color: @c:text@; }
 """
 
 
@@ -49,13 +49,11 @@ def css() -> str:
     """CSS trang hướng dẫn theo cỡ chữ đang chọn."""
     from . import theme
     k = theme.scale()
-    out = CSS_TEMPLATE
+    out = _tokens(CSS_TEMPLATE)
     for tok, pt in (("@BODY@", 10.5), ("@H1@", 17), ("@H2@", 13.5), ("@H3@", 11.5), ("@SMALL@", 9.5)):
         out = out.replace(tok, f"{pt * k:.1f}")
     return out
 
-
-CSS = css()
 
 
 # ---------------- các khối trình bày ----------------
@@ -84,7 +82,7 @@ def steps(items: list[tuple[str, str]]) -> str:
 def legend(items: list[tuple[str, str]]) -> str:
     """Chú thích các số trên ảnh: [số cam] tên — mô tả."""
     rows = "".join(
-        f'<tr><td width="30" align="center" bgcolor="{BADGE}"><b><span style="color:{T["bg"]};">{k}</span></b></td>'
+        f'<tr><td width="30" align="center" bgcolor="{BADGE}"><b><span style="color:@c:bg@;">{k}</span></b></td>'
         f'<td>&nbsp;<b>{name}</b> — {desc}</td></tr>' for k, (name, desc) in enumerate(items, 1))
     return f'<table cellpadding="5" cellspacing="4">{rows}</table>'
 
@@ -99,8 +97,7 @@ def img(name: str, caption: str = "") -> str:
 def box(kind: str, text: str) -> str:
     """Khung Mẹo / Lưu ý / Ví dụ."""
     tone, title = {"tip": ("info", "Mẹo"), "warn": ("warn", "Lưu ý"), "ex": ("accent", "Ví dụ")}[kind]
-    color = theme.mix(T["panel"], T[tone], 0.55)
-    bg = theme.mix(T["panel"], T[tone], 0.14)
+    color, bg = f"@c:box_{tone}_bar@", f"@c:box_{tone}_bg@"
     return (f'<table width="100%" cellpadding="10" cellspacing="0" bgcolor="{bg}"><tr>'
             f'<td width="6" bgcolor="{color}"></td><td><b>{title}:</b> {text}</td></tr></table>')
 
@@ -120,22 +117,25 @@ def examples(rows: list[tuple[str, str]], head: tuple[str, str] = ("Gõ", "Nghĩ
 
 def flow_blocks(items: list[tuple[str, str]]) -> str:
     """Dải màu minh hoạ thứ tự phát (ví dụ NỀN ×70 → Cảnh 2 → NỀN ×70 …)."""
-    cells = "".join(f'<td bgcolor="{c}" align="center"><b><span style="color:{T["text"]};">{t}</span></b></td>'
+    cells = "".join(f'<td bgcolor="{c}" align="center"><b><span style="color:@c:white@;">{t}</span></b></td>'
                     for t, c in items)
     return f'<table width="100%" cellpadding="8" cellspacing="3"><tr>{cells}</tr></table>'
 
 
 NEN, CANH, CANH2 = theme.FLOW_COLORS
-GREY, GREY2 = T["line_strong"], T["raised"]
+GREY, GREY2 = theme.BOOKEND_COLOR, theme.SOURCE_COLOR  # khối xám chữ trắng: đọc rõ ở cả Sáng / Tối
 
 # ---------------- nội dung từng chủ đề ----------------
 TOPICS: list[tuple[str, str, str, str, str]] = []  # (id, nhóm, icon, tiêu đề, html)
 
 
 def _tokens(html: str) -> str:
-    """Thay @c:tên@ trong HTML tĩnh bằng màu theo token."""
-    cols = {"ok_bg": theme.mix(T["panel"], T["success"], 0.30), "raised": T["raised"], "field": T["field"]}
-    return re.sub(r"@c:(\w+)@", lambda m: cols[m.group(1)], html)
+    """Thay @c:tên@ trong HTML / CSS bằng màu của bộ màu + chế độ Sáng / Tối đang dùng (gọi lúc hiển thị)."""
+    cols = {"ok_bg": theme.mix(T["panel"], T["success"], 0.30)}
+    for tone in ("info", "warn", "accent"):
+        cols[f"box_{tone}_bar"] = theme.mix(T["panel"], T[tone], 0.55)
+        cols[f"box_{tone}_bg"] = theme.mix(T["panel"], T[tone], 0.14)
+    return re.sub(r"@c:(\w+)@", lambda m: cols.get(m.group(1)) or T[m.group(1)], html)
 
 
 META: dict[str, dict] = {}  # tid → {"title", "when", "actions"} lấy từ hero()
@@ -147,7 +147,7 @@ def topic(tid: str, group: str, icon: str, title: str, html: str) -> None:
     if m:
         META[tid] = json.loads(m.group(1))
         html = html[:m.start()] + html[m.end():]
-    TOPICS.append((tid, group, icon, title, _tokens(html)))
+    TOPICS.append((tid, group, icon, title, html))
 
 
 topic("batdau", "Bắt đầu", "home", "Bắt đầu trong 3 bước", hero(
@@ -206,8 +206,8 @@ topic("kieu", "Bắt đầu", "video_music", "Chọn kiểu sản phẩm", hero(
 <table cellpadding="7" cellspacing="2">
 <tr><td></td><td class="muted"><b>1. Video</b></td><td class="muted"><b>2. Nhạc &amp; Nền</b></td><td class="muted"><b>3. Xuất</b></td></tr>
 <tr><td><b>Video có nhạc</b></td><td bgcolor="@c:ok_bg@">✓ clip</td><td bgcolor="@c:ok_bg@">✓ playlist + tiếng nền</td><td bgcolor="@c:ok_bg@">✓ .mp4</td></tr>
-<tr><td><b>Chỉ video</b></td><td bgcolor="@c:ok_bg@">✓ clip</td><td bgcolor=GREY2>chỉ tiếng nền (tuỳ chọn)</td><td bgcolor="@c:ok_bg@">✓ .mp4</td></tr>
-<tr><td><b>Chỉ nhạc</b></td><td bgcolor=GREY2>bỏ qua</td><td bgcolor="@c:ok_bg@">✓ playlist / tiếng nền + độ dài</td><td bgcolor="@c:ok_bg@">✓ file nhạc</td></tr>
+<tr><td><b>Chỉ video</b></td><td bgcolor="@c:ok_bg@">✓ clip</td><td bgcolor="@c:raised@">chỉ tiếng nền (tuỳ chọn)</td><td bgcolor="@c:ok_bg@">✓ .mp4</td></tr>
+<tr><td><b>Chỉ nhạc</b></td><td bgcolor="@c:raised@">bỏ qua</td><td bgcolor="@c:ok_bg@">✓ playlist / tiếng nền + độ dài</td><td bgcolor="@c:ok_bg@">✓ file nhạc</td></tr>
 </table>""" + box("tip", "Muốn video dài <b>đúng bằng</b> một lượt playlist (ví dụ playlist 30 phút → video 30 phút): kiểu "
                          "Video có nhạc → trang Video → thẻ <b>Độ dài</b> → <i>Theo độ dài nhạc</i>."))
 
@@ -394,7 +394,7 @@ tiếp (Ctrl+Z quay lại). <b>Số mầm</b> giữ kết quả ngẫu nhiên gi
 topic("catdoan", "Làm video", "scissors", "Cắt đoạn, crossfade, Intro / Outro", hero(
     "Cắt đoạn, crossfade, Intro / Outro", "Làm chỗ nối mượt, bỏ phần thừa đầu / cuối clip, thêm đoạn mở đầu / kết thúc cố định.",
     (("Mở trang Video", "app:video"),)) + """
-<h2>Đoạn lấy — chỉ dùng phần giữa clip</h2>""" + flow_blocks([("bỏ 2s đầu", GREY), ("dùng 2s → 8s", T["accent"]), ("bỏ 2s cuối", GREY)]) + """
+<h2>Đoạn lấy — chỉ dùng phần giữa clip</h2>""" + flow_blocks([("bỏ 2s đầu", GREY), ("dùng 2s → 8s", "@c:accent@"), ("bỏ 2s cuối", GREY)]) + """
 <p>Bấm đúp ô <b>Đoạn lấy</b>: hộp thoại có trình phát tự lặp đúng đoạn đã chọn. Kéo 2 tay nắm, hoặc phát tới chỗ muốn cắt
 rồi bấm <i>Đặt điểm đầu tại đây</i> / <i>Đặt điểm cuối tại đây</i> (phím <span class="k">I</span> / <span class="k">O</span>,
 <span class="k">Space</span> phát / dừng). Đoạn cắt áp cho <b>mọi lần</b> loop. Bấm <b>Lưu đoạn cắt</b> để áp dụng.</p>
@@ -702,14 +702,26 @@ topic("caidat", "Khác", "settings", "Cài đặt & card đồ hoạ", hero(
     "Cài đặt & card đồ hoạ", "Kiểm tra máy có dùng được card đồ hoạ để xuất nhanh không, và các tuỳ chọn hệ thống.",
     (("Mở Cài đặt", "app:settings"),)) + img("settings") + legend([
     ("Thông số máy", "hệ điều hành, CPU, RAM, card đồ hoạ (driver, VRAM, nhiệt độ), CUDA, ổ đĩa."),
-    ("FFmpeg &amp; tăng tốc", "✓ xanh = dùng được: NVIDIA <b>NVENC</b>, Intel <b>Quick Sync</b>, AMD <b>AMF</b>, giải mã <b>CUDA</b>. Chỉ cần <b>một</b> dòng xanh là xuất nhanh.")]) + """
+    ("FFmpeg &amp; tăng tốc", "✓ xanh = dùng được: NVIDIA <b>NVENC</b>, Intel <b>Quick Sync</b>, AMD <b>AMF</b>, giải mã <b>CUDA</b>. Chỉ cần <b>một</b> dòng xanh là xuất nhanh."),
+    ("Giao diện", "<b>Tối</b> / <b>Sáng</b> / <b>Theo Windows</b> — bấm là màu hoà dần sang ngay (xem dưới).")]) + """
 <ul>
 <li><b>Kiểm tra lại phần cứng</b>: đọc lại thông số sau khi cắm / cập nhật driver card đồ hoạ.</li>
 <li><b>Đo tốc độ mã hoá</b> (khoảng 30 giây): mã hoá thử bằng từng bộ mã hoá (×10 = nhanh gấp 10 lần thời gian thực).</li>
 <li>Thư mục xuất mặc định, <b>mở thư mục</b> / <b>âm báo</b> khi xuất xong, cỡ chữ.</li>
-<li><b>Màu chủ đạo</b> (Giao diện hiển thị): <i>Tím neon</i> (mặc định), <i>Đại dương</i>, <i>Hoàng hôn</i>,
-<i>Tím xanh</i> (như bản cũ) — đổi là thấy ngay. Vài biểu tượng nhỏ đổi màu hẳn sau khi mở lại app.
-<b>Xem lại màn hình chào</b> cũng ở đây.</li>
+<li><b>Giao diện</b> (Giao diện hiển thị) — ba nút:
+<ul>
+<li><b>Tối</b> (mặc định): nền tối, chữ sáng — dịu mắt khi làm buổi tối, xem video rõ màu.</li>
+<li><b>Sáng</b>: nền sáng, chữ đậm — dễ đọc ở phòng nhiều ánh sáng.</li>
+<li><b>Theo Windows</b>: app sáng hay tối theo Windows (Cài đặt Windows → Cá nhân hoá → Màu sắc → <i>Chọn chế độ ứng
+dụng</i>). Bên cạnh nút ghi rõ Windows đang để Sáng hay Tối; Windows đổi là app đổi theo ngay, không cần mở lại.</li>
+</ul></li>
+<li><b>Màu chủ đạo</b>: <i>Tím neon</i> (mặc định), <i>Đại dương</i>, <i>Hoàng hôn</i>, <i>Tím xanh</i> (như bản cũ).
+Dùng được với cả Sáng lẫn Tối — ở chế độ Sáng, chữ màu nhấn tự đậm hơn cho dễ đọc trên nền trắng.</li>
+<li>Đổi Giao diện hay Màu chủ đạo: màu cũ <b>hoà dần</b> sang màu mới trong khoảng nửa giây, cả trang dài, bảng nhiều
+dòng lẫn hộp thoại đang mở — không nháy, không phải mở lại app. Thanh tiêu đề cửa sổ Windows cũng đổi sáng / tối theo.
+Lựa chọn được nhớ <b>theo từng tài khoản Windows</b>: máy dùng chung thì mỗi người một kiểu. Màu giao diện chỉ để nhìn,
+không ảnh hưởng tới video xuất ra.</li>
+<li><b>Xem lại màn hình chào</b> cũng ở mục Giao diện hiển thị.</li>
 <li><b>Tắt máy khi chạy xong hàng đợi</b> (có 2 phút để huỷ) — chỉ có tác dụng tới khi tắt app, lần mở sau phải tick lại.</li>
 <li><b>Lưu vào Google Drive / OneDrive: xuất ra máy trước rồi tự chép lên</b> (mặc định bật) — chỉ có tác dụng khi thư mục
 lưu nằm trên Drive. Tắt thì ghi thẳng lên Drive như thư mục thường (video dài dễ lỗi ở bước cuối).</li>
@@ -983,6 +995,8 @@ class HelpPage(QWidget):
         self._last_w = 0
         self._stale = False
         self.toc.setCurrentItem(self._items[self._current])
+        # đổi bộ màu / Sáng ↔ Tối: dựng lại trang đang đọc với màu mới (nội dung chỉ ghi @c:tên@)
+        theme.on_change(self, lambda pg: pg.refresh_font())
 
     # ---------- hiển thị ----------
     def show_topic(self, tid: str) -> None:
@@ -1032,7 +1046,7 @@ class HelpPage(QWidget):
         k = [t[0] for t in TOPICS].index(tid)
         self.nav.set_neighbours((TOPICS[k - 1][0], TOPICS[k - 1][3]) if k > 0 else None,
                                 (TOPICS[k + 1][0], TOPICS[k + 1][3]) if k < len(TOPICS) - 1 else None)
-        html = re.sub(r"@IMG:([\w-]+)@", self._img_tag, html)
+        html = _tokens(re.sub(r"@IMG:([\w-]+)@", self._img_tag, html))
         pos = self.view.verticalScrollBar().value()
         self.view.document().setDefaultStyleSheet(css())
         self.view.setHtml(html)

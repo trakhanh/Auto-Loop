@@ -55,7 +55,7 @@ class StepCard(QFrame):
         badge.setFixedSize(26, 26)
         badge.setAlignment(Qt.AlignmentFlag.AlignCenter)
         ico = QLabel()
-        ico.setPixmap(icons.pixmap(ic, 18, color))
+        icons.set_label(ico, icons.pixmap(ic, 18, color))
         top.addWidget(badge)
         top.addWidget(ico)
         top.addWidget(_label(title, "welcomeStepTitle", wrap=False), 1)
@@ -104,7 +104,7 @@ class WelcomeOverlay(QWidget):
         for k, (ic, color, title, desc) in enumerate(STEPS):
             if k:
                 arrow = QLabel()
-                arrow.setPixmap(icons.pixmap("arrow_right", 14, "text_muted"))
+                icons.set_label(arrow, icons.pixmap("arrow_right", 14, "text_muted"))
                 arrow.setAlignment(Qt.AlignmentFlag.AlignCenter)
                 self._arrows.append(arrow)
                 self.steps_box.addWidget(arrow)

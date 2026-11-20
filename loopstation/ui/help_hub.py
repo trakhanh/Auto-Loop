@@ -34,6 +34,9 @@ FIRST_STEPS = (
 )
 # "Có gì mới" của bản đang chạy — hiện ở đầu trang Tổng quan (sửa cùng lúc với APP_VERSION khi ra bản mới)
 WHATS_NEW = (
+    ("sun", "Giao diện Sáng / Tối, đổi màu hoà dần",
+     "Cài đặt → Giao diện hiển thị → Giao diện: Tối, Sáng hoặc Theo Windows (Windows đổi là app đổi theo). Đổi bộ màu "
+     "hay Sáng / Tối, màu cũ hoà dần sang màu mới, không nháy, không khựng. Mỗi người dùng máy nhớ lựa chọn riêng."),
     ("film", "Clip khác fps: bạn chọn clip giữ nguyên",
      "Content 30 fps + loop 24 fps: trang Xuất liệt kê từng clip, chọn clip cần giữ nguyên. Đề xuất ghi rõ: giữ fps "
      "cao thì mọi clip còn lại buộc phải nâng lên fps đó (lặp khung, không mất khung)."),

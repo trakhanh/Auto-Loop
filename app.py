@@ -68,7 +68,8 @@ def main() -> int:
         font_pt = int(prefs.value("pref/font_pt", 10))
     except (TypeError, ValueError):
         font_pt = 10
-    theme.apply(app, font_pt, str(prefs.value("pref/palette", theme.PALETTE) or theme.PALETTE))
+    theme.apply(app, font_pt, str(prefs.value("pref/palette", theme.PALETTE) or theme.PALETTE),
+                str(prefs.value("pref/theme_mode", theme.MODE) or theme.MODE))
     _install_error_log()
 
     selftest_mode = "--selftest" in sys.argv

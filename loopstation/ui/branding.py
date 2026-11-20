@@ -85,14 +85,15 @@ def set_windows_app_id() -> None:
 
 
 def apply_window_frame(widget) -> None:
-    """Đồng bộ thanh tiêu đề và viền cửa sổ Windows 10/11 sang tông tối, ánh màu chủ đạo đang chọn."""
+    """Đồng bộ thanh tiêu đề và viền cửa sổ Windows 10/11 theo chế độ Sáng / Tối, ánh màu chủ đạo đang chọn."""
     if sys.platform != "win32":
         return
     try:
         import ctypes
         hwnd = int(widget.winId())
         dwm = ctypes.windll.dwmapi
-        dark = ctypes.c_int(1)
+        from . import theme
+        dark = ctypes.c_int(0 if theme.LIGHT else 1)
         # DWMWA_USE_IMMERSIVE_DARK_MODE (20, dự phòng 19 cho Windows 10 cũ)
         dwm.DwmSetWindowAttribute(hwnd, 20, ctypes.byref(dark), ctypes.sizeof(dark))
         dwm.DwmSetWindowAttribute(hwnd, 19, ctypes.byref(dark), ctypes.sizeof(dark))
@@ -100,7 +101,6 @@ def apply_window_frame(widget) -> None:
         corner = ctypes.c_int(2)
         dwm.DwmSetWindowAttribute(hwnd, 33, ctypes.byref(corner), ctypes.sizeof(corner))
         # viền + thanh tiêu đề theo bộ màu đang chọn (COLORREF = 0x00BBGGRR)
-        from . import theme
 
         def colorref(hex_color: str) -> ctypes.c_uint32:
             c = theme.QColor(hex_color)

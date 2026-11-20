@@ -33,6 +33,23 @@ All tokens live in ONE dict in `theme.py` (`T`, replacing today's `C`; keep `C` 
 
 Rule: a child is always one step lighter than its parent (`bg` -> `panel` -> `raised` -> `overlay`) except `field`, which is an inset well (darker than parent).
 
+### 1.1b Light mode (Cài đặt → Giao diện: Tối / Sáng / Theo Windows)
+
+`theme.MODE` = user choice (`pref/theme_mode`: `dark` | `light` | `system`), `theme.LIGHT` = what is shown (`system` asks
+Windows via `QStyleHints.colorScheme`, fallback registry `AppsUseLightTheme`). `build_tokens(key, light)` overlays
+`_NEUTRAL_LIGHT` (bg `#eceef4`, panel / overlay `#ffffff`, raised `#f0f2f7`, field `#f6f7fa`, 2.5 % accent tint) and
+`_FIXED_LIGHT` (dark text, light lines, darker semantic `*_text`). Light `accent_text` / `accent_soft` = the accent
+darkened until >= 4.8:1 on bg / panel / raised. Mode-aware helper tokens: `tint` (translucent hover overlay; white on dark,
+near-black on light — never write `rgba('#ffffff', …)`), `text_hi` (selected tab text, checked / hovered icon), `knob`
+(slider handle, radio dot), `hover_bg` (secondary button hover). `white` / `black` stay literal for text on video and
+coloured blocks. `tests/test_theme_mode.py` checks every palette x mode for >= 4.5:1 text contrast.
+
+Switching: `motion.crossfade(fn)` snapshots each open window into a frameless tool window on top, runs `fn` (theme.apply)
+underneath, then fades the snapshot out with `windowOpacity` (DWM blends it, so long tables cost nothing per frame).
+`theme.apply` clears the app QSS before setting the new one (~6x faster than replacing it directly) and never re-sets the
+style. Icons from `icons.icon` / `icons.pixmap` / `brand.*` are re-rendered by `icons.recolor_all` (use
+`icons.set_label` for QLabel pixmaps); item / rich-text colours baked from tokens are remapped by `theme.retint`.
+
 ### 1.2 Lines
 
 | Token | Hex | Use |

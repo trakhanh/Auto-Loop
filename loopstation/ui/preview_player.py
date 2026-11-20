@@ -1054,7 +1054,7 @@ class VideoView(QWidget):
             p.setPen(Qt.PenStyle.NoPen)
             p.setBrush(theme.qcolor("black", 210))
             p.drawRoundedRect(r, 9, 9)
-            p.setPen(theme.qcolor("text"))
+            p.setPen(theme.qcolor("white"))  # nhãn nền đen: chữ trắng ở cả chế độ Sáng / Tối
             p.drawText(r, Qt.AlignmentFlag.AlignCenter,
                        fm.elidedText(self.text, Qt.TextElideMode.ElideRight, int(tw) - 20))
 

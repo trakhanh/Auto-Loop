@@ -1,12 +1,12 @@
 """Logo nền tảng (vẽ lại dạng đơn giản bằng SVG) cho trang Tải video: dòng "Hỗ trợ", cột Nền tảng, màn hình trống.
-Màu lấy từ theme.BRAND (không ghi mã màu ở đây)."""
+Màu lấy từ theme.brand_colors() (không ghi mã màu ở đây; chế độ Sáng đổi logo X sang màu đậm)."""
 from __future__ import annotations
 
 from PySide6.QtCore import QByteArray, QRectF, Qt
 from PySide6.QtGui import QIcon, QPainter, QPixmap
 from PySide6.QtSvg import QSvgRenderer
 
-from . import theme
+from . import icons, theme
 
 SHOWN = ("YouTube", "TikTok", "Douyin", "Bilibili", "Facebook", "X", "Instagram")
 _NOTE = "M13 4v10.2a3.2 3.2 0 1 1-3.2-3.2"
@@ -37,12 +37,12 @@ _cache: dict[tuple[str, int, float], QPixmap] = {}
 
 
 def svg(platform: str) -> str:
-    body = _SVG.get(platform, _SVG["_other"]).format(**theme.BRAND)
+    body = _SVG.get(platform, _SVG["_other"]).format(**theme.brand_colors())
     return f'<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24">{body}</svg>'
 
 
 def pixmap(platform: str, size: int, dpr: float = 2.0) -> QPixmap:
-    key = (platform, size, dpr)
+    key = (platform, size, dpr, theme.LIGHT)
     if key not in _cache:
         px = int(size * dpr)
         pm = QPixmap(px, px)
@@ -52,9 +52,15 @@ def pixmap(platform: str, size: int, dpr: float = 2.0) -> QPixmap:
         QSvgRenderer(QByteArray(svg(platform).encode())).render(p, QRectF(0, 0, px, px))
         p.end()
         pm.setDevicePixelRatio(dpr)
-        _cache[key] = pm
+        _cache[key] = icons.track_pixmap(pm, lambda: pixmap(platform, size, dpr))
     return _cache[key]
 
 
+_icons: dict[tuple[str, int, bool], QIcon] = {}
+
+
 def icon(platform: str, size: int = 16) -> QIcon:
-    return QIcon(pixmap(platform, size))
+    key = (platform, size, theme.LIGHT)
+    if key not in _icons:
+        _icons[key] = icons.track_icon(QIcon(pixmap(platform, size)), lambda: icon(platform, size))
+    return _icons[key]

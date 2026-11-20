@@ -402,7 +402,7 @@ class DownloadPage(QWidget):
             cl.setContentsMargins(6, 3, 9, 3)
             cl.setSpacing(5)
             logo = QLabel()
-            logo.setPixmap(brand.pixmap(name, 16))
+            icons.set_label(logo, brand.pixmap(name, 16))
             cl.addWidget(logo)
             cl.addWidget(QLabel(name))
             flow.addWidget(chip)
@@ -676,7 +676,7 @@ class DownloadPage(QWidget):
         self.empty_logos: list[QLabel] = []
         for name in brand.SHOWN:
             lab = QLabel()
-            lab.setPixmap(brand.pixmap(name, 30))
+            icons.set_label(lab, brand.pixmap(name, 30))
             lab.setToolTip(name)
             logos.addWidget(lab)
             self.empty_logos.append(lab)

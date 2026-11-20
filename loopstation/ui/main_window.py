@@ -95,6 +95,20 @@ def backups_to_drop(files: list[Path]) -> list[Path]:
     return [f for f in files if f not in keep]
 
 
+def _new_tag() -> QLabel:
+    """Nhãn "MỚI" trên nút thanh bên: luôn đủ rộng cho chữ, kể cả sau khi đổi cỡ chữ / giao diện (không bị cắt)."""
+    tag = QLabel("MỚI")
+    tag.setObjectName("newTag")
+    tag.setFixedHeight(18)
+
+    def fit(t: QLabel) -> None:
+        t.ensurePolished()  # cỡ chữ QSS (Cài đặt → Cỡ chữ) chỉ có sau khi polish: đo trước đó là thiếu chỗ
+        t.setMinimumWidth(t.sizeHint().width())
+    fit(tag)
+    theme.on_change(tag, fit)
+    return tag
+
+
 class MainWindow(QMainWindow):
     def __init__(self):
         super().__init__()
@@ -177,6 +191,10 @@ class MainWindow(QMainWindow):
         self.settings_page = SettingsPage(self.settings)
         self.settings_page.shutdown.toggled.connect(lambda _on: self._queue_running and self._mark_queue_running(True))
         self.settings_page.prefsChanged.connect(self._apply_prefs)
+        try:  # "Theo Windows": Windows đổi Sáng / Tối thì app đổi theo ngay
+            QApplication.styleHints().colorSchemeChanged.connect(self._on_system_scheme)
+        except AttributeError:
+            pass
         self.settings_page.recheckRequested.connect(lambda: self._detect_encoders(force=True))
         sp = QScrollArea()
         sp.setWidget(self.settings_page)
@@ -516,10 +534,7 @@ class MainWindow(QMainWindow):
             inner = QHBoxLayout(self.download_btn)  # nhãn MỚI nằm trong nút (tới khi mở trang lần đầu)
             inner.setContentsMargins(0, 0, 8, 0)
             inner.addStretch(1)
-            self.download_tool_new = QLabel("MỚI")
-            self.download_tool_new.setObjectName("newTag")
-            self.download_tool_new.setFixedHeight(18)
-            self.download_tool_new.setMinimumWidth(self.download_tool_new.sizeHint().width())
+            self.download_tool_new = _new_tag()
             inner.addWidget(self.download_tool_new, 0, Qt.AlignmentFlag.AlignVCenter)
         self.cut_btn = QPushButton("  Cắt video")
         self.cut_btn.setObjectName("nav")
@@ -535,10 +550,7 @@ class MainWindow(QMainWindow):
             inner = QHBoxLayout(self.cut_btn)  # nhãn MỚI nằm trong nút (tới khi mở trang lần đầu)
             inner.setContentsMargins(0, 0, 8, 0)
             inner.addStretch(1)
-            self.cut_tool_new = QLabel("MỚI")
-            self.cut_tool_new.setObjectName("newTag")
-            self.cut_tool_new.setFixedHeight(18)
-            self.cut_tool_new.setMinimumWidth(self.cut_tool_new.sizeHint().width())
+            self.cut_tool_new = _new_tag()
             inner.addWidget(self.cut_tool_new, 0, Qt.AlignmentFlag.AlignVCenter)
         sv.addSpacing(6)
         sv.addWidget(lbl_steps)
@@ -590,10 +602,7 @@ class MainWindow(QMainWindow):
                 inner = QHBoxLayout(b)  # nhãn MỚI nằm trong nút (tới khi mở công cụ lần đầu)
                 inner.setContentsMargins(0, 0, 8, 0)
                 inner.addStretch(1)
-                self.denoise_tool_new = QLabel("MỚI")
-                self.denoise_tool_new.setObjectName("newTag")
-                self.denoise_tool_new.setFixedHeight(18)
-                self.denoise_tool_new.setMinimumWidth(self.denoise_tool_new.sizeHint().width())  # không bị ép hẹp
+                self.denoise_tool_new = _new_tag()
                 inner.addWidget(self.denoise_tool_new, 0, Qt.AlignmentFlag.AlignVCenter)
 
         self._update_text = ""
@@ -1856,12 +1865,15 @@ class MainWindow(QMainWindow):
         app = QApplication.instance()
         from . import theme
         pal = str(self.settings.value("pref/palette", theme.PALETTE) or theme.PALETTE)
-        if pal in theme.PALETTES and pal != theme.PALETTE:  # đổi bộ màu: dựng lại QSS, vẽ lại phần tự vẽ
-            theme.apply(app, theme.FONT_PT, pal)
-            for wd in QApplication.allWidgets():
-                wd.update()
-            branding.apply_window_frame(self)
-            self.notify(f"Đã đổi màu chủ đạo: {theme.PALETTES[pal][0]}", "ok", 2500)
+        mode = str(self.settings.value("pref/theme_mode", theme.MODE) or theme.MODE)
+        pal = pal if pal in theme.PALETTES else theme.PALETTE
+        mode = mode if mode in theme.MODES else theme.MODE
+        if pal != theme.PALETTE or mode != theme.MODE:
+            msg = (f"Đã đổi màu chủ đạo: {theme.PALETTES[pal][0]}" if pal != theme.PALETTE
+                   else f"Giao diện: {theme.MODES[mode]}"
+                   + (f" (đang {'sáng' if theme.resolve_light(mode) else 'tối'})" if mode == "system" else ""))
+            self._recolor(pal, mode)
+            self.notify(msg, "ok", 2500)
         if theme.FONT_PT != pt:  # áp ngay: dựng lại QSS với cỡ chữ mới (chỉ setFont thì QSS lấn át, không đổi gì)
             theme.apply(app, pt)
             if self._help_page is not None:
@@ -1870,6 +1882,28 @@ class MainWindow(QMainWindow):
             self._update_header_chips_visibility()
             QTimer.singleShot(0, lambda: self.resizeEvent(None))
             self.notify(f"Đã đổi cỡ chữ: {pt}pt", "ok", 2500)
+
+    def _recolor(self, palette: str | None = None, mode: str | None = None) -> None:
+        """Đổi bộ màu / chế độ sáng tối: màu cũ hoà dần sang màu mới (motion.crossfade), cả hộp thoại đang mở."""
+        from . import theme
+        app = QApplication.instance()
+
+        def change():  # không truyền gì = dựng lại theo lựa chọn hiện tại (Windows vừa đổi Sáng / Tối)
+            theme.apply(app, theme.FONT_PT, palette or theme.PALETTE, mode or theme.MODE)
+            for wd in QApplication.allWidgets():
+                wd.update()  # phần tự vẽ (timeline, sóng âm…) đọc màu lúc vẽ
+            for top in QApplication.topLevelWidgets():
+                if top.isWindow() and top.isVisible() and top.objectName() != "themeFade":
+                    branding.apply_window_frame(top)  # thanh tiêu đề Windows sáng / tối theo app
+
+        motion.crossfade(change)
+
+    def _on_system_scheme(self, *_) -> None:
+        """Windows đổi Sáng ↔ Tối khi người dùng chọn "Theo Windows": app đổi theo, hoà dần."""
+        from . import theme
+        if theme.MODE == "system" and theme.resolve_light("system") != theme.LIGHT:
+            self._recolor()
+            self.notify(f"Windows chuyển sang {'Sáng' if theme.LIGHT else 'Tối'} — app đổi theo", "ok", 2500)
 
     def _on_encoders(self, available: dict) -> None:
         self.export_tab.set_available(available)

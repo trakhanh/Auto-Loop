@@ -1,6 +1,6 @@
 r"""Capture UI screenshots of every main page (offscreen, isolated data + settings).
 
-Run:  .venv\Scripts\python.exe tools\shots.py [--out docs\ui\before] [--palette neon] [--font 10]
+Run:  .venv\Scripts\python.exe tools\shots.py [--out docs\ui\before] [--palette neon] [--mode dark|light] [--font 10]
 Writes 1440x900 PNGs. Nothing touches the user's real settings or data.
 """
 import argparse
@@ -12,6 +12,7 @@ ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 ap = argparse.ArgumentParser()
 ap.add_argument("--out", default=os.path.join(ROOT, "docs", "ui", "before"))
 ap.add_argument("--palette", default="neon")
+ap.add_argument("--mode", default="dark", choices=["dark", "light"])
 ap.add_argument("--font", type=int, default=10)
 ap.add_argument("--w", type=int, default=1440)
 ap.add_argument("--h", type=int, default=900)
@@ -31,13 +32,15 @@ from PySide6.QtWidgets import QApplication  # noqa: E402
 
 app = QApplication([])
 from loopstation.ui import theme  # noqa: E402
-theme.apply(app, args.font, args.palette)
+theme.apply(app, args.font, args.palette, args.mode)
 import loopstation.ui.main_window as mw  # noqa: E402
 
 ini = os.path.join(scratch, "settings.ini")
 mw.QSettings = lambda org, name: QSettings(ini, QSettings.Format.IniFormat)
 _seed = QSettings(ini, QSettings.Format.IniFormat)
 _seed.setValue("pref/font_pt", args.font)  # MainWindow re-reads the font pref, so seed it
+_seed.setValue("pref/palette", args.palette)
+_seed.setValue("pref/theme_mode", args.mode)
 _seed.sync()
 
 
@@ -97,5 +100,9 @@ win.go_to(3)
 shot(win, "08-settings")
 win.go_to(4)
 shot(win, "09-help")
+win.go_to(mw.DOWNLOAD_PAGE)
+shot(win, "10-download")
+win.go_to(mw.CUT_PAGE)
+shot(win, "11-cut")
 sys.stdout.flush()
 os._exit(0)
