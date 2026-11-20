@@ -226,3 +226,23 @@ YouTube; vị trí nút Kiểm tra bản mới / Gỡ trong Cài đặt.
   nền tảng vào thư mục tạm.
 - Mọi test chạy cô lập: `KTLS_DATA_DIR` thư mục tạm, `KTLS_SETTINGS_ORG=KTLoopStation-Test`, `KTLS_NO_UPDATE=1`,
   `QT_QPA_PLATFORM=offscreen`.
+
+## 2c. Làm lại giao diện cho dễ nhìn + thêm tuỳ chọn (anh Khánh duyệt 2026-11-20, sau khi xem bản đầu)
+Phản hồi: bảng trống chiếm hết chiều cao, đẩy các tuỳ chọn và nút Tải xuống dưới mép cửa sổ; ô dán link dùng chữ
+kiểu máy tính; không có hướng dẫn khi trống.
+
+- **Bố cục 2 cột:** trái = ô dán link (chữ thường, có dòng nền tảng hỗ trợ) + danh sách; phải = thẻ **Cài đặt tải**
+  luôn hiện (rộng ~300 px, tự cuộn riêng nếu cao). Cửa sổ hẹp → thẻ chuyển xuống dưới danh sách.
+- **Thanh dưới luôn trong màn hình:** "Đã chọn N video · tóm tắt cài đặt" … [⋯] [Mở thư mục] [⬇ Tải N video] (Dừng khi
+  đang tải).
+- **Danh sách:** trống → hướng dẫn 3 bước (Dán link → Đọc link → chọn rồi Tải). Cột nền tảng là nhãn màu theo nền tảng;
+  cột trạng thái có thanh tiến độ màu (vẽ bằng delegate, màu lấy token `theme.py`).
+- **Thẻ Cài đặt tải:** Định dạng (nút chọn: MP4 · MKV gốc · MP3 · M4A), Chất lượng (Cao nhất · 1080p · 720p · 480p;
+  với MP3: 320 · 192 · 128 kbps), Lưu vào (Đổi / Mở), Đăng nhập ▾, ☐ Lưu ảnh bìa (.jpg), ☐ Lưu tiêu đề + mô tả (.txt),
+  ☐ Tải xong mở thư mục; **Nâng cao ▸** (gấp): phụ đề, tên file, thư mục con, tải cùng lúc, giới hạn tốc độ, mỗi lần đọc
+  kênh, bỏ tick video dài hơn (Không / 10 / 30 / 60 phút), ghi thông tin vào file, tham số thêm, Về mặc định.
+- **Tuỳ chọn mới:** MKV gốc (`-S res[:N]` không ép H.264, `--merge-output-format mkv`); MP3 kbps (`--audio-quality 320K`);
+  ảnh bìa (`--write-thumbnail --convert-thumbnails jpg`); tiêu đề + mô tả → app tự ghi `<tên file>.txt` từ
+  `--print after_move:KTLS_META|%(.{title,uploader,webpage_url,upload_date,description})j`; tên "Số thứ tự – Tiêu đề"
+  (số = vị trí trong nhóm, app ghi thẳng vào mẫu tên; video lẻ dùng "Tiêu đề"); bỏ tick video dài hơn N phút khi đọc
+  kênh (gợi ý — người dùng vẫn tick lại được); tải xong mở thư mục.
