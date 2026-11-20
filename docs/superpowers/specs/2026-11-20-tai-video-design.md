@@ -26,7 +26,8 @@ File tải về **chỉ lưu vào thư mục**. Không tự đưa vào bảng cl
 - Không làm bộ cài nặng thêm (giữ ~195 MB).
 - Không thêm chữ dài lên giao diện (phản hồi "rối, nhiều chữ" của 2026-11-18): giải thích đưa vào chú thích (tooltip)
   và trang Hướng dẫn.
-- Không làm: chỉ tải tiếng (MP3), phụ đề, chọn định dạng thủ công, hẹn giờ tải, tải song song nhiều video.
+- Không làm: hẹn giờ tải, proxy, SponsorBlock, lọc kênh theo ngày đăng (cần đọc đầy đủ từng video → rất chậm).
+  (Chỉ tải tiếng, phụ đề, tải song song… ban đầu không làm, nay có trong khung **Tuỳ chỉnh** — mục 2b.)
 
 ## Lưu ý pháp lý (ghi để anh nắm, không chặn trong app)
 Chỉ nên tải nội dung công ty có quyền dùng (video của mình, nội dung cho phép dùng lại, đã mua bản quyền). Tải video
@@ -95,6 +96,33 @@ nhắc; app không chặn.
 - Dòng **Công cụ tải** nhỏ, mờ ở chân trang: phiên bản; khi vừa tự cập nhật: "Đã cập nhật công cụ tải lên bản …".
 - Màu, chữ dùng token `theme.py`; không mã hex trực tiếp; không thêm `setStyleSheet` (giới hạn 3 lần trong
   `loopstation/ui` ngoài theme.py).
+
+### 2b. Tuỳ chỉnh (anh Khánh, 2026-11-20: "làm cho tuỳ chỉnh luôn, tham khảo các tool trên thị trường")
+Tham khảo 4K Video Downloader, Stacher, Seal, Parabolic, Open Video Downloader — chọn những tuỳ chỉnh có ích cho việc
+tham khảo / đăng lại. *(Danh sách là quyết định của người làm thiết kế.)*
+
+Một nút **Tuỳ chỉnh ▾** ở thanh dưới; khi gấp chỉ hiện một dòng tóm tắt (vd "MP4 · phụ đề: không · tên: Nền tảng –
+Tiêu đề · 1 video/lần"), mở ra là một lưới gọn. Nhớ trạng thái mở / gấp và mọi giá trị trong `QSettings`
+(`download/opt/<tên>`). Áp cho video bắt đầu tải sau khi đổi. Nút **Về mặc định** đưa tất cả về giá trị mặc định.
+
+| Tuỳ chỉnh | Lựa chọn (mặc định in đậm) | yt-dlp |
+|---|---|---|
+| Định dạng | **Video MP4** · Chỉ tiếng MP3 · Chỉ tiếng M4A | MP3/M4A: `-x --audio-format mp3|m4a --audio-quality 0` (bỏ `-S` độ phân giải) |
+| Chất lượng (ô ở thanh dưới) | Cao nhất · **1080p** · 720p · 480p | `-S res[:N],vcodec:h264,acodec:aac` |
+| Phụ đề | **Không** · Tải kèm file .srt · Gắn vào video | `--write-subs --write-auto-subs --sub-langs "vi.*,en.*" --convert-subs srt` (+ `--embed-subs`) |
+| Tên file | **Nền tảng – Tiêu đề** · Tiêu đề · Ngày đăng – Tiêu đề · Kênh – Tiêu đề | mẫu `-o`; luôn kèm ` [%(id)s]` ở cuối tên để nhận file đã có |
+| Thư mục con | **Không** · Theo nền tảng · Theo kênh | tiền tố `%(extractor_key)s/` hoặc `%(uploader)s/` trong `-o` |
+| Tải cùng lúc | **1** · 2 · 3 video | số tiến trình yt-dlp chạy song song |
+| Giới hạn tốc độ | **Không** · 5 MB/s · 2 MB/s · 1 MB/s (mỗi video) | `-r 5M` … |
+| Mỗi lần đọc kênh | 20 · **50** · 100 · 200 video | `--playlist-end` / "Hiện thêm N" |
+| Ghi thông tin vào file | ☐ (tiêu đề, kênh, mô tả, ảnh bìa) | `--embed-metadata --embed-thumbnail` |
+| Tham số thêm cho yt-dlp | ô trống (cho người rành) | nối cuối lệnh, tách bằng `shlex` (posix=False); chú thích cảnh báo |
+
+Riêng từng video (chuột phải dòng): **Chỉ tải đoạn…** — hộp nhỏ Từ / Đến (mm:ss hoặc hh:mm:ss) →
+`--download-sections "*A-B" --force-keyframes-at-cuts`; cột trạng thái ghi "đoạn 1:00–2:30". Bỏ đoạn → tải cả video.
+
+Hệ quả cho phần khác: "Tải cùng lúc" > 1 → nhiều dòng "đang tải" một lúc; **Dừng** dừng tất cả, mọi dòng đang tải
+về "Chờ". Nhận file đã có vẫn theo `[id]` trong tên (mọi mẫu tên đều có), tìm trong cả thư mục con.
 
 ### 3. Cài công cụ lần đầu và tự cập nhật (`loopstation/core/dl_tools.py`)
 - Công cụ cất ở `ffmpeg_tools.data_dir() / "tools"` (`yt-dlp.exe`, `deno.exe`) — test dùng `KTLS_DATA_DIR` nên
