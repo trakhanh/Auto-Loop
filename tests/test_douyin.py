@@ -150,3 +150,15 @@ def test_download_no_range_support_falls_back(tmp_path, monkeypatch):
     _range_server(monkeypatch, data, ranges=False)
     out = douyin.download("https://v/a", tmp_path / "v.mp4", "UA", None, threading.Event(), parts=4)
     assert out.read_bytes() == data
+
+
+def test_parse_grab_drops_page_assets():
+    """Thử thật link 7707598997954874674: trang có một <video> là file tĩnh của Douyin (douyinstatic.com) hiện trước
+    video thật → app tải nhầm. Bỏ file tĩnh; link /aweme/v1/play/ (cần cookie trình duyệt) xếp sau link CDN."""
+    g = douyin.parse_grab({"title": "A", "srcs": [
+        "https://lf-douyin-pc-web.douyinstatic.com/obj/douyin-pc-web/intro.mp4",
+        "https://www.douyin.com/aweme/v1/play/?aid=6383&video_id=x",
+        "https://v5-hl-mly-ov.zjcdn.com/abc/video/tos/x"]}, "https://www.douyin.com/video/1")
+    assert g["srcs"] == ["https://v5-hl-mly-ov.zjcdn.com/abc/video/tos/x",
+                         "https://www.douyin.com/aweme/v1/play/?aid=6383&video_id=x"]
+    assert "video-detail" in douyin.JS_GRAB and "player-container" in douyin.JS_GRAB

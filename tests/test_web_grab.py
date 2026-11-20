@@ -65,3 +65,17 @@ def test_verify_page_opens_window_and_continues_there(tmp_path):
     out = run_probe(page, "30", "40", "verify")
     assert out.get("verifying") and out["grabbed"]["srcs"] == ["https://v.zjcdn.com/ok.mp4"]
     assert out["grabbed"]["title"] == "Đã qua"
+
+
+def test_ignores_decoy_video_takes_main_player(tmp_path):
+    """Trang Douyin thật: <video> khác (file tĩnh của trang) có trước; video thật nằm trong khung trình phát chính."""
+    page = tmp_path / "video" / "7707598997954874674.html"
+    page.parent.mkdir()
+    page.write_text('<html><head><meta charset="utf-8"><title>Video thật - 抖音</title></head><body data-e2e="root">'
+                    '<video src="https://lf-douyin-pc-web.douyinstatic.com/obj/douyin-pc-web/decoy.mp4"></video>'
+                    '<div id="main"></div><script>setTimeout(() => { document.getElementById("main").innerHTML ='
+                    '\'<div data-e2e="video-detail"><div data-e2e="player-container">'
+                    '<video src="https://v.zjcdn.com/main.mp4"></video></div></div>\'; }, 1500);</script></body></html>',
+                    encoding="utf-8")
+    out = run_probe(page)
+    assert out["grabbed"]["srcs"] == ["https://v.zjcdn.com/main.mp4"]

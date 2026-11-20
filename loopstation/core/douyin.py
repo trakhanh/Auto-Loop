@@ -21,7 +21,13 @@ _BAD = re.compile(r'[<>:"/\\|?*\x00-\x1f]+')
 
 # chạy trong trang: tiêu đề, link video, thời lượng, ảnh bìa, tên kênh
 JS_GRAB = """(() => {
-  const v = document.querySelector('video');
+  // chỉ video trong khung trình phát chính của trang (trang còn có <video> khác: file tĩnh, video gợi ý…);
+  // trang không có khung của Douyin (vd trang thử) thì lấy <video> đầu tiên
+  const main = document.querySelector('[data-e2e="video-detail"] video, [data-e2e="player-container"] video, ' +
+                                      '[data-e2e="feed-active-video"] video');
+  const v = main || (document.querySelector('[data-e2e="video-detail"], [data-e2e="player-container"]') ? null
+                     : (document.querySelector('[data-e2e]') && /douyin\\.com$/.test(location.hostname) ? null
+                        : document.querySelector('video')));
   const srcs = v ? [v.currentSrc, v.src, ...Array.from(v.querySelectorAll('source')).map(s => s.src)] : [];
   const meta = n => (document.querySelector(`meta[name="${n}"]`) || {}).content || '';
   const author = (document.querySelector('[data-e2e="user-info"] [data-e2e="user-name"], [data-e2e="video-author-name"]')
@@ -60,8 +66,9 @@ def parse_grab(data: dict, page_url: str) -> dict:
     title = re.sub(r"\s*[-–|]\s*抖音.*$", "", str(data.get("title") or "")).strip()
     srcs: list[str] = []
     for s in data.get("srcs") or []:
-        if isinstance(s, str) and s.lower().startswith(("http://", "https://")) and s not in srcs:
+        if isinstance(s, str) and s.lower().startswith(("http://", "https://")) and s not in srcs                 and "douyinstatic.com" not in s:  # file tĩnh của trang Douyin, không phải video
             srcs.append(s)
+    srcs.sort(key=lambda u: "/aweme/v1/play" in u)  # link CDN trước; link play (cần cookie trình duyệt) sau
     url = str(data.get("url") or page_url)
     try:
         dur = float(data.get("duration") or 0)
