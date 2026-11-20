@@ -679,6 +679,9 @@ topic("taivideo", "Công cụ", "download", "Tải video", hero(
                                "chỉ có H.265 / AV1 (TikTok, Bilibili, YouTube 2K/4K) thì app tự chuyển sang H.264 "
                                "bằng card đồ hoạ — mở được Premiere, CapCut."),
     ("Lưu kèm", "ảnh bìa (.jpg), tiêu đề + mô tả (.txt) cạnh video; tự mở thư mục khi xong."),
+    ("Douyin", "app tự mở trang bằng <b>trình duyệt riêng trong app</b> (chạy ngầm, không cần đăng nhập) để lấy video. "
+               "Nếu Douyin hỏi xác minh, một cửa sổ hiện ra: kéo thanh theo hướng dẫn, xong app tải tiếp. "
+               "Link trang cá nhân (/user/…) chưa hỗ trợ — dán link từng video."),
     ("Nâng cao", "phụ đề, mẫu tên file (có <b>Số thứ tự – Tiêu đề</b> cho danh sách phát), thư mục con theo kênh, "
                  "tải cùng lúc 2–3 video, giới hạn tốc độ, số video mỗi lần đọc kênh, bỏ tick video quá dài. "
                  "Chuột phải một video → <b>Chỉ tải đoạn…</b>."),
