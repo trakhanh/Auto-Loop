@@ -34,21 +34,20 @@ FIRST_STEPS = (
 )
 # "Có gì mới" của bản đang chạy — hiện ở đầu trang Tổng quan (sửa cùng lúc với APP_VERSION khi ra bản mới)
 WHATS_NEW = (
+    ("music", "Nhạc chạy từ clip nào: một dòng",
+     "Ngay trên dòng thời gian: ♪ Nhạc chạy từ clip … tới … · bài đầu …. Hoặc chuột phải khối clip → Nhạc bắt đầu / "
+     "dừng ở clip này, hay kéo mép dải nhạc."),
+    ("film", "Dòng thời gian kiểu Premiere",
+     "Ctrl + lăn chuột để zoom, lăn / kéo để trượt, nút − / + / Vừa khung; vạch phát tự cuộn theo, kéo rê mượt."),
+    ("chip", "Card NVIDIA + AMD giải mã video",
+     "Cắt video, xuất ảnh, tải video giải mã bằng card (NVIDIA CUDA, AMD / Intel D3D11); card không đọc được thì tự "
+     "dùng CPU. Tắt / bật ở Cài đặt."),
     ("sun", "Giao diện Sáng / Tối, đổi màu hoà dần",
      "Cài đặt → Giao diện hiển thị → Giao diện: Tối, Sáng hoặc Theo Windows (Windows đổi là app đổi theo). Đổi bộ màu "
      "hay Sáng / Tối, màu cũ hoà dần sang màu mới, không nháy, không khựng. Mỗi người dùng máy nhớ lựa chọn riêng."),
-    ("film", "Clip khác fps: bạn chọn clip giữ nguyên",
-     "Content 30 fps + loop 24 fps: trang Xuất liệt kê từng clip, chọn clip cần giữ nguyên. Đề xuất ghi rõ: giữ fps "
-     "cao thì mọi clip còn lại buộc phải nâng lên fps đó (lặp khung, không mất khung)."),
-    ("chip", "Nhanh hơn, mượt hơn toàn ứng dụng",
-     "Mở app, tạo ảnh nhỏ clip, tính lại dự án lớn, lọc tạp âm và xuất video từ ảnh tĩnh nhanh hơn rõ rệt; "
-     "playlist dài hàng giờ nối mượt, không nghẽn bộ nhớ; bộ cài gọn nhẹ hơn."),
     ("waves", "Lọc tạp âm như Premiere",
      "Bỏ gió, ù nền trong tiếng gốc clip, giữ tiếng bước chân, nước, lửa. Trang Video → Lọc tạp âm (hoặc Bảng trộn âm); "
      "lọc riêng file: thanh bên → Lọc tạp âm…"),
-    ("video", "Mẫu bảng nhận đủ kiểu tên Content",
-     "33_1_Content (mỗi tình huống), 33_Content (một lần đầu tập), Content.mp4. Bản tự lưu trùng tên mẫu có sẵn: Thư "
-     "viện mẫu → Khôi phục mẫu gốc."),
     ("upload", "Lưu thẳng vào Google Drive an toàn",
      "Thư mục lưu trên Drive / OneDrive: app xuất ra máy trước rồi tự chép lên khi xong — Drive chỉ nhận file đã hoàn "
      "chỉnh. Tắt / bật ở Cài đặt → Tuỳ chọn xuất video."),
