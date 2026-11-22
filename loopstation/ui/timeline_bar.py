@@ -15,7 +15,7 @@ from dataclasses import dataclass
 from fractions import Fraction
 
 from PySide6.QtCore import QEasingCurve, QPointF, QRectF, Qt, QVariantAnimation, Signal
-from PySide6.QtGui import QBrush, QColor, QFont, QLinearGradient, QPainter, QPainterPath, QPen
+from PySide6.QtGui import QBrush, QColor, QFont, QLinearGradient, QPainter, QPainterPath, QPen, QPixmap
 from PySide6.QtWidgets import QMenu, QToolTip, QWidget
 
 from ..core import planner
@@ -102,6 +102,13 @@ class TimelineBar(QWidget):
         self._edge: dict | None = None  # đang kéo mép đoạn nhạc: {"t0", "kind": start|end, "t"}
         self._edge_hover: int | None = None
         self._sweep: dict | None = None  # Alt + quét khối clip: {"on", "rows", "x0", "x"}
+        # Lớp vẽ sẵn: các khối, chữ, thước giờ vẽ một lần vào ảnh đệm; rê / kéo / vạch phát chỉ vẽ lớp trên cùng
+        # (trước đây mỗi lần nhích chuột vẽ lại hàng trăm khối → khựng). Vẽ lại khi dữ liệu / khung nhìn / cỡ / màu đổi.
+        self._data_ver = 0
+        self._static: QPixmap | None = None
+        self._static_for: tuple | None = None
+        self._sections: list[tuple[float, float]] | None = None
+        self._tip_last = ""
         self._mv: dict | None = None  # {"lane", "block", "clip", "x0", "x", "on", "slot"}
         self._caret_x: float | None = None  # vạch chèn đang vẽ (trượt mượt tới chỗ thả)
         self._land: tuple[QRectF, QRectF, str, str] | None = None  # bóng khối bay về chỗ thả sau khi nhả chuột
@@ -121,6 +128,8 @@ class TimelineBar(QWidget):
             self.unsetCursor()
         self.video, self.music, self.source = [], [], []
         self.music_only = False
+        self._data_ver += 1
+        self._sections = None
         if tl is None or not tl.ok or not tl.total:
             self.total = 0.0
             self.note = ((tl.errors[0] if tl.errors else "Chưa tính được dòng thời gian — kiểm tra lại cài đặt")
@@ -442,13 +451,16 @@ class TimelineBar(QWidget):
         return [self.music_rows[k] if k < len(self.music_rows) else True for k in range(n)]
 
     def _music_sections(self) -> list[tuple[float, float]]:
-        """Các đoạn có nhạc trên làn NHẠC (gộp các bài liền / chồng crossfade)."""
+        """Các đoạn có nhạc trên làn NHẠC (gộp các bài liền / chồng crossfade) — tính một lần cho mỗi lần dựng."""
+        if self._sections is not None:
+            return self._sections
         out: list[tuple[float, float]] = []
         for b in sorted(self.music, key=lambda b: b.start):
             if out and b.start <= out[-1][1] + 0.1:
                 out[-1] = (out[-1][0], max(out[-1][1], b.end))
             else:
                 out.append((b.start, b.end))
+        self._sections = out
         return out
 
     def _music_edges(self) -> list[tuple[float, str]]:
@@ -538,8 +550,8 @@ class TimelineBar(QWidget):
             menu.addAction(label, lambda f=flags: self.musicFlagsRequested.emit(f))
         menu.exec(e.globalPos())
 
-    def _draw_music_edit(self, p: QPainter, small) -> None:
-        """Khoảng không nhạc (gạch chéo mờ), tay nắm ở mép đoạn nhạc, phần sắp bật / tắt khi kéo mép hoặc quét."""
+    def _draw_music_gaps(self, p: QPainter, small) -> None:
+        """Khoảng không nhạc (gạch chéo mờ) — phần đứng yên, nằm trong lớp vẽ sẵn."""
         if not (self.use_music and self.video and self.music):
             return
         top, h = self._lane_y("m")
@@ -560,6 +572,12 @@ class TimelineBar(QWidget):
             if r.width() > 70:
                 p.setPen(theme.qcolor("text_muted"))
                 p.drawText(r, Qt.AlignmentFlag.AlignCenter, "không nhạc")
+
+    def _draw_music_edit(self, p: QPainter, small) -> None:
+        """Tay nắm ở mép đoạn nhạc, phần sắp bật / tắt khi kéo mép hoặc quét — lớp trên, vẽ lại mỗi lần."""
+        if not (self.use_music and self.video and self.music):
+            return
+        top, h = self._lane_y("m")
         edges = self._music_edges()
         for k, (t, _kind) in enumerate(edges):
             x = self._x(t)
@@ -643,19 +661,7 @@ class TimelineBar(QWidget):
         }[self._audio_lane_name()]
 
     # ---------- vẽ ----------
-    def paintEvent(self, e) -> None:  # noqa: N802
-        p = QPainter(self)
-        p.setRenderHint(QPainter.RenderHint.Antialiasing)
-        if not self.isEnabled():
-            p.setOpacity(0.35)
-        w, h = self.width(), self.height()
-        bg = QPainterPath()
-        bg.addRoundedRect(QRectF(0.5, 0.5, w - 1, h - 1), theme.R["lg"], theme.R["lg"])
-        p.fillPath(bg, theme.qcolor("panel"))
-        p.setPen(QPen(theme.qcolor("line"), 1))
-        p.drawPath(bg)
-        self._hits = []
-
+    def _fonts(self) -> tuple[QFont, QFont, QFont]:
         small = QFont(self.font())
         small.setPointSize(max(8, small.pointSize() - 1))
         bold = QFont(small)
@@ -663,18 +669,42 @@ class TimelineBar(QWidget):
         tiny = QFont(small)
         tiny.setPointSize(max(7, small.pointSize() - 1))
         tiny.setBold(True)
+        return small, bold, tiny
 
-        if not self.total:
-            p.setFont(small)
-            p.setPen(theme.qcolor("text_muted"))
-            pm = icons.pixmap("timeline", 15, "text_muted")
-            tw = p.fontMetrics().horizontalAdvance(self.note)
-            start_x = max(16.0, (w - (tw + 24)) / 2.0)
-            p.drawPixmap(int(start_x), int((h - 15) / 2), pm)
-            p.drawText(QRectF(start_x + 22, 0, w - start_x - 28, h),
-                       Qt.AlignmentFlag.AlignVCenter | Qt.AlignmentFlag.AlignLeft, self.note)
-            return
+    def _static_key(self) -> tuple:
+        return (self.width(), self.height(), self.devicePixelRatioF(), self.view0, self.view1, self._data_ver,
+                self.font().key(), theme.qcolor("panel").rgba(), theme.qcolor("accent").rgba(),
+                theme.qcolor("text").rgba(), theme.qcolor("field").rgba())
 
+    def _static_layer(self) -> QPixmap:
+        """Ảnh đệm phần đứng yên (nền, tên làn, khối clip / nhạc, khoảng không nhạc, thước giờ)."""
+        key = self._static_key()
+        if self._static is not None and self._static_for == key:
+            return self._static
+        dpr = self.devicePixelRatioF()
+        pm = QPixmap(max(1, round(self.width() * dpr)), max(1, round(self.height() * dpr)))
+        pm.setDevicePixelRatio(dpr)
+        pm.fill(Qt.GlobalColor.transparent)
+        p = QPainter(pm)
+        p.setRenderHint(QPainter.RenderHint.Antialiasing)
+        self._hits = []
+        self._paint_static(p)
+        p.end()
+        self._static, self._static_for = pm, key
+        return pm
+
+    def _paint_background(self, p: QPainter) -> None:
+        w, h = self.width(), self.height()
+        bg = QPainterPath()
+        bg.addRoundedRect(QRectF(0.5, 0.5, w - 1, h - 1), theme.R["lg"], theme.R["lg"])
+        p.fillPath(bg, theme.qcolor("panel"))
+        p.setPen(QPen(theme.qcolor("line"), 1))
+        p.drawPath(bg)
+
+    def _paint_static(self, p: QPainter) -> None:
+        h = self.height()
+        small, bold, tiny = self._fonts()
+        self._paint_background(p)
         top_v = self.TOP_V
         top_m = top_v + self.LANE_V + 6
         track_w = self._span_px()
@@ -716,6 +746,37 @@ class TimelineBar(QWidget):
                        "Chỉ có tiếng nền" if self.ambient else
                        "Chưa có nhạc · tiếng gốc của clip đang tắt (bật ở thẻ Khung & Tiếng, trang Video)" if self.source_off
                        else "Không có âm thanh (chưa có nhạc, clip không có tiếng gốc)")
+        self._draw_music_gaps(p, small)
+        p.restore()
+        self._draw_ruler(p, top_m + self.LANE_M + 4, small, bold)
+
+    def paintEvent(self, e) -> None:  # noqa: N802
+        p = QPainter(self)
+        p.setRenderHint(QPainter.RenderHint.Antialiasing)
+        if not self.isEnabled():
+            p.setOpacity(0.35)
+        w, h = self.width(), self.height()
+        small, _bold, _tiny = self._fonts()
+
+        if not self.total:
+            self._hits = []
+            self._paint_background(p)
+            p.setFont(small)
+            p.setPen(theme.qcolor("text_muted"))
+            pm = icons.pixmap("timeline", 15, "text_muted")
+            tw = p.fontMetrics().horizontalAdvance(self.note)
+            start_x = max(16.0, (w - (tw + 24)) / 2.0)
+            p.drawPixmap(int(start_x), int((h - 15) / 2), pm)
+            p.drawText(QRectF(start_x + 22, 0, w - start_x - 28, h),
+                       Qt.AlignmentFlag.AlignVCenter | Qt.AlignmentFlag.AlignLeft, self.note)
+            return
+
+        p.drawPixmap(0, 0, self._static_layer())  # phần đứng yên: vẽ sẵn
+        # ----- lớp trên: nhấp sáng, tay nắm mép nhạc, vạch phát, khối đang kéo -----
+        top_v = self.TOP_V
+        top_m = top_v + self.LANE_V + 6
+        p.save()
+        p.setClipRect(QRectF(self.PAD_L, 0, self._span_px(), h))
         self._draw_flash(p)
         self._draw_music_edit(p, small)
         if self.playhead is not None and self.view0 <= self.playhead <= self.view1:
@@ -730,7 +791,6 @@ class TimelineBar(QWidget):
             p.fillPath(head, theme.qcolor("text"))
         self._draw_drag(p, small)
         p.restore()
-        self._draw_ruler(p, top_m + self.LANE_M + 4, small, bold)
         if self.playhead is not None and self.view0 <= self.playhead <= self.view1:
             # tay nắm vạch phát trên thước giờ (kéo để tua, như CapCut / Premiere)
             x = self._x(self.playhead)
@@ -1010,6 +1070,11 @@ class TimelineBar(QWidget):
         if self.total:
             self._animate_view(0.0, self.total, 260)
 
+    def _tip(self, e, text: str) -> None:
+        if text != self._tip_last or not QToolTip.isVisible():
+            self._tip_last = text
+            QToolTip.showText(e.globalPosition().toPoint(), text, self)
+
     def mouseMoveEvent(self, e) -> None:  # noqa: N802
         if not self.total:
             return
@@ -1033,8 +1098,7 @@ class TimelineBar(QWidget):
             self.update()
         if hov is not None:
             self.setCursor(Qt.CursorShape.SizeHorCursor)
-            QToolTip.showText(e.globalPosition().toPoint(), "Kéo mép đoạn nhạc sang trái / phải để nhạc bắt đầu / kết "
-                              "thúc ở clip khác (Ctrl+Z để quay lại)", self)
+            self._tip(e, "Kéo mép đoạn nhạc sang trái / phải để nhạc bắt đầu / kết thúc ở clip khác (Ctrl+Z để quay lại)")
             return
         if self._mv is not None:
             x = e.position().x()
@@ -1075,12 +1139,11 @@ class TimelineBar(QWidget):
                         if mh[0] == "v" else "\nKéo sang trái / phải để đổi thứ tự bài trong playlist")
                 if mh[0] == "v" and self.use_music:
                     hit += "\nChuột phải: bật / tắt nhạc ở clip này · Alt + quét: nhiều clip một lượt"
-            QToolTip.showText(e.globalPosition().toPoint(), hit, self)
+            self._tip(e, hit)
         elif pos.x() >= self.PAD_L:
-            QToolTip.showText(e.globalPosition().toPoint(),
-                              f"{fmt_dur(self._t(pos.x()))}\n"
-                              + ("Bấm để xem trước từ chỗ này · " if self.seek_enabled else "")
-                              + "Lăn chuột để phóng to · kéo khối để đổi thứ tự · Shift + kéo (hoặc Shift + lăn) để "
-                              "di chuyển · nhấp đúp để xem toàn bộ", self)
+            self._tip(e, f"{fmt_dur(self._t(pos.x()))}\n"
+                      + ("Bấm để xem trước từ chỗ này · " if self.seek_enabled else "")
+                      + "Lăn chuột để phóng to · kéo khối để đổi thứ tự · Shift + kéo (hoặc Shift + lăn) để "
+                      "di chuyển · nhấp đúp để xem toàn bộ")
         else:  # rê vào tên làn: giải thích làn đó
-            QToolTip.showText(e.globalPosition().toPoint(), self._lane_tip(pos.y()), self)
+            self._tip(e, self._lane_tip(pos.y()))
