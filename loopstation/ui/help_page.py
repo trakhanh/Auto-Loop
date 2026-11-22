@@ -241,19 +241,14 @@ topic("video", "Làm video", "film", "Trang Video: clip & số lần loop", hero
     (("Mở trang Video", "app:video"),)) + img("video", "Trang Video với dự án mẫu “Loop 70 lần”.") + legend([
     ("Thêm clip", "<b>Thêm file</b> / <b>Thư mục</b>, hoặc <b>kéo thả</b> video, ảnh, cả thư mục vào bảng (tick <i>Cả thư mục con</i> để lấy cả thư mục bên trong). File mới vào bảng <b>chưa được chọn</b>: tick dòng cần dùng, hoặc ô <b>Chọn tất cả</b> đầu hàng công cụ (bấm lần nữa để bỏ chọn tất cả). "
                   "Nút <b>⋯</b> cạnh ô tìm: <b>Sắp xếp A–Z</b> (clip2 trước clip10), <b>Xáo ngẫu nhiên thứ tự</b>, <b>Bật / tắt nhanh</b> (bật / tắt / đảo ngược tất cả), <b>Xoá tất cả</b> (có hỏi lại). Ô tìm tên file (Ctrl+F) — gõ không dấu cũng được."),
-    ("Bảng clip", "mỗi dòng một clip, kéo lên / xuống để đổi thứ tự. <b>Bấm đúp ô</b> để sửa: Số lần phát, Đoạn lấy, Nối loop, Sang clip. "
-                  "Cột <b>Nhạc</b>: bấm ô để chọn <b>Tiếp tục</b> (nhạc chạy tiếp playlist), <b>Không nhạc</b>, hoặc "
-                  "<b>Bắt đầu bằng bài X</b> (tới clip này phát bài X từ đầu, rồi tiếp bài sau). Ví dụ bài 1 vào clip 5: clip 1–4 "
-                  "chọn Không nhạc, clip 5 chọn Bắt đầu bằng bài 1. Bôi đen nhiều dòng rồi bấm ô: áp cho cả các dòng."),
+    ("Bảng clip", "mỗi dòng một clip, kéo lên / xuống để đổi thứ tự. <b>Bấm đúp ô</b> để sửa: Số lần phát, Đoạn lấy, Nối loop, Sang clip."),
     ("Xếp clip ▾", "tự xếp bảng: <b>Xen kẽ clip nền</b> (<i>nền ×70 → cảnh 2 → nền ×70 → cảnh 3 …</i> theo tên file), "
                    "<b>Xếp lần lượt từng loop</b> (Loop1, Loop2…), <b>Thư viện mẫu</b> (xem chủ đề Xen kẽ)."),
     ("Đặt nhanh", "bôi đen nhiều dòng rồi đặt số lần phát một lượt (gõ số, hoặc chọn ×1, ×10, ×70, 10p, 1h ở mũi tên ▾ cuối ô) → <b>Áp dụng</b>; <b>Bật tự giãn</b> / <b>Bỏ giãn</b>. "
                   "Hàng <i>Cắt đoạn &amp; hoà hình ▾</i>: <b>Áp dụng cắt</b> / <b>Lấy toàn bộ</b>, <b>Áp dụng nối</b> / <b>Bỏ nối</b>, <b>Nhân bản</b>, <b>Xem thử nối</b>."),
     ("3 thẻ cài đặt", "<b>Độ dài</b> (tổng thời lượng, thứ tự, Intro/Outro) · <b>Khung &amp; Tiếng</b> (clip khác tỉ lệ, ảnh tĩnh, mờ dần cuối, tiếng gốc) · <b>Màu &amp; Logo</b>."),
     ("Dòng thời gian", "nhìn tổng thể: làn CLIP và làn NHẠC. <b>Kéo một khối clip</b> sang trái / phải để đổi thứ tự trong bảng (Ctrl+Z để quay lại); <b>kéo một khối bài nhạc</b> để đổi thứ tự playlist (đang ngẫu nhiên thì app hỏi chuyển sang theo thứ tự). "
-                       "<b>Nhạc theo clip</b>: kéo <b>mép đoạn nhạc</b> trên làn NHẠC để nhạc bắt đầu / kết thúc ở clip khác; "
-                       "<b>chuột phải</b> khối clip → Tắt nhạc ở clip này / Chỉ có nhạc từ clip này trở đi…; <b>Alt + quét</b> "
-                       "qua nhiều khối để bật / tắt nhạc một lượt. Lăn chuột để phóng to, Shift + kéo (hoặc Shift + lăn) để di chuyển, nhấp đúp để xem toàn bộ."),
+                       "<b>Nhạc chạy từ clip nào</b>: dòng <b>♪ Nhạc chạy từ clip [5 ▾] tới [hết video ▾] · bài đầu [Bài 1 ▾]</b> ngay trên dòng thời gian, hoặc kéo <b>tay nắm ♪</b> trên làn NHẠC. “Clip 5” là khối thứ 5 trên dòng thời gian (kể cả khi bảng lặp cả chuỗi). Lăn chuột để phóng to, Shift + kéo (hoặc Shift + lăn) để di chuyển, nhấp đúp để xem toàn bộ."),
     ("Thanh hướng dẫn", "đang ở bước mấy + việc nên làm tiếp."),
     ("Tiếp theo", "sang bước Nhạc (hoặc Xuất nếu không dùng nhạc).")]) + """
 <h2>Ô “Số lần phát” — gõ gì?</h2>""" + examples([
@@ -446,9 +441,8 @@ topic("nhac", "Âm thanh", "music", "Trang Nhạc: playlist", hero(
     ("Playlist", "kéo thả bài hoặc cả thư mục nhạc. Bỏ tick bài không dùng. <b>Số lần/lượt</b> = bài đó phát mấy lần mỗi lượt playlist. Bấm đúp tên bài để nghe."),
     ("Đoạn nghe", "bài hát không phát từ đầu bài: <b>bấm đúp ô Thời lượng</b> (hoặc chuột phải bài → <i>Chọn đoạn nghe</i>) → "
                   "<b>Bỏ đầu</b> (vd 0:30 intro) / <b>Bỏ cuối</b>. Bài có đoạn nghe hiện ✂ trước thời lượng."),
-    ("Nhạc vào lúc", "thẻ Thứ tự phát: nhạc bắt đầu ở mốc này của video (vd 0 giờ 3 phút 0 giây). 0 = ngay đầu video."),
-    ("Nhạc ở clip", "thẻ Thứ tự phát → <b>Chọn clip…</b>: gõ <code>5-10</code> (nhạc từ clip 5 tới 10), <code>2-3, 7-8</code>, "
-                    "<code>5-</code> (từ clip 5 tới hết) hoặc tick từng clip. Clip không có nhạc: nhạc ngừng, tới clip có nhạc thì sang bài kế."),
+    ("Nhạc chạy từ clip nào", "dòng <b>♪ Nhạc chạy từ clip … tới … · bài đầu …</b> ngay trên dòng thời gian (ví dụ bài 1 "
+                              "vào từ clip 5: chọn <i>5</i> và <i>Bài 1</i>), hoặc kéo tay nắm ♪ trên làn NHẠC."),
     ("Âm lượng %", "to / nhỏ <b>riêng từng bài</b>: bấm đúp để sửa, hoặc bôi đen nhiều bài → chuột phải → <i>Đặt âm lượng bài đang chọn…</i>. "
                    "Cột <b>Độ to gốc</b> cho biết bài nào vốn to / nhỏ hơn."),
     ("Lịch phát dự kiến", "bài nào phát lúc mấy giờ — chính là YouTube Chapters."),

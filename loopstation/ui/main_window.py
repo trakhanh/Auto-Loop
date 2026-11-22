@@ -176,7 +176,7 @@ class MainWindow(QMainWindow):
         self.video_tab.timeline.seekRequested.connect(self._preview_seek)
         self.video_tab.timeline.trackMoveRequested.connect(self._move_track_from_timeline)
         self.video_tab.timeline.blockedMoveRequested.connect(self._blocked_timeline_move)
-        self.music_tab.clipMusicRequested.connect(self._choose_clip_music)
+        self.video_tab.timeline.musicStartRequested.connect(self._music_from_clip)
         self.video_tab.timeline.seek_enabled = True
         self.music_tab.mixer.playbackStopped.connect(self._mixer_stopped)
         self.music_tab.mixer.previewRequested.connect(self.preview_audio)
@@ -783,6 +783,7 @@ class MainWindow(QMainWindow):
         self.dock_bar.setToolTip("Thu gọn / mở dòng thời gian (kéo vạch phát trên đó để tua trình phát)")
         self.dock_bar.clicked.connect(lambda: self.tl_toggle.click())
         tl_lay.addWidget(self.dock_bar, 0, Qt.AlignmentFlag.AlignLeft)
+        tl_lay.addWidget(self.music_tab.range_bar)  # ♪ Nhạc chạy từ clip … tới … · bài đầu …
         tl_lay.addWidget(self.video_tab.timeline)
 
         # Trình phát xem trước luôn hiện cạnh trang đang làm (bước Video / Nhạc / Xuất)
@@ -1243,6 +1244,7 @@ class MainWindow(QMainWindow):
         self.name_edit.blockSignals(False)
         self.video_tab.load(proj.video)
         self.music_tab.load(proj.music)
+        self._music_migrate = True  # dự án cũ chỉnh nhạc theo từng clip: quy về một dòng ở lần tính đầu tiên
         self.music_tab.mixer.set_values(proj.video.music_volume, proj.video.source_volume)
         self.music_tab.mixer.set_level(proj.video.source_level)
         self.export_tab.load(proj.export)
@@ -1424,18 +1426,27 @@ class MainWindow(QMainWindow):
         if dest is not None:
             self.video_tab.timeline.flash_track(dest)
 
-    def _choose_clip_music(self) -> None:
-        """Trang Nhạc → Chọn clip…: chọn clip nào có nhạc nền (cùng dữ liệu cột Nhạc ở trang Video)."""
-        from .clip_music_dialog import ClipMusicDialog
-        clips = self.video_tab.collect().clips
-        if not clips:
-            self.notify("Chưa có clip — thêm clip ở trang Video trước.", "info")
-            return
-        dlg = ClipMusicDialog([Path(c.path).stem for c in clips], [c.music for c in clips], self)
-        flags = dlg.flags() if dlg.exec() else None
-        w.dispose(dlg)
-        if flags is not None:
-            self.video_tab.set_music_flags(flags)
+    def _music_from_clip(self, n: int) -> None:
+        """Kéo tay nắm ♪ trên dòng thời gian: nhạc chạy từ khối thứ n (0 = đầu video)."""
+        start, end, first = self.music_tab.range_bar.values()
+        if end and n and end < n:
+            end = 0  # tới clip trước chỗ bắt đầu thì vô nghĩa: chạy tới hết video
+        self.music_tab.range_bar.set_values(n, end, first, emit=True)
+
+    def _migrate_music(self, proj, tl):
+        """Dự án cũ (1.9.6–2.0.1) chỉnh nhạc theo từng clip / Nhạc vào lúc → một dòng "Nhạc chạy từ clip …". Có gộp
+        (nhạc ngắt quãng) thì báo một dòng — không đổi ngầm. Trả về (proj, tl) đã tính lại, hoặc None."""
+        res = timeline.legacy_music_range(proj, tl)
+        if res is None:
+            return None
+        start, end, first, note = res
+        self.music_tab.range_bar.set_values(start, end, first)
+        self.music_tab._legacy_start_at = 0.0
+        self.video_tab.clear_legacy_music()
+        if note:
+            self.notify(note, "info", 8000)
+        proj = self.collect_project()
+        return proj, timeline.build(proj)
 
     def _blocked_timeline_move(self, lane: str, src: int, target: int, after: bool) -> None:
         """Kéo khối khi đang phát ngẫu nhiên: hỏi có chuyển sang "Theo thứ tự trong bảng" rồi đổi chỗ không."""
@@ -1484,13 +1495,17 @@ class MainWindow(QMainWindow):
             self.export_tab.set_can_export(False)
             self._set_chips(error=f"Lỗi: {e}")
             return
+        if getattr(self, "_music_migrate", False) and tl.ok:
+            self._music_migrate = False
+            migrated = self._migrate_music(proj, tl)
+            if migrated:
+                proj, tl = migrated
         self._cached_tl = (self._preview_signature(proj) + "|v0", tl)
         self.music_tab.mixer.set_timeline(tl.total if tl.ok else 0.0, [it.start for it in tl.music_items[1:]])
         clip_names = [Path(c.path).stem for c in proj.video.clips]
-        self.video_tab.set_tracks([(t.path, Path(t.path).stem) for t in proj.music.tracks])
-        from ..core.clip_ranges import ranges_text
-        self.music_tab.set_clip_music(ranges_text([c.music for c in proj.video.clips])
-                                      if proj.video.clips and self.mode == "video_music" else "")
+        self.music_tab.range_bar.set_tracks([(t.path, Path(t.path).stem) for t in proj.music.tracks])
+        self.music_tab.range_bar.set_blocks([(clip_names[c] if 0 <= c < len(clip_names) else f"Clip {c + 1}", a, b)
+                                             for c, a, b in timeline.numbered_blocks(tl)])
         track_paths = [t.path for t in proj.music.tracks]
         self.video_tab.timeline.set_timeline(tl if proj.video.clips else None, clip_names,
                                              [Path(t).stem for t in track_paths])

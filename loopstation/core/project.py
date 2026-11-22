@@ -107,7 +107,12 @@ class MusicSettings:
     export_format: str = "mp3_320"
     versions: int = 1  # kiểu Chỉ nhạc: xuất bao nhiêu bản, mỗi bản một thứ tự phát khác nhau
     pin_pos: str = "first"  # bài ghim: first (mở đầu file) | random (vị trí ngẫu nhiên nhưng chắc chắn có)
-    start_at: float = 0.0  # video có nhạc: nhạc vào lúc giây thứ mấy của video (0 = ngay đầu)
+    start_at: float = 0.0  # (1.9.6–2.0.1, chỉ để đọc dự án cũ) nhạc vào lúc giây thứ mấy — giờ quy về start_clip
+    # "♪ Nhạc chạy từ clip [start_clip] tới [end_clip] · bài đầu [first_track]": số thứ tự khối trên làn CLIP
+    # (lần phát, kể cả bảng lặp cả chuỗi), 0 = đầu video / hết video; first_track = đường dẫn bài, "" = theo playlist
+    start_clip: int = 0
+    end_clip: int = 0
+    first_track: str = ""
 
 
 @dataclass
@@ -223,6 +228,8 @@ class Project:
                     for t in m.tracks
                 ],
                 "start_at": m.start_at,
+                "range": {"start_clip": m.start_clip, "end_clip": m.end_clip,
+                          "first_track": p(m.first_track) if m.first_track else ""},
                 "audio_export": {"mode": m.export_mode, "target": format_hms(m.export_target),
                                  "rounds": m.export_rounds, "format": m.export_format},
                 "ambient": [
@@ -339,6 +346,10 @@ class Project:
                                        trim_start=max(0.0, float((td.get("trim") or {}).get("start", 0.0))),
                                        trim_end=max(0.0, float((td.get("trim") or {}).get("end", 0.0)))))
         m.start_at = max(0.0, float(md.get("start_at", 0.0)))
+        rg = md.get("range") or {}
+        m.start_clip = max(0, int(rg.get("start_clip", 0)))
+        m.end_clip = max(0, int(rg.get("end_clip", 0)))
+        m.first_track = p(rg["first_track"]) if rg.get("first_track") else ""
         ae = md.get("audio_export", {})
         m.export_mode = ae.get("mode", m.export_mode)
         m.export_target = parse_hms(str(ae.get("target", format_hms(m.export_target))))

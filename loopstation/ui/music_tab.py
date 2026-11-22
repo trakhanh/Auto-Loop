@@ -35,7 +35,6 @@ class MusicTab(QWidget):
     changed = Signal()
     switchModeRequested = Signal(str)
     nextStepRequested = Signal()
-    clipMusicRequested = Signal()  # bấm "Chọn clip…": chọn clip nào có nhạc nền (cửa sổ chính mở hộp chọn)
 
     def __init__(self, settings: QSettings, parent=None):
         super().__init__(parent)
@@ -214,30 +213,11 @@ class MusicTab(QWidget):
         f.setVerticalSpacing(8)
         f.setRowWrapPolicy(QFormLayout.RowWrapPolicy.WrapLongRows)  # cột hẹp / chữ to: nhãn lên trên, không đẩy cột
         f.addRow("Chế độ phát", self.order)
-        # nhạc chỉ phát ở một số clip (vd từ clip 5, hoặc clip 2–3 và 7–8) — cùng dữ liệu với cột "Nhạc" ở trang Video
-        self.clip_music_label = QLabel("Tất cả clip")
-        self.clip_music_label.setToolTip("Clip nào có nhạc nền. Clip không có nhạc: nhạc ngừng, tới clip có nhạc thì sang "
-                                         "bài kế (phát từ đầu). Chỉnh cả ở cột Nhạc trang Video và trên dòng thời gian.")
-        self.clip_music_btn = QPushButton("Chọn clip…")
-        self.clip_music_btn.setObjectName("pill")
-        self.clip_music_btn.setIcon(icons.icon("music", 13))
-        self.clip_music_btn.clicked.connect(lambda: self.clipMusicRequested.emit())
-        self.clip_music_row = QWidget()
-        cm = QHBoxLayout(self.clip_music_row)
-        cm.setContentsMargins(0, 0, 0, 0)
-        cm.setSpacing(8)
-        cm.addWidget(self.clip_music_label, 1)
-        cm.addWidget(self.clip_music_btn)
-        self.lbl_clip_music = QLabel("Nhạc ở clip")
-        f.addRow(self.lbl_clip_music, self.clip_music_row)
-        # nhạc vào lúc nào trong video (không phải ngay đầu): mốc tuỳ ý, không gò theo ranh giới clip
-        self.start_at = w.DurationEdit(0.0, allow_zero=True)
-        self.start_at.setToolTip("Nhạc bắt đầu ở mốc này của video (0 = ngay đầu video). Trước mốc này chỉ có tiếng gốc / "
-                                 "tiếng nền. " + w.DurationEdit.HELP)
-        self.start_at.valueChanged.connect(self._emit)
-        self.start_at_row = self.start_at
-        self.lbl_start_at = QLabel("Nhạc vào lúc")
-        f.addRow(self.lbl_start_at, self.start_at)
+        # "♪ Nhạc chạy từ clip … tới … · bài đầu …": một dòng duy nhất, cửa sổ chính đặt ngay trên dòng thời gian
+        from .music_range import MusicRangeBar
+        self.range_bar = MusicRangeBar()
+        self.range_bar.changed.connect(self._emit)
+        self._legacy_start_at = 0.0  # "Nhạc vào lúc" của dự án cũ — giữ tới khi cửa sổ chính quy đổi
         f.addRow(self.lbl_seed, self.seed_wrap)
         self.pin_info = QLabel("")
         self.pin_info.setObjectName("muted")
@@ -627,7 +607,8 @@ class MusicTab(QWidget):
         lufs_map = audio_build.cached_loudnesses([t.path for t, inf in zip(ms.tracks, infos) if inf.ok])
         for t, info in zip(ms.tracks, infos):
             self.list.addTopLevelItem(self._make_item(t, info, lufs_map))
-        self.start_at.set_seconds(ms.start_at, emit=False)
+        self.range_bar.set_values(ms.start_clip, ms.end_clip, ms.first_track)
+        self._legacy_start_at = ms.start_at
         self.list.blockSignals(False)
         self._refresh_track_styles()
         self.ambient.blockSignals(True)
@@ -689,7 +670,8 @@ class MusicTab(QWidget):
         ms.export_rounds = self.len_rounds.value()
         ms.versions = self.versions.value()
         ms.pin_pos = self.pin_pos.currentData()
-        ms.start_at = self.start_at.seconds()
+        ms.start_clip, ms.end_clip, ms.first_track = self.range_bar.values()
+        ms.start_at = self._legacy_start_at
         return ms
 
     # ---------- ghim bài / nhiều bản ----------
@@ -796,8 +778,7 @@ class MusicTab(QWidget):
     def set_mode(self, mode: str) -> None:
         """Kiểu 'Chỉ video': playlist không dùng (khoá thao tác)."""
         self.set_playlist_enabled(mode != "video_only")
-        for wdg in (self.start_at_row, self.lbl_start_at):  # "Nhạc vào lúc" chỉ có nghĩa khi nhạc đi cùng video
-            wdg.setVisible(mode == "video_music")
+        self.range_bar.setVisible(mode == "video_music")  # nhạc chạy từ clip nào: chỉ khi nhạc đi cùng video
         self.g_exp.setVisible(mode == "video_music")
         self.g_length.setVisible(mode == "music_only")
 
@@ -1000,12 +981,6 @@ class MusicTab(QWidget):
         self.lbl_lufs.setVisible(loud)
         self.lufs.setVisible(loud)
         self.lufs.setEnabled(loud)
-
-    def set_clip_music(self, text: str) -> None:
-        """Dòng "Nhạc ở clip": "Tất cả clip", "Clip 5–10"… Rỗng = ẩn (Chỉ nhạc / chưa có clip)."""
-        self.clip_music_label.setText(f"<b>{text}</b>" if text else "")
-        for wdg in (self.clip_music_row, self.lbl_clip_music):
-            wdg.setVisible(bool(text))
 
     def move_track_row(self, src: int, target: int, after: bool) -> int | None:
         """Kéo khối bài nhạc trên dòng thời gian: đặt bài `src` ngay trước / sau bài `target`. Trả về vị trí mới."""

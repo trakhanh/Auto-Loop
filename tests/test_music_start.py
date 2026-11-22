@@ -6,7 +6,6 @@ import os
 import shutil
 import sys
 import tempfile
-import time
 from pathlib import Path
 
 import pytest
@@ -135,70 +134,6 @@ def test_all_continue_is_unchanged(env):
     p = _proj([dict()] * 3)
     tl = timeline.build(p)
     assert tl.music_items == planner.plan_music(p.music, tl.track_durations, tl.total)
-
-
-# ---------------- bảng clip: ô Nhạc ----------------
-def _tab(env, clips):
-    from loopstation.core.project import ClipItem, VideoSettings
-    from loopstation.ui import video_tab as vt
-    tab = vt.VideoTab(env[1])
-    tab.load(VideoSettings(clips=[ClipItem(str(VIDEO[k % len(VIDEO)]), count=1, **kw) for k, kw in enumerate(clips)]))
-    tab.set_tracks([(str(m), m.stem) for m in MUSIC[:3]])
-    tab.resize(1300, 800)
-    tab.show()
-    _KEEP.append(tab)
-    return tab
-
-
-def pump(app, sec=0.1):
-    t = time.time()
-    while time.time() - t < sec:
-        app.processEvents()
-        time.sleep(0.01)
-
-
-@need_media
-def test_music_cell_choices_and_undo(env):
-    from loopstation.ui import video_tab as vt
-    app = env[0]
-    tab = _tab(env, [dict()] * 5)
-    it = tab.list.topLevelItem(4)
-    assert it.text(vt.COL_MUSIC) == "Tiếp tục"
-    labels = [lab for lab, _on, _start in tab.music_choices()]
-    assert labels[:2] == ["Tiếp tục playlist", "Không nhạc"] and any(MUSIC[0].stem in lab for lab in labels)
-    tab.set_music_choice([4], True, str(MUSIC[0]))
-    pump(app)
-    c = tab.collect().clips[4]
-    assert c.music and c.music_start == str(MUSIC[0])
-    assert "1" in it.text(vt.COL_MUSIC) and MUSIC[0].stem[:6] in it.toolTip(vt.COL_MUSIC)
-    tab.set_music_choice([0, 1, 2, 3], False, "")
-    assert [c.music for c in tab.collect().clips] == [False] * 4 + [True]
-    assert tab.list.topLevelItem(0).text(vt.COL_MUSIC) == "Không nhạc"
-    tab.undo()
-    pump(app)
-    assert [c.music for c in tab.collect().clips] == [True] * 5
-
-
-@need_media
-def test_timeline_menu_offers_start_song(env):
-    from loopstation.core import timeline
-    from loopstation.core.project import MusicTrack, Project
-    tab = _tab(env, [dict()] * 3)
-    p = Project()
-    p.video = tab.collect()
-    p.music.tracks = [MusicTrack(path=str(m)) for m in MUSIC[:3]]
-    tl = timeline.build(p)
-    bar = tab.timeline
-    bar.resize(1200, 118)
-    bar.set_timeline(tl, [Path(c.path).stem for c in p.video.clips], [Path(t.path).stem for t in p.music.tracks])
-    got = []
-    bar.musicStartRequested.connect(lambda *a: got.append(a))
-    k = next(i for i, b in enumerate(bar.video) if b.clip == 1)
-    songs = bar._start_song_choices()
-    assert [name for _i, name in songs] == [m.stem for m in MUSIC[:3]]
-    bar.musicStartRequested.emit(bar.video[k].clip, 0)
-    pump(env[0])
-    assert tab.collect().clips[1].music_start == str(MUSIC[0])
 
 
 # ---------------- tắt hết bài nhạc khi độ dài "Theo độ dài nhạc" ----------------

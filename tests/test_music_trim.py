@@ -6,7 +6,6 @@ import os
 import shutil
 import sys
 import tempfile
-import time
 from pathlib import Path
 
 import pytest
@@ -133,20 +132,21 @@ def env():
 
 
 @need_media
-def test_music_tab_trim_and_start_at(env):
+def test_music_tab_trim_and_legacy_start_at(env):
     from loopstation.core.project import MusicSettings, MusicTrack
     from loopstation.ui.music_tab import COL_DUR, MusicTab
     mt = MusicTab(env[1])
     _KEEP.append(mt)
     mt.load(MusicSettings(tracks=[MusicTrack(path=str(m)) for m in MUSIC[:2]], start_at=90.0))
-    assert mt.collect().start_at == 90.0
+    assert mt.collect().start_at == 90.0  # "Nhạc vào lúc" của dự án cũ giữ nguyên tới khi cửa sổ chính quy đổi
     mt.set_track_trim([0], 30.0, 5.0)
     t = mt.collect().tracks[0]
     assert (t.trim_start, t.trim_end) == (30.0, 5.0)
     it = mt.list.topLevelItem(0)
     assert "✂" in it.text(COL_DUR) and "0:30" in it.toolTip(COL_DUR)
     assert any("đoạn nghe" in txt.lower() for _ic, txt, _f in mt.list.menu_extras)
+    assert not hasattr(mt, "start_at")  # ô "Nhạc vào lúc" đã gom vào dòng "Nhạc chạy từ clip …"
     mt.set_mode("music_only")
-    assert not mt.start_at_row.isVisibleTo(mt)
+    assert not mt.range_bar.isVisibleTo(mt)
     mt.set_mode("video_music")
-    assert mt.start_at_row.isVisibleTo(mt)
+    assert mt.range_bar.isVisibleTo(mt)

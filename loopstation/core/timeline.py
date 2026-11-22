@@ -197,12 +197,94 @@ def build(project: Project) -> Timeline:
         return tl
     tl.warnings += tl.video.warnings
     if tl.use_music and not tl.errors:
-        wins = music_windows(tl, vs, ms.tracks)
-        if ms.start_at > 0:  # "Nhạc vào lúc": trước mốc này không có nhạc
-            wins = [(max(w[0], ms.start_at), w[1], w[2] if w[0] >= ms.start_at - 1e-6 else None)
-                    for w in wins if w[1] > ms.start_at + 0.05]
+        if ms.start_clip or ms.end_clip or ms.first_track:  # "♪ Nhạc chạy từ clip … tới … · bài đầu …"
+            wins = range_windows(tl, ms)
+        else:  # dự án cũ chưa quy đổi (hàng đợi, xuất hàng loạt): nhạc theo từng clip / Nhạc vào lúc như trước
+            wins = legacy_windows(tl, vs, ms)
         tl.music_items = planner.plan_music_windows(ms, tl.track_durations, wins, tl.total)
     return tl
+
+
+def clip_blocks(tl: "Timeline") -> list[tuple[int, float, float]]:
+    """Khối trên làn CLIP [(dòng, bắt đầu, kết thúc)]: các lần phát liền nhau của cùng một dòng gộp một khối — đúng
+    như dòng thời gian vẽ (Intro / Outro có dòng < 0)."""
+    if tl.video is None or tl.video.error:
+        return []
+    plan, out, pos = tl.video, [], 0
+    for j, (clip, _r) in enumerate(plan.plays):
+        f = plan.ends.get(j, tl.frames.get(clip, 0))
+        a, b = float(Fraction(pos) / tl.fps), float(Fraction(pos + f) / tl.fps)
+        if out and out[-1][0] == clip:
+            out[-1] = (clip, out[-1][1], b)
+        else:
+            out.append((clip, a, b))
+        if j < len(plan.overlaps):
+            pos += f - plan.overlaps[j]
+    return out
+
+
+def numbered_blocks(tl: "Timeline") -> list[tuple[int, float, float]]:
+    """Các khối được đánh số "clip 1, 2, 3…" trong dòng chọn nhạc (bỏ Intro / Outro)."""
+    return [b for b in clip_blocks(tl) if b[0] >= 0]
+
+
+def _track_index(tracks: list, path: str, durations: dict) -> int | None:
+    if not path:
+        return None
+    key = os.path.normcase(os.path.abspath(path))
+    i = next((k for k, t in enumerate(tracks) if os.path.normcase(os.path.abspath(t.path)) == key), None)
+    return i if i is not None and i in durations else None
+
+
+def range_windows(tl: "Timeline", ms) -> list[tuple]:
+    """Đoạn có nhạc theo dòng "♪ Nhạc chạy từ clip N tới M · bài đầu": từ đầu khối N (0 = đầu video) tới cuối khối M
+    (0 = hết video), mở đầu bằng bài đã chọn (rồi tiếp playlist)."""
+    total = tl.total
+    blocks = numbered_blocks(tl)
+    a = blocks[min(ms.start_clip, len(blocks)) - 1][1] if ms.start_clip >= 1 and blocks else 0.0
+    b = blocks[min(ms.end_clip, len(blocks)) - 1][2] if ms.end_clip >= 1 and blocks else total
+    if b - a <= 0.05:
+        return []
+    return [(a, b, _track_index(ms.tracks, ms.first_track, tl.track_durations))]
+
+
+def legacy_windows(tl: "Timeline", vs, ms) -> list[tuple]:
+    """Cách cũ (1.9.6–2.0.1): nhạc theo từng clip + "Nhạc vào lúc"."""
+    wins = music_windows(tl, vs, ms.tracks)
+    if ms.start_at > 0:  # trước mốc này không có nhạc
+        wins = [(max(w[0], ms.start_at), w[1], w[2] if w[0] >= ms.start_at - 1e-6 else None)
+                for w in wins if w[1] > ms.start_at + 0.05]
+    return wins
+
+
+def legacy_music_range(proj, tl: "Timeline") -> tuple[int, int, str, str] | None:
+    """Dự án cũ chỉnh nhạc theo từng clip / Nhạc vào lúc → (start_clip, end_clip, first_track, lời báo). None khi dự
+    án không dùng cách cũ. Nhạc ngắt quãng được gộp thành một đoạn (từ đoạn đầu tới hết đoạn cuối) và báo cho biết."""
+    vs, ms = proj.video, proj.music
+    if not (any(not c.music or c.music_start for c in vs.clips) or ms.start_at > 0):
+        return None
+    total = tl.total
+    wins = legacy_windows(tl, vs, ms)
+    blocks = numbered_blocks(tl)
+    if not wins or not blocks:
+        return 0, 0, "", "Dự án này tắt nhạc ở mọi clip — giờ nhạc chạy cả video (bỏ tick bài ở trang Nhạc nếu không muốn nhạc)."
+    a, b, first = wins[0][0], wins[-1][1], wins[0][2]
+
+    def block_at(t: float, end: bool) -> int:
+        for k, (_c, s, e) in enumerate(blocks):
+            if (s - 0.05 <= t < e - 0.05) if not end else (s + 0.05 < t <= e + 0.05):
+                return k + 1
+        return len(blocks)
+    start = 0 if a <= 0.05 else block_at(a, False)
+    end = 0 if b >= total - 0.05 else block_at(b, True)
+    first_path = ms.tracks[first].path if first is not None and 0 <= first < len(ms.tracks) else ""
+    note = ""
+    if len(wins) > 1:
+        note = ("Nhạc ngắt quãng của dự án cũ đã được gộp thành một đoạn: "
+                f"nhạc chạy từ {'đầu video' if not start else f'clip {start}'} tới {'hết video' if not end else f'clip {end}'}.")
+    elif start and abs(blocks[start - 1][1] - a) > 0.05:
+        note = f"“Nhạc vào lúc” của dự án cũ đã đổi thành: nhạc chạy từ clip {start}."
+    return start, end, first_path, note
 
 
 def music_windows(tl: "Timeline", vs, tracks: list | None = None) -> list[tuple]:

@@ -197,46 +197,6 @@ def _tab(env, flags):
     return tab
 
 
-@need_media
-def test_music_column_reads_and_writes(env):
-    from loopstation.ui import video_tab as vt
-    app = env[0]
-    tab = _tab(env, [True, False, True])
-    assert tab.list.headerItem().text(vt.COL_MUSIC) == "Nhạc"
-    assert [c.music for c in tab.collect().clips] == [True, False, True]
-    tab.set_music_choice([0], False)  # bấm ô Nhạc → Không nhạc
-    pump(app)
-    assert tab.list.topLevelItem(0).text(vt.COL_MUSIC) == "Không nhạc"
-    assert [c.music for c in tab.collect().clips] == [False, False, True]
-    tab.undo()
-    pump(app)
-    assert [c.music for c in tab.collect().clips] == [True, False, True]
-
-
-@need_media
-def test_music_on_off_for_selected_rows(env):
-    app = env[0]
-    tab = _tab(env, [True, True, True])
-    tab.list.clearSelection()
-    for k in (1, 2):
-        tab.list.topLevelItem(k).setSelected(True)
-    tab.set_music_selected(False)
-    pump(app)
-    assert [c.music for c in tab.collect().clips] == [True, False, False]
-    assert "Nhạc" in " ".join(t for _ic, t, _f in tab.list.menu_extras)
-
-
-@need_media
-def test_music_column_hidden_when_no_music(env):
-    from loopstation.ui import video_tab as vt
-    tab = _tab(env, [True, True, True])
-    tab.set_mode("video_only")
-    assert tab.list.isColumnHidden(vt.COL_MUSIC)
-    tab.set_mode("video_music")
-    assert not tab.list.isColumnHidden(vt.COL_MUSIC)
-
-
-# ======================= kéo khối bài nhạc trên dòng thời gian =======================
 def _mouse(bar, kind, x, y):
     from PySide6.QtCore import QEvent, QPointF, Qt
     from PySide6.QtGui import QMouseEvent
