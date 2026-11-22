@@ -34,6 +34,7 @@ class MusicRangeBar(QWidget):
                         (self.end, "Nhạc nhỏ dần rồi tắt ở cuối clip này — hoặc chạy tới hết video"),
                         (self.first, "Bài phát đầu tiên khi nhạc vào, rồi tiếp các bài sau theo playlist")):
             cb.setToolTip(tip)
+            cb.setObjectName("rangeCombo")  # theme.py: viền màu nhấn + mũi tên — nhìn ra là bấm chọn được
             cb.setSizeAdjustPolicy(QComboBox.SizeAdjustPolicy.AdjustToMinimumContentsLengthWithIcon)
             cb.setMinimumContentsLength(14)
             cb.setSizePolicy(QSizePolicy.Policy.Preferred, QSizePolicy.Policy.Fixed)
@@ -78,8 +79,9 @@ class MusicRangeBar(QWidget):
             self._fill(self.start, [(0, "đầu video")] + [
                 (k + 1, f"{k + 1} · {name} · {fmt_dur(a)}") for k, (name, a, _b) in enumerate(self._blocks[:MAX_ITEMS])],
                 start, lambda n: f"{n} · (lần phát thứ {n})")
-            self._fill(self.end, [(0, "hết video")] + [
-                (k + 1, f"hết clip {k + 1} · {name}") for k, (name, _a, _b) in enumerate(self._blocks[:MAX_ITEMS])],
+            self._fill(self.end, [(0, "hết video")] + [  # chỉ các clip từ clip bắt đầu trở đi
+                (k + 1, f"hết clip {k + 1} · {name}") for k, (name, _a, _b) in enumerate(self._blocks[:MAX_ITEMS])
+                if k + 1 >= max(1, start)],
                 end, lambda n: f"hết clip {n}")
             self._fill(self.first, [("", "theo playlist")] + [
                 (path, f"Bài {k + 1} · {name}") for k, (path, name) in enumerate(self._tracks)],
@@ -101,6 +103,9 @@ class MusicRangeBar(QWidget):
     def _on_changed(self, *_) -> None:
         if self._quiet:
             return
-        self._values = (int(self.start.currentData() or 0), int(self.end.currentData() or 0),
-                        str(self.first.currentData() or ""))
+        start, end = int(self.start.currentData() or 0), int(self.end.currentData() or 0)
+        if end and start and end < start:
+            end = 0  # dừng trước chỗ bắt đầu thì vô nghĩa: chạy tới hết video (ô "tới" hiện đúng như vậy)
+        self._values = (start, end, str(self.first.currentData() or ""))
+        self._sync()  # ô "tới" chỉ liệt kê các clip sau clip bắt đầu
         self.changed.emit()

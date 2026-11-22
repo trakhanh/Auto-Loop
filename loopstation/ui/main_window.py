@@ -177,6 +177,7 @@ class MainWindow(QMainWindow):
         self.video_tab.timeline.trackMoveRequested.connect(self._move_track_from_timeline)
         self.video_tab.timeline.blockedMoveRequested.connect(self._blocked_timeline_move)
         self.video_tab.timeline.musicStartRequested.connect(self._music_from_clip)
+        self.video_tab.timeline.musicEndRequested.connect(self._music_to_clip)
         self.video_tab.timeline.seek_enabled = True
         self.music_tab.mixer.playbackStopped.connect(self._mixer_stopped)
         self.music_tab.mixer.previewRequested.connect(self.preview_audio)
@@ -289,6 +290,9 @@ class MainWindow(QMainWindow):
         self.updates.checked.connect(self._on_update_checked)
         self.settings_page.updateCheckRequested.connect(self._check_updates)
         self.viewer.positionChanged.connect(self.video_tab.timeline.set_playhead)
+        # đang phát: vạch phát chạy ra ngoài khung thì dòng thời gian tự cuộn theo (như Premiere)
+        self.viewer.player.stateChanged.connect(
+            lambda st: setattr(self.video_tab.timeline, "follow_playhead", st == "playing"))
         from .preview_player import SpaceToggle
         self._space = SpaceToggle(self, lambda: self.viewer)  # Space = Phát / Dừng ở mọi chỗ (trừ khi đang gõ chữ)
         self.viewer.player.stateChanged.connect(self._preview_state)
@@ -782,9 +786,38 @@ class MainWindow(QMainWindow):
         self.dock_bar.setCursor(Qt.CursorShape.PointingHandCursor)
         self.dock_bar.setToolTip("Thu gọn / mở dòng thời gian (kéo vạch phát trên đó để tua trình phát)")
         self.dock_bar.clicked.connect(lambda: self.tl_toggle.click())
-        tl_lay.addWidget(self.dock_bar, 0, Qt.AlignmentFlag.AlignLeft)
-        tl_lay.addWidget(self.music_tab.range_bar)  # ♪ Nhạc chạy từ clip … tới … · bài đầu …
-        tl_lay.addWidget(self.video_tab.timeline)
+        tl = self.video_tab.timeline
+        head = QHBoxLayout()
+        head.setContentsMargins(0, 0, 0, 0)
+        head.setSpacing(4)
+        head.addWidget(self.dock_bar)
+        head.addStretch(1)
+        # zoom như Premiere: − / + / Vừa khung (Ctrl + lăn chuột cũng được)
+        self.tl_zoom = QWidget()
+        zl = QHBoxLayout(self.tl_zoom)
+        zl.setContentsMargins(0, 0, 0, 0)
+        zl.setSpacing(4)
+        for text, tip, fn in (("−", "Thu nhỏ dòng thời gian (Ctrl + lăn chuột xuống)", tl.zoom_out),
+                              ("+", "Phóng to dòng thời gian (Ctrl + lăn chuột lên)", tl.zoom_in),
+                              ("Vừa khung", "Xem cả video trong khung (nhấp đúp dòng thời gian cũng được)", tl.fit)):
+            b = QPushButton(text)
+            b.setObjectName("pill")
+            b.setFixedHeight(22)
+            b.setToolTip(tip)
+            b.clicked.connect(fn)
+            zl.addWidget(b)
+        head.addWidget(self.tl_zoom)
+        tl_lay.addLayout(head)
+        # thân dải đáy: dòng chọn nhạc + dòng thời gian + thanh cuộn ngang (thu gọn thì ẩn cả khối)
+        self.tl_body = QWidget()
+        bl = QVBoxLayout(self.tl_body)
+        bl.setContentsMargins(0, 0, 0, 0)
+        bl.setSpacing(2)
+        bl.addWidget(self.music_tab.range_bar)  # ♪ Nhạc chạy từ clip … tới … · bài đầu …
+        bl.addWidget(tl)
+        bl.addWidget(tl.scrollbar)
+        tl.scrollbar.setVisible(False)
+        tl_lay.addWidget(self.tl_body)
 
         # Trình phát xem trước luôn hiện cạnh trang đang làm (bước Video / Nhạc / Xuất)
         from PySide6.QtWidgets import QSplitter
@@ -902,7 +935,8 @@ class MainWindow(QMainWindow):
         on_steps = idx in (0, 1, 2)
         expanded = self.tl_toggle.isChecked()
         self.timeline_wrap.setVisible(on_steps)  # thanh mảnh luôn hiện; nội dung chỉ hiện khi mở
-        self.video_tab.timeline.setVisible(expanded)
+        self.tl_body.setVisible(expanded)
+        self.tl_zoom.setVisible(expanded)
         self.dock_bar.setIcon(icons.icon("down" if expanded else "up", 12, "text_muted"))
         self.dock_bar.setText("Dòng thời gian" if expanded else "Dòng thời gian (đang thu gọn)")
         self.tl_toggle.setVisible(on_steps)
@@ -1432,6 +1466,13 @@ class MainWindow(QMainWindow):
         if end and n and end < n:
             end = 0  # tới clip trước chỗ bắt đầu thì vô nghĩa: chạy tới hết video
         self.music_tab.range_bar.set_values(n, end, first, emit=True)
+
+    def _music_to_clip(self, n: int) -> None:
+        """Chuột phải khối clip / kéo mép cuối dải nhạc: nhạc dừng ở hết khối thứ n (0 = hết video)."""
+        start, _end, first = self.music_tab.range_bar.values()
+        if n and start and n < start:
+            start = n  # dừng ở clip trước chỗ đang bắt đầu: nhạc chỉ chạy đúng clip đó
+        self.music_tab.range_bar.set_values(start, n, first, emit=True)
 
     def _migrate_music(self, proj, tl):
         """Dự án cũ (1.9.6–2.0.1) chỉnh nhạc theo từng clip / Nhạc vào lúc → một dòng "Nhạc chạy từ clip …". Có gộp

@@ -778,6 +778,10 @@ QPushButton#playerPlay:hover {{ background: {t['accent_hover']}; }}
 QPushButton#playerPlay:pressed {{ background: {t['accent_pressed']}; }}
 QPushButton#playerPlay:disabled {{ background: {t['raised']}; }}
 QComboBox#playerCombo {{ padding: 2px 8px; font-size: {f['small']}; }}
+/* dòng "♪ Nhạc chạy từ clip … tới … · bài đầu …": viền màu nhấn để nhìn ra là ô bấm chọn được */
+QComboBox#rangeCombo {{ border: 1px solid {rgba(t['accent'], 0.6)}; background: {t['field']}; padding: 3px 8px;
+    font-weight: 600; }}
+QComboBox#rangeCombo:hover {{ border-color: {t['accent']}; background: {rgba(t['accent'], 0.12)}; }}
 /* hộp thoại cắt đoạn */
 QFrame#playerFrame {{ background: {t['black']}; border: 1px solid {t['line']}; border-radius: {R['lg']}px; }}
 QFrame#sideCard {{ background: {t['panel']}; border: 1px solid {t['line']}; border-radius: {R['xl']}px; }}

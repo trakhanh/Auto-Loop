@@ -248,7 +248,12 @@ topic("video", "Làm video", "film", "Trang Video: clip & số lần loop", hero
                   "Hàng <i>Cắt đoạn &amp; hoà hình ▾</i>: <b>Áp dụng cắt</b> / <b>Lấy toàn bộ</b>, <b>Áp dụng nối</b> / <b>Bỏ nối</b>, <b>Nhân bản</b>, <b>Xem thử nối</b>."),
     ("3 thẻ cài đặt", "<b>Độ dài</b> (tổng thời lượng, thứ tự, Intro/Outro) · <b>Khung &amp; Tiếng</b> (clip khác tỉ lệ, ảnh tĩnh, mờ dần cuối, tiếng gốc) · <b>Màu &amp; Logo</b>."),
     ("Dòng thời gian", "nhìn tổng thể: làn CLIP và làn NHẠC. <b>Kéo một khối clip</b> sang trái / phải để đổi thứ tự trong bảng (Ctrl+Z để quay lại); <b>kéo một khối bài nhạc</b> để đổi thứ tự playlist (đang ngẫu nhiên thì app hỏi chuyển sang theo thứ tự). "
-                       "<b>Nhạc chạy từ clip nào</b>: dòng <b>♪ Nhạc chạy từ clip [5 ▾] tới [hết video ▾] · bài đầu [Bài 1 ▾]</b> ngay trên dòng thời gian, hoặc kéo <b>tay nắm ♪</b> trên làn NHẠC. “Clip 5” là khối thứ 5 trên dòng thời gian (kể cả khi bảng lặp cả chuỗi). Lăn chuột để phóng to, Shift + kéo (hoặc Shift + lăn) để di chuyển, nhấp đúp để xem toàn bộ."),
+                       "<b>Nhạc chạy từ clip nào</b>: dòng <b>♪ Nhạc chạy từ clip [5 ▾] tới [hết video ▾] · bài đầu [Bài 1 ▾]</b> ngay trên dòng thời gian, “Clip 5” là khối thứ 5 trên dòng thời gian (kể cả khi bảng lặp cả chuỗi). "
+                       "Khỏi đếm số: <b>chuột phải khối clip</b> → <i>Nhạc bắt đầu từ clip này</i> / <i>Nhạc dừng ở hết clip này</i>, "
+                       "hoặc kéo <b>mép đầu (♪) / mép cuối</b> dải nhạc trên làn NHẠC — tự hít vào ranh giới clip. "
+                       "Xem như Premiere: <b>Ctrl + lăn chuột</b> để phóng to / thu nhỏ quanh con trỏ, nút <b>− / + / Vừa khung</b>; "
+                       "<b>lăn chuột</b> (hoặc Shift + lăn), kéo chỗ trống, kéo bằng <b>nút giữa chuột</b> hoặc kéo <b>thanh cuộn</b> "
+                       "để trượt ngang; nhấp đúp để xem toàn bộ. Đang phát thì vạch phát tự cuộn theo."),
     ("Thanh hướng dẫn", "đang ở bước mấy + việc nên làm tiếp."),
     ("Tiếp theo", "sang bước Nhạc (hoặc Xuất nếu không dùng nhạc).")]) + """
 <h2>Ô “Số lần phát” — gõ gì?</h2>""" + examples([
@@ -442,7 +447,8 @@ topic("nhac", "Âm thanh", "music", "Trang Nhạc: playlist", hero(
     ("Đoạn nghe", "bài hát không phát từ đầu bài: <b>bấm đúp ô Thời lượng</b> (hoặc chuột phải bài → <i>Chọn đoạn nghe</i>) → "
                   "<b>Bỏ đầu</b> (vd 0:30 intro) / <b>Bỏ cuối</b>. Bài có đoạn nghe hiện ✂ trước thời lượng."),
     ("Nhạc chạy từ clip nào", "dòng <b>♪ Nhạc chạy từ clip … tới … · bài đầu …</b> ngay trên dòng thời gian (ví dụ bài 1 "
-                              "vào từ clip 5: chọn <i>5</i> và <i>Bài 1</i>), hoặc kéo tay nắm ♪ trên làn NHẠC."),
+                              "vào từ clip 5: chọn <i>5</i> và <i>Bài 1</i>). Nhanh hơn: chuột phải khối clip trên dòng thời gian → "
+                              "<i>Nhạc bắt đầu từ clip này</i> / <i>Nhạc dừng ở hết clip này</i>, hoặc kéo mép dải nhạc."),
     ("Âm lượng %", "to / nhỏ <b>riêng từng bài</b>: bấm đúp để sửa, hoặc bôi đen nhiều bài → chuột phải → <i>Đặt âm lượng bài đang chọn…</i>. "
                    "Cột <b>Độ to gốc</b> cho biết bài nào vốn to / nhỏ hơn."),
     ("Lịch phát dự kiến", "bài nào phát lúc mấy giờ — chính là YouTube Chapters."),
