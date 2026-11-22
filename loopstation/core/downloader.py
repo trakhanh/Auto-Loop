@@ -659,13 +659,23 @@ def needs_h264(o: Options, codec: str) -> bool:
 
 def convert_to_h264(path: str, encoder: str, cancel: threading.Event,
                     on_progress: Callable[[float], None] | None = None) -> str:
-    """Chuyển video sang H.264 (card đồ hoạ nếu có), giữ tiếng; ghi file tạm rồi thay file gốc. Trả về đường dẫn."""
-    from . import encoders, probe
+    """Chuyển video sang H.264 (card đồ hoạ nếu có), giữ tiếng; ghi file tạm rồi thay file gốc. Trả về đường dẫn.
+    Giải mã bằng card (NVIDIA → CUDA, AMD / Intel → D3D11) nếu bật ô Cài đặt và card đọc được video này. Lỗi ở card
+    (giải mã rồi mã hoá) → lần lượt thử lại: giải mã CPU, rồi mã hoá CPU (libx264 nhanh) — không bỏ dở video."""
+    from . import encoders, hwdec, probe
     src = Path(path)
     tmp = src.with_name(src.stem + ".h264tmp" + src.suffix)
     dur = probe.probe(str(src)).duration or 0.0
-    args = ["-v", "error", "-i", str(src), "-map", "0:v:0", "-map", "0:a?", *encoders.encoder_args(encoder, "high", 250),
-            "-pix_fmt", encoders.pix_fmt(encoder), "-c:a", "copy", "-movflags", "+faststart", str(tmp)]
+    use_card = ffmpeg_tools.OPTIONS.get("cut_hwdec", "1") == "1"
+    hw = hwdec.choose(encoder, str(src), use_card)
+    tries = [(encoder, hw)] + ([(encoder, "")] if hw else [])         + ([("libx264", "")] if encoders.is_hardware(encoder) else [])
+
+    def args_for(enc: str, dec: str) -> list[str]:
+        venc = encoders.encoder_args(enc, "high", 250)
+        if enc == "libx264":  # "slow" của bản xuất dài: chuyển một video 4K mất hàng chục phút
+            venc[venc.index("-preset") + 1] = "veryfast"
+        return ["-v", "error", *hwdec.args(dec), "-i", str(src), "-map", "0:v:0", "-map", "0:a?", *venc,
+                "-pix_fmt", encoders.pix_fmt(enc), "-c:a", "copy", "-movflags", "+faststart", str(tmp)]
     runner = ffmpeg_tools.Runner()
     stop = threading.Event()
 
@@ -683,7 +693,14 @@ def convert_to_h264(path: str, encoder: str, cancel: threading.Event,
             except ValueError:
                 pass
     try:
-        runner.ffmpeg(args, prog)
+        for i, (enc, dec) in enumerate(tries):
+            try:
+                runner.ffmpeg(args_for(enc, dec), prog)
+                break
+            except ffmpeg_tools.FFmpegError:
+                tmp.unlink(missing_ok=True)
+                if cancel.is_set() or i == len(tries) - 1:
+                    raise
         if cancel.is_set():
             raise CancelledError()
         os.replace(tmp, src)

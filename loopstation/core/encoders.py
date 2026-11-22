@@ -262,11 +262,16 @@ def encoder_args(encoder: str, quality: str, gop: int, maxrate_kbps: int = 0, st
         base = [26, 23, 20, 18] if encoder == "h264_qsv" else [28, 25, 22, 20]
         return common + ["-preset", preset, "-global_quality", str(base[q])]
     if encoder in ("h264_amf", "hevc_amf"):
+        # H.264: profile High như NVENC (AMF mặc định Main — kém nét hơn ở cùng dung lượng). hevc_amf chỉ có Main.
+        prof = ["-profile:v", "high"] if encoder == "h264_amf" else []
         if maxrate_kbps > 0:
-            return common + ["-quality", AMF_QUALITY[q], "-rc", "vbr_peak", "-b:v", f"{maxrate_kbps * 7 // 10}k", *cap]
+            return common + ["-quality", AMF_QUALITY[q], "-rc", "vbr_peak", "-b:v", f"{maxrate_kbps * 7 // 10}k", *cap,
+                             *prof]
         base = [25, 22, 19, 17] if encoder == "h264_amf" else [27, 24, 21, 19]
+        # driver AMD mới tự bật khung B cho H.264: đặt qp khung B như khung P (để mặc định thì khung B mờ hơn)
+        bq = ["-qp_b", str(base[q] + 2)] if encoder == "h264_amf" else []
         return common + ["-quality", AMF_QUALITY[q], "-rc", "cqp",
-                         "-qp_i", str(base[q]), "-qp_p", str(base[q] + 2)]
+                         "-qp_i", str(base[q]), "-qp_p", str(base[q] + 2), *bq, *prof]
     return common + cap
 
 

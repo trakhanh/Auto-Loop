@@ -107,6 +107,7 @@ def test_encoders_reach_cut_page(win):
 
 def test_help_action_opens_cut(win):
     import loopstation.ui.main_window as mw
+    pump(2.5)  # dự án trống mở xong thì app tự về trang Bắt đầu — đợi xong rồi mới thử
     win._help_action("cut")
     pump()
     assert win.stack.currentIndex() == mw.CUT_PAGE

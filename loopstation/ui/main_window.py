@@ -22,7 +22,7 @@ from PySide6.QtWidgets import (
 )
 
 from ..core import encoders, ffmpeg_tools, planner, power, probe, render, render_queue as rq, size_estimate, sysinfo, timeline
-from ..core import denoise, updater
+from ..core import denoise, hwdec, updater
 from ..core.ffmpeg_tools import CancelledError
 from ..core.project import PROJECT_EXT, ClipItem, Project, is_sample_file
 from ..core.render import RenderJob, clean_filename, default_output_name, output_path, strip_ext
@@ -1854,9 +1854,10 @@ class MainWindow(QMainWindow):
     def _apply_prefs(self) -> None:
         """Áp tuỳ chọn từ trang Cài đặt."""
         sp = self.settings_page
-        cuda_ok = bool(self._accel and self._accel.cuda_decode)
-        ffmpeg_tools.OPTIONS["hwdec"] = "cuda" if cuda_ok and sp.pref("pref/hwdec") else ""
+        # NVIDIA → CUDA, AMD / Intel → D3D11 (chỉ khi người dùng bật ô "Giải mã video nguồn bằng GPU")
+        ffmpeg_tools.OPTIONS["hwdec"] = hwdec.export_choice(self._accel, sp.pref("pref/hwdec"))
         ffmpeg_tools.OPTIONS["cloud_stage"] = "1" if sp.pref("pref/cloud_stage", True) else ""
+        ffmpeg_tools.OPTIONS["cut_hwdec"] = "1" if sp.pref("pref/cut_hwdec", True) else ""
         self.export_tab._update_cloud_note()
         try:
             pt = int(self.settings.value("pref/font_pt", 10))

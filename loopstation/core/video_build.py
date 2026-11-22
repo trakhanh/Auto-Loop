@@ -55,12 +55,13 @@ def seconds(frames: int, fps: Fraction) -> float:
     return float(Fraction(frames) / fps)
 
 
-def _input(path: str, fps: Fraction) -> list[str]:
-    """Tham số đầu vào: ảnh tĩnh chỉ giải mã 1 frame rồi nhân bản ở sau bước co giãn khung hình."""
+def _input(path: str, fps: Fraction, hw: bool = True) -> list[str]:
+    """Tham số đầu vào: ảnh tĩnh chỉ giải mã 1 frame rồi nhân bản ở sau bước co giãn khung hình.
+    `hw`: giải mã bằng card theo Cài đặt (CUDA / D3D11). Xem trước tắt — khối ngắn, tua liên tục."""
     if os.path.splitext(path)[1].lower() in IMAGE_EXTS:
         return ["-framerate", f"{fps.numerator}/{fps.denominator}", "-i", path]
-    hw = ft.OPTIONS.get("hwdec")
-    return (["-hwaccel", hw] if hw else []) + ["-i", path]
+    dec = ft.OPTIONS.get("hwdec") if hw else ""
+    return (["-hwaccel", dec] if dec else []) + ["-i", path]
 
 
 def color_fix(path: str) -> str:

@@ -44,6 +44,7 @@ class AccelInfo:
     hwaccels: list[str] = field(default_factory=list)
     encoders: dict[str, bool] = field(default_factory=dict)  # tên encoder → chạy được
     cuda_decode: bool = False
+    d3d11_decode: bool = False  # giải mã bằng card qua D3D11 (mọi hãng card: AMD, Intel, NVIDIA)
     error: str = ""
 
 
@@ -171,6 +172,24 @@ def _test_cuda_decode() -> bool:
     return ok
 
 
+def _test_d3d11_decode() -> bool:
+    """Giải mã H.264 bằng D3D11 thật sự (đường của card AMD / Intel)."""
+    if "d3d11_decode" in encoders._TEST_CACHE:
+        return encoders._TEST_CACHE["d3d11_decode"]
+    from . import hwdec
+    tmp = Path(tempfile.gettempdir()) / f"ktls_d3d11_test_{os.getpid()}_{threading.get_ident()}.mp4"
+    try:
+        ft.run([ft.ffmpeg(), "-hide_banner", "-v", "error", "-y", "-f", "lavfi", "-i",
+                "testsrc2=s=640x360:r=24:d=0.3", "-c:v", "libx264", "-pix_fmt", "yuv420p", str(tmp)], timeout=15)
+        ok = hwdec.works("d3d11va", str(tmp))
+    except Exception:  # noqa: BLE001
+        ok = False
+    finally:
+        tmp.unlink(missing_ok=True)
+    encoders._TEST_CACHE["d3d11_decode"] = ok
+    return ok
+
+
 def gather_accel() -> AccelInfo:
     info = AccelInfo()
     try:
@@ -184,8 +203,10 @@ def gather_accel() -> AccelInfo:
     info.hwaccels = [x.strip() for x in out.splitlines()[1:] if x.strip()]
     with ThreadPoolExecutor(max_workers=4) as ex:
         cuda = ex.submit(_test_cuda_decode) if "cuda" in info.hwaccels else None
+        d3d = ex.submit(_test_d3d11_decode) if "d3d11va" in info.hwaccels else None
         info.encoders = dict(zip(TEST_ENCODERS, ex.map(_test_encoder, TEST_ENCODERS)))
         info.cuda_decode = bool(cuda and cuda.result())
+        info.d3d11_decode = bool(d3d and d3d.result())
     return info
 
 

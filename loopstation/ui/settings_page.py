@@ -163,9 +163,15 @@ class SettingsPage(QWidget):
         row.setSpacing(6)
         row.addWidget(self.out_dir, 1)
         row.addWidget(pick)
-        self.hwdec = QCheckBox("Giải mã video nguồn bằng GPU (CUDA)")
-        self.hwdec.setToolTip("Thường KHÔNG nhanh hơn với clip ngắn (CPU giải mã rất nhanh, CUDA tốn thời gian khởi "
-                              "động). Chỉ nên bật trên máy CPU yếu hoặc clip nguồn 4K dài.")
+        self.hwdec = QCheckBox("Giải mã video nguồn bằng GPU (CUDA / D3D11)")
+        self.hwdec.setToolTip("Card NVIDIA dùng CUDA, card AMD / Intel dùng D3D11. Thường KHÔNG nhanh hơn với clip "
+                              "ngắn (CPU giải mã rất nhanh, card tốn thời gian khởi động). Chỉ nên bật trên máy CPU "
+                              "yếu hoặc clip nguồn 4K dài. Card không đọc được clip nào thì app tự chuyển về CPU.")
+        self.cut_hwdec = QCheckBox("Dùng card đồ hoạ giải mã khi cắt video")
+        self.cut_hwdec.setToolTip("Trang Cắt video (chia đoạn, xuất ảnh) và chuyển H.264 ở trang Tải video: card "
+                                  "NVIDIA dùng CUDA (nhanh gấp khoảng 2 lần), card AMD / Intel dùng D3D11 (đỡ việc cho CPU; máy "
+                                  "CPU mạnh thì gần như ngang — tắt nếu thấy chậm hơn). App thử "
+                                  "trước vài khung của từng video, card không đọc được thì tự dùng CPU.")
         self.open_folder = QCheckBox("Mở thư mục chứa file khi xuất xong")
         self.beep = QCheckBox("Phát âm báo khi xuất xong")
         self.shutdown = QCheckBox("Tắt máy khi chạy xong hàng đợi (có 2 phút để huỷ)")
@@ -178,6 +184,7 @@ class SettingsPage(QWidget):
         f = self._form(g_exp)
         f.addRow(self._lab("Thư mục xuất mặc định"), row)
         f.addRow(self.hwdec)
+        f.addRow(self.cut_hwdec)
         f.addRow(w.muted("Tốc độ xuất đến chủ yếu từ bộ mã hoá trên card (NVENC/Quick Sync/AMF), app luôn tự dùng. "
                          "Giải mã bằng GPU là tuỳ chọn thêm."))
         f.addRow(self.open_folder)
@@ -424,7 +431,8 @@ class SettingsPage(QWidget):
         theme.page_layout(lay)
         lay.addLayout(cols, 1)
 
-        for c, key, default in ((self.hwdec, "pref/hwdec", False), (self.open_folder, "pref/open_folder", True),
+        for c, key, default in ((self.hwdec, "pref/hwdec", False), (self.cut_hwdec, "pref/cut_hwdec", True),
+                                (self.open_folder, "pref/open_folder", True),
                                 (self.beep, "pref/beep", True), (self.cloud_stage, "pref/cloud_stage", True)):
             c.setChecked(str(settings.value(key, default)).lower() in ("true", "1"))
             c.toggled.connect(lambda v, k=key: self._save(k, v))
@@ -517,8 +525,9 @@ class SettingsPage(QWidget):
         path.setObjectName("muted")
         path.setToolTip(info.ffmpeg_path)
         g.addWidget(path, 1, 1, 1, 4)
-        g.addWidget(self._lab("Giải mã CUDA"), 2, 0)
-        g.addWidget(pill(info.cuda_decode, "dùng được" if info.cuda_decode else "không có", 96), 2, 1, left)
+        g.addWidget(self._lab("Giải mã bằng card"), 2, 0)
+        g.addWidget(pill(info.cuda_decode, "CUDA" if info.cuda_decode else "CUDA: không", 96), 2, 1, left)
+        g.addWidget(pill(info.d3d11_decode, "D3D11" if info.d3d11_decode else "D3D11: không", 96), 2, 2, left)
         r = 3
         for vendor, encs in VENDOR_ROWS:
             g.addWidget(self._lab(vendor), r, 0)
@@ -531,14 +540,16 @@ class SettingsPage(QWidget):
         for c in (1, 2, 3):
             g.setColumnMinimumWidth(c, 96)
         g.setColumnStretch(4, 1)
-        self.hwdec.setEnabled(info.cuda_decode)
-        if not info.cuda_decode:
+        card_dec = info.cuda_decode or info.d3d11_decode
+        self.hwdec.setEnabled(card_dec)
+        if not card_dec:
             self.hwdec.setChecked(False)
 
         best = next((v for v, encs in VENDOR_ROWS[:3] if info.encoders.get(encs[0])), None)
         if best:
             self.verdict.setText(f"Máy này xuất bằng <b>{best}</b> trên card đồ hoạ — tốc độ cao. "
-                                 + ("CUDA cũng sẵn sàng. " if info.cuda_decode else "")
+                                 + ("Giải mã bằng card (CUDA) cũng sẵn sàng. " if info.cuda_decode else
+                                    "Giải mã bằng card (D3D11) cũng sẵn sàng. " if info.d3d11_decode else "")
                                  + "Bạn không cần cài thêm gì.")
         else:
             self.verdict.setText("Không dùng được bộ mã hoá trên card đồ hoạ — app sẽ xuất bằng CPU (chậm hơn "

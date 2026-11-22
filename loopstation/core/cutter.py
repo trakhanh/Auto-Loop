@@ -11,6 +11,7 @@ from dataclasses import dataclass
 from pathlib import Path
 
 from . import encoders
+from . import hwdec as hwdec_mod  # tham số các hàm dưới cũng tên "hwdec"
 from .probe import MediaInfo
 
 EPS = 1e-6
@@ -267,9 +268,10 @@ def aspect_filter(w: int, h: int, aspect: str, fit: str) -> str:
 
 
 def speed_plan(encoder: str) -> tuple[str, int]:
-    """(giải mã bằng gì, mấy đoạn cùng lúc) theo encoder đã dò. NVIDIA: giải mã CUDA (CPU giải mã là phần chậm nhất
-    khi card mã hoá) + 3 đoạn song song — đo trên 1080p: nhanh gấp ~2 lần. Card khác / CPU: giải mã CPU."""
-    return ("cuda" if encoder.endswith("_nvenc") else ""), encoders.parallel_jobs(encoder)
+    """(nên thử giải mã bằng gì, mấy đoạn cùng lúc) theo encoder đã dò. Khi card mã hoá, CPU giải mã là phần chậm
+    nhất: NVIDIA → CUDA, AMD / Intel → D3D11 (hwdec.candidate) + nhiều đoạn song song — đo trên 1080p: nhanh gấp ~2
+    lần. Không có card mã hoá → CPU. Trang Cắt video thử thật từng video (hwdec.choose) trước khi dùng."""
+    return hwdec_mod.candidate(encoder), encoders.parallel_jobs(encoder)
 
 
 def split_args(src: str, seg: Segment, out: Path, info: MediaInfo, s: SplitSettings, encoder: str,
@@ -282,7 +284,7 @@ def split_args(src: str, seg: Segment, out: Path, info: MediaInfo, s: SplitSetti
     if not s.exact:
         return [*head, "-c", "copy", "-avoid_negative_ts", "make_zero", str(out)]
     if hwdec:
-        head = ["-hwaccel", hwdec, *head]  # khung giải mã tự chép về RAM cho bộ lọc / encoder
+        head = [*hwdec_mod.args(hwdec), *head]  # khung giải mã tự chép về RAM cho bộ lọc / encoder
     flt = aspect_filter(info.width, info.height, s.aspect, s.fit)
     if not flt and (info.width % 2 or info.height % 2):  # H.264 4:2:0 không nhận cạnh lẻ (quay màn hình, clip đã cắt)
         flt = "scale=trunc(iw/2)*2:trunc(ih/2)*2"
@@ -338,8 +340,7 @@ def frame_args(src: str, info: MediaInfo, s: FrameSettings, pattern: Path, hwdec
         flt = "select=eq(n\\,0)+gt(scene\\," + f"{scene_threshold(s.scene):g})"
         post = ["-fps_mode", "vfr"]
     q = ["-q:v", "2"] if s.fmt == "jpg" else []
-    hw = ["-hwaccel", hwdec] if hwdec else []
-    return [*hw, *pre, "-i", src, "-map", "0:v:0", "-vf", flt, *post, *q, str(pattern)]
+    return [*hwdec_mod.args(hwdec), *pre, "-i", src, "-map", "0:v:0", "-vf", flt, *post, *q, str(pattern)]
 
 
 def frame_estimate(info: MediaInfo, s: FrameSettings) -> int | None:
@@ -461,6 +462,24 @@ def split_video(runner, src: str, info: MediaInfo, s: SplitSettings, folder: Pat
         if on_progress:
             on_progress(min(1.0, sum(got) / total), text)
 
+    # cổng chạy: bình thường nhiều đoạn cùng lúc; sau khi card từ chối phiên ("serial") thì mỗi lúc một đoạn
+    gate = threading.Condition()
+    gate_state = {"serial": False, "active": 0, "excl": False}
+
+    def run(args: list[str], prog) -> None:
+        with gate:
+            while gate_state["excl"] or (gate_state["serial"] and gate_state["active"] > 0):
+                gate.wait()
+            gate_state["active"] += 1
+            gate_state["excl"] = gate_state["serial"]
+        try:
+            runner.ffmpeg(args, on_progress=prog)
+        finally:
+            with gate:
+                gate_state["active"] -= 1
+                gate_state["excl"] = False
+                gate.notify_all()
+
     def one(i: int) -> None:
         seg = segments[i]
         text = f"đoạn {i + 1}/{n}"
@@ -474,19 +493,28 @@ def split_video(runner, src: str, info: MediaInfo, s: SplitSettings, folder: Pat
                 with lock:
                     got[i] = min(max(t, 0.0), seg.dur)
                     report(text)
+        enc = encoder
         while True:
             use_hw = hw["on"]
             try:
-                runner.ffmpeg(split_args(src, seg, out, info, s, encoder, hwdec if use_hw else ""), on_progress=prog)
+                run(split_args(src, seg, out, info, s, enc, hwdec if use_hw else ""), prog)
             except CancelledError:
                 out.unlink(missing_ok=True)
                 raise
             except FFmpegError as e:
                 out.unlink(missing_ok=True)
+                with lock:
+                    got[i] = 0.0
                 if use_hw:  # card không giải mã được video này → CPU, cho cả các đoạn sau
                     hw["on"] = False
-                    with lock:
-                        got[i] = 0.0
+                    continue
+                if encoders.is_hardware(enc) and not gate_state["serial"]:
+                    # card từ chối thêm phiên mã hoá (AMD / card phổ thông giới hạn số phiên): từ giờ chạy lần lượt
+                    with gate:
+                        gate_state["serial"] = True
+                    continue
+                if encoders.is_hardware(enc):  # chạy một mình vẫn lỗi → card không làm được: mã hoá bằng CPU
+                    enc = "libx264"
                     continue
                 with lock:
                     errs[i] = f"Đoạn {i + 1}: {_last_line(e)}"

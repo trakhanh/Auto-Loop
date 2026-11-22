@@ -120,9 +120,11 @@ def segment_args(sch: Schedule, idx: int, skip: int) -> list[str]:
         seek_a = seg.start + off_a + skip  # tua thẳng tới chỗ cần ở đầu vào: không giải mã lại từ đầu clip dài
         if seek_a:
             inputs += ["-ss", f"{float(Fraction(seek_a) / fps):.6f}"]
-    inputs += video_build._input(sch.paths[seg.clip], fps)
+    # luôn giải mã CPU: khối xem trước ngắn, tua liên tục — khởi động card (CUDA / D3D11) mỗi khối chỉ chậm thêm,
+    # và card không đọc được clip nào thì bản xem trước hỏng
+    inputs += video_build._input(sch.paths[seg.clip], fps, hw=False)
     if seg.kind == "xfade":
-        inputs += video_build._input(sch.paths[seg.clip_b], fps)
+        inputs += video_build._input(sch.paths[seg.clip_b], fps, hw=False)
     graph = video_build.segment_graph(seg, sch.paths, fps, sch.width, sch.height, sch.fit, "rgb24", fade,
                                       off_a, off_b, look, side, skip=skip, seek_a=seek_a)
     return ["-v", "error", "-nostdin", *inputs, "-filter_complex", graph, "-map", "[v]",

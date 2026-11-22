@@ -18,7 +18,7 @@ from PySide6.QtWidgets import (
     QRadioButton, QScrollArea, QSpinBox, QStackedWidget, QTreeWidget, QTreeWidgetItem, QVBoxLayout, QWidget,
 )
 
-from ..core import cutter, ffmpeg_tools, probe
+from ..core import cutter, ffmpeg_tools, hwdec, probe
 from ..core.cutter import FrameSettings, SplitSettings
 from . import icons, theme
 from . import widgets as w
@@ -90,6 +90,11 @@ def _save(settings: QSettings, prefix: str, obj) -> None:
         settings.setValue(f"{prefix}/{f.name}", getattr(obj, f.name))
 
 
+def card_decode_enabled(settings: QSettings) -> bool:
+    """Ô Cài đặt "Dùng card đồ hoạ giải mã khi cắt video" (mặc định bật, nhớ theo từng người dùng Windows)."""
+    return str(settings.value("pref/cut_hwdec", True)).lower() in ("true", "1")
+
+
 def fmt_secs(sec: float) -> str:
     """Giây → "1 phút 12 giây" (nhật ký)."""
     s = int(round(sec))
@@ -125,6 +130,8 @@ class CutPage(QWidget):
         self.b.all_done.connect(self._on_all_done)
         self.b.note.connect(self._log)
         self._run: dict = {}
+        self._card_decode = True
+        self._last_dec: str | None = None
         self._anim = QTimer(self)  # vẽ lại thanh tiến độ trong danh sách (vệt sáng chạy) khi đang chạy
         self._anim.setInterval(40)
         self._build()
@@ -811,6 +818,8 @@ class CutPage(QWidget):
             self.status[tab][p] = "wait"
             self.status_text[tab][p] = "Chờ"
             self._paint(p)
+        self._card_decode = card_decode_enabled(self.settings)
+        self._last_dec = None  # nhật ký chỉ ghi cách giải mã khi đổi (đỡ dài)
         self._run = {"tab": tab, "todo": todo, "done": 0, "outputs": 0, "user_stop": False, "t0": {},
                      "folder": folder}
         self._runner = ffmpeg_tools.Runner()
@@ -836,14 +845,30 @@ class CutPage(QWidget):
         finally:
             self.b.all_done.emit(reason)
 
+    def _decode_plan(self, p: str, encoder: str) -> tuple[str, int]:
+        """(giải mã bằng gì, mấy đoạn cùng lúc) cho video này: card NVIDIA → CUDA, AMD / Intel → D3D11, thử thật vài
+        khung trước (hwdec.works); ô Cài đặt tắt hoặc card không đọc được video → CPU. Ghi nhật ký khi đổi."""
+        cand, jobs = cutter.speed_plan(encoder)
+        use = cand if self._card_decode else ""
+        hw = use if use and hwdec.works(use, p) else ""
+        text = f"Giải mã bằng {hwdec.label(hw)}"
+        if use and not hw:
+            text += f" — {hwdec.label(use)} không đọc được video này"
+        elif cand and not self._card_decode:
+            text += " (đã tắt giải mã bằng card trong Cài đặt)"
+        if text != self._last_dec:
+            self._last_dec = text
+            self.b.note.emit(f"{Path(p).name}: {text}")
+        return hw, jobs
+
     def _work_one(self, runner, tab, p, job, folder, encoder, info, old) -> bool:
         """Một video. False = bị Dừng (không làm video sau)."""
         self.b.progress.emit(p, -1.0, "")
 
         def prog(frac, text):
             self.b.progress.emit(p, frac, text)
-        hwdec, jobs = cutter.speed_plan(encoder)  # card NVIDIA: giải mã CUDA + 3 đoạn cùng lúc
         try:
+            hw, jobs = self._decode_plan(p, encoder)
             spot = None
             if old is not None:  # lượt trước bị Dừng: dọn file chính lượt đó tạo, chạy lại đúng chỗ cũ
                 kept = 0
@@ -861,9 +886,9 @@ class CutPage(QWidget):
                 if note:
                     self.b.note.emit(f"{Path(p).name}: {note}")
                 res = cutter.split_video(runner, p, info, job, folder, encoder, segs, on_progress=prog, reuse=spot,
-                                         hwdec=hwdec, jobs=jobs)
+                                         hwdec=hw, jobs=jobs)
             else:
-                res = cutter.extract_frames(runner, p, info, job, folder, on_progress=prog, reuse=spot, hwdec=hwdec)
+                res = cutter.extract_frames(runner, p, info, job, folder, on_progress=prog, reuse=spot, hwdec=hw)
             self.b.video_done.emit(p, res, "", None)
         except ffmpeg_tools.CancelledError as e:
             self.b.video_done.emit(p, None, "stop", (getattr(e, "folder", folder), getattr(e, "stem", ""),

@@ -347,3 +347,40 @@ def test_run_uses_speed_plan(page, env, monkeypatch):
     page.start()
     assert wait(lambda: not page.is_busy(), 60)
     assert seen == {"split": ("", 2), "frames": ""}
+
+
+@pytest.mark.parametrize("enabled,card_ok,expect,log_part", [
+    (True, True, "d3d11va", "D3D11"),
+    (True, False, "", "không đọc được"),
+    (False, True, "", "CPU"),
+])
+def test_card_decode_choice_and_log(page, env, settings, monkeypatch, enabled, card_ok, expect, log_part):
+    """Card AMD / Intel: thử giải mã D3D11 trên chính video; ô Cài đặt tắt hoặc card không đọc được → CPU. Nhật ký ghi
+    rõ đang giải mã bằng gì."""
+    from loopstation.core import cutter
+    from loopstation.ui import cut_page
+    settings.setValue("pref/cut_hwdec", enabled)
+    monkeypatch.setattr(cut_page.cutter, "speed_plan", lambda enc: ("d3d11va", 2))
+    monkeypatch.setattr(cut_page.hwdec, "works", lambda hw, src: card_ok)
+    seen = {}
+    real = cutter.split_video
+
+    def spy(*a, **k):
+        seen["hw"] = k.get("hwdec")
+        k["hwdec"] = ""  # chạy thật bằng CPU (kết quả giải mã thật đã có test riêng)
+        return real(*a, **k)
+    monkeypatch.setattr(cut_page.cutter, "split_video", spy)
+    add_ready(page, env / "lua.mp4")
+    page.mode_radio["parts"].setChecked(True)
+    page.start()
+    assert wait(lambda: not page.is_busy(), 60)
+    assert seen["hw"] == expect
+    assert "Giải mã" in page.log.toPlainText() and log_part in page.log.toPlainText()
+
+
+def test_card_decode_setting_default_on(settings):
+    from loopstation.ui.cut_page import card_decode_enabled
+    settings.remove("pref/cut_hwdec")
+    assert card_decode_enabled(settings)
+    settings.setValue("pref/cut_hwdec", False)
+    assert not card_decode_enabled(settings)

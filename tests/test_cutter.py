@@ -247,8 +247,17 @@ def test_split_args_cpu_uses_fast_preset():
 
 def test_speed_plan():
     assert c.speed_plan("h264_nvenc") == ("cuda", 3)
-    assert c.speed_plan("h264_qsv")[1] == 2 and c.speed_plan("h264_qsv")[0] == ""
+    assert c.speed_plan("h264_amf") == ("d3d11va", 3)  # AMD: giải mã D3D11, 3 đoạn cùng lúc như NVIDIA
+    assert c.speed_plan("h264_qsv") == ("d3d11va", 2)
     assert c.speed_plan("libx264")[0] == "" and c.speed_plan("libx264")[1] >= 1
+
+
+def test_split_args_hw_device():
+    a = c.split_args("a.mp4", c.Segment(10, 5), Path("o.mp4"), INFO, c.SplitSettings(), "h264_amf",
+                     hwdec="d3d11va:1")
+    assert a[:4] == ["-hwaccel", "d3d11va", "-hwaccel_device", "1"] and a.index("-hwaccel_device") < a.index("-i")
+    f = c.frame_args("a.mp4", INFO, c.FrameSettings(), Path("x_%04d.jpg"), hwdec="d3d11va:1")
+    assert f[:4] == ["-hwaccel", "d3d11va", "-hwaccel_device", "1"]
 
 
 def test_frame_args_hwdec():

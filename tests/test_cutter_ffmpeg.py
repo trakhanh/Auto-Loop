@@ -253,3 +253,72 @@ def test_hwdec_failure_falls_back_to_cpu(media, tmp_path):
     f = cutter.extract_frames(ffmpeg_tools.Runner(), str(sample), info, cutter.FrameSettings(count=3), tmp_path / "a",
                               hwdec="khong-co-that")
     assert len(f.files) == 3 and not f.errors
+
+
+@pytest.mark.parametrize("hw", ["d3d11va", "d3d11va:1", "cuda"])
+def test_split_and_frames_with_card_decode(media, tmp_path, hw):
+    """Giải mã bằng card thật (D3D11 = đường của card AMD, thử trên NVIDIA và Intel): đúng số đoạn, độ dài, số ảnh."""
+    from loopstation.core import cutter, ffmpeg_tools, hwdec, probe
+    sample, _ = media
+    if not hwdec.works(hw, str(sample)):
+        pytest.skip(f"máy này không giải mã được bằng {hw}")
+    info = probe.probe(str(sample))
+    s = cutter.SplitSettings(mode="parts", parts=3, aspect="9:16")
+    segs, _ = cutter.plan_segments(info.duration, s)
+    r = cutter.split_video(ffmpeg_tools.Runner(), str(sample), info, s, tmp_path, "libx264", segs, hwdec=hw, jobs=3)
+    assert len(r.files) == 3 and not r.errors
+    assert all(abs(dur(p) - 2.0) < 0.15 for p in r.files)
+    assert all(probe.probe(str(p)).nb_frames in (None, 50) for p in r.files)
+    f = cutter.extract_frames(ffmpeg_tools.Runner(), str(sample), info, cutter.FrameSettings(count=6), tmp_path / "a",
+                              hwdec=hw)
+    assert len(f.files) == 6 and not f.errors
+
+
+def test_card_encoder_failure_retries_then_cpu(media, tmp_path):
+    """Card mã hoá từ chối (AMD giới hạn số phiên cùng lúc, hoặc không có card): đoạn đó chạy lại một mình, vẫn lỗi
+    thì mã hoá bằng CPU — không đoạn nào bị bỏ. Máy không có AMD: h264_amf luôn lỗi → phải ra đủ file bằng CPU."""
+    from loopstation.core import cutter, encoders, ffmpeg_tools, probe
+    if encoders._test("h264_amf"):
+        pytest.skip("máy có card AMD chạy được — không giả lập lỗi được")
+    sample, _ = media
+    info = probe.probe(str(sample))
+    s = cutter.SplitSettings(mode="parts", parts=3)
+    segs, _ = cutter.plan_segments(info.duration, s)
+    r = cutter.split_video(ffmpeg_tools.Runner(), str(sample), info, s, tmp_path, "h264_amf", segs, jobs=3)
+    assert len(r.files) == 3 and not r.errors
+    assert all(abs(dur(p) - 2.0) < 0.15 for p in r.files)
+
+
+def test_session_limit_runs_alone(media, tmp_path, monkeypatch):
+    """Card chỉ cho 1 phiên: chạy 3 đoạn cùng lúc thì lỗi → các đoạn chạy lần lượt, vẫn bằng card (không sang CPU)."""
+    import threading
+    from loopstation.core import cutter, ffmpeg_tools, probe
+    sample, _ = media
+    info = probe.probe(str(sample))
+    s = cutter.SplitSettings(mode="parts", parts=3)
+    segs, _ = cutter.plan_segments(info.duration, s)
+    real = ffmpeg_tools.Runner.ffmpeg
+    live = {"n": 0, "max": 0}
+    lock = threading.Lock()
+    used = []
+
+    def limited(self, args, on_progress=None):
+        with lock:
+            live["n"] += 1
+            busy = live["n"]
+        try:
+            enc = args[args.index("-c:v") + 1]
+            used.append(enc)
+            if busy > 1:
+                raise ffmpeg_tools.FFmpegError("ffmpeg lỗi", "[h264_amf @ 0] AMF failed to create encoder: too many "
+                                                            "sessions")
+            a = [*args]
+            a[a.index("-c:v") + 1] = "libx264"  # "card" giả: thật ra chạy bằng CPU
+            return real(self, a, on_progress)
+        finally:
+            with lock:
+                live["n"] -= 1
+    monkeypatch.setattr(ffmpeg_tools.Runner, "ffmpeg", limited)
+    r = cutter.split_video(ffmpeg_tools.Runner(), str(sample), info, s, tmp_path, "h264_amf", segs, jobs=3)
+    assert len(r.files) == 3 and not r.errors
+    assert set(used) == {"h264_amf"}  # vẫn dùng card, chỉ bớt số phiên

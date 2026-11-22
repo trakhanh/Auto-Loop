@@ -698,11 +698,35 @@ topic("taivideo", "Công cụ", "download", "Tải video", hero(
     "warn", "Chỉ tải nội dung công ty có quyền dùng — tải video người khác để đăng lại có thể vi phạm điều khoản "
             "nền tảng và bị gậy bản quyền."))
 
+topic("catvideo", "Công cụ", "scissors", "Cắt video & xuất ảnh", hero(
+    "Cắt video & xuất ảnh", "Chia video dài thành nhiều đoạn ngắn để up hàng loạt (TikTok, Shorts, Reels…), hoặc lấy "
+                            "ảnh từ video.",
+    (("Mở trang Cắt video", "app:cut"),)) + steps([
+    ("Thêm video", "kéo thả file hoặc cả thư mục vào danh sách (hoặc bấm <b>Thêm video</b>). Một hay nhiều video đều "
+                   "được — app chạy lần lượt."),
+    ("Chọn cách cắt", "thẻ <b>Chia đoạn</b>: chia N phần · mỗi đoạn dài cố định · dài ngẫu nhiên A–B · theo mốc · "
+                      "theo khoảng A-B. Thẻ <b>Xuất ảnh</b>: tổng số ảnh · mỗi N giây · mỗi N khung · theo chuyển "
+                      "động. Dòng <b>Dự kiến</b> báo trước số đoạn / số ảnh; gõ sai mốc thì báo đỏ."),
+    ("Bấm Bắt đầu", "tiến độ ở từng video và thanh tổng; <b>Dừng</b> giữ các đoạn đã xong, chạy lại thì làm lại "
+                    "đúng chỗ cũ. File ra: <code>Tên_01.mp4</code>, <code>Tên_0001.jpg</code>, không ghi đè file có "
+                    "sẵn.")]) + legend([
+    ("Chế độ xuất", "<b>Chính xác</b>: cắt đúng từng giây, đổi được tỉ lệ khung. <b>Nhanh</b>: chép nguyên, gần như "
+                    "tức thì, có thể lệch 1–2 giây."),
+    ("Tỉ lệ khung", "Giữ nguyên · 9:16 · 16:9 · 1:1 · 4:5 — khi đổi: <b>Nền mờ</b> / <b>Viền đen</b> / <b>Cắt</b>."),
+    ("Card đồ hoạ", "chế độ Chính xác mã hoá bằng card (NVIDIA / AMD / Intel), cắt 2–3 đoạn cùng lúc và "
+                    "<b>giải mã bằng card</b>: NVIDIA dùng CUDA (nhanh gấp khoảng 2 lần), AMD / Intel dùng D3D11 (đỡ "
+                    "việc cho CPU — lợi nhất ở máy CPU yếu, máy CPU mạnh thì gần như ngang). App "
+                    "thử vài khung của từng video trước; card không đọc được (vd video DivX / Xvid cũ) thì tự dùng CPU. "
+                    "Nhật ký ghi rõ đang giải mã bằng gì. Tắt ở Cài đặt → <i>Dùng card đồ hoạ giải mã khi cắt video</i>. "
+                    "Máy không có card rời vẫn chạy, bằng CPU.")]))
+
 topic("caidat", "Khác", "settings", "Cài đặt & card đồ hoạ", hero(
     "Cài đặt & card đồ hoạ", "Kiểm tra máy có dùng được card đồ hoạ để xuất nhanh không, và các tuỳ chọn hệ thống.",
     (("Mở Cài đặt", "app:settings"),)) + img("settings") + legend([
     ("Thông số máy", "hệ điều hành, CPU, RAM, card đồ hoạ (driver, VRAM, nhiệt độ), CUDA, ổ đĩa."),
-    ("FFmpeg &amp; tăng tốc", "✓ xanh = dùng được: NVIDIA <b>NVENC</b>, Intel <b>Quick Sync</b>, AMD <b>AMF</b>, giải mã <b>CUDA</b>. Chỉ cần <b>một</b> dòng xanh là xuất nhanh."),
+    ("FFmpeg &amp; tăng tốc", "✓ xanh = dùng được: NVIDIA <b>NVENC</b>, Intel <b>Quick Sync</b>, AMD <b>AMF</b>; "
+                              "giải mã bằng card: <b>CUDA</b> (NVIDIA), <b>D3D11</b> (mọi hãng card, gồm AMD). Chỉ cần "
+                              "<b>một</b> dòng mã hoá xanh là xuất nhanh."),
     ("Giao diện", "<b>Tối</b> / <b>Sáng</b> / <b>Theo Windows</b> — bấm là màu hoà dần sang ngay (xem dưới).")]) + """
 <ul>
 <li><b>Kiểm tra lại phần cứng</b>: đọc lại thông số sau khi cắm / cập nhật driver card đồ hoạ.</li>
@@ -730,7 +754,9 @@ lưu nằm trên Drive. Tắt thì ghi thẳng lên Drive như thư mục thư�
 <li><b>Nơi lưu bộ nhớ đệm</b>: mặc định ở ổ C (tới 30 GB). Ổ C hay đầy thì bấm <b>Đổi nơi lưu…</b> chọn ổ khác (D:, E:…).
 Ổ chứa bộ nhớ đệm / thư mục lưu còn dưới 8 GB thì app hiện dải vàng cảnh báo kèm nút xử lý ngay.</li>
 </ul>""" + box("tip", "Tốc độ xuất chủ yếu đến từ bộ mã hoá trên card (NVENC / Quick Sync / AMF) — app luôn tự dùng. "
-                     "“Giải mã bằng GPU (CUDA)” thường <b>không</b> nhanh hơn với clip ngắn, chỉ nên bật khi CPU yếu.") + box(
+                     "“Giải mã video nguồn bằng GPU (CUDA / D3D11)” thường <b>không</b> nhanh hơn với clip ngắn, chỉ "
+                     "nên bật khi CPU yếu hoặc clip 4K dài. “Dùng card đồ hoạ giải mã khi cắt video” (mặc định bật) "
+                     "làm trang Cắt video nhanh hơn (card NVIDIA: gấp khoảng 2 lần).") + box(
     "tip", "Bộ nhớ đệm giúp lần xuất sau nhanh hơn; app tự dọn khi quá 30 GB. Xoá tay ở đây nếu ổ C sắp đầy."))
 
 topic("dulieu", "Khác", "folder", "Cài app, cập nhật & dữ liệu", hero(
@@ -773,7 +799,8 @@ topic("hoi", "Khác", "help", "Câu hỏi thường gặp", hero(
         ("App đứng ở màn hình khởi động, không mở lên?", "Thường do dự án tự lưu có thời lượng quá lớn (ví dụ lỡ gõ 1.000.000 phút ở bản 1.4.8). "
                                                        "Từ bản 1.4.10 app tự đưa về tối đa 48 giờ và báo khi mở. Cài bản mới nhất rồi mở lại."),
         ("Video dài tối đa bao nhiêu?", "48 giờ cho mỗi video / file nhạc, mỗi clip phát tối đa 99.999 lần. YouTube nhận video tối đa 12 giờ."),
-        ("Cài đặt báo CUDA ✗?", "CUDA chỉ dùng để <b>giải mã</b> trên card NVIDIA, không bắt buộc. Chỉ cần một dòng <b>NVENC / Quick Sync / AMF</b> "
+        ("Cài đặt báo CUDA ✗?", "CUDA chỉ dùng để <b>giải mã</b> trên card NVIDIA, không bắt buộc (card AMD / Intel giải mã bằng "
+                                "<b>D3D11</b>). Chỉ cần một dòng <b>NVENC / Quick Sync / AMF</b> "
                                 "xanh là xuất nhanh; không có dòng nào xanh thì app dùng CPU (chậm hơn nhưng vẫn xuất được)."),
         ("Xuất lỗi “Pulse data corrupt” / “Invalid data found” / “invalid band type”?",
          "Một file nhạc / tiếng nền / tiếng gốc của clip (thường .m4a tải về, hoặc file trên Google Drive chưa tải hết "

@@ -151,6 +151,7 @@ footer { margin-top: 56px; padding-top: 18px; border-top: 1px solid var(--line);
     <li><a href="#hang-doi"><span>9</span><span>Hàng đợi (chạy qua đêm)</span></a></li>
     <li><a href="#ho-so"><span>9b</span><span>Hồ sơ kênh &amp; gửi mẫu</span></a></li>
     <li><a href="#hang-loat"><span>10</span><span>Xuất hàng loạt theo thư mục</span></a></li>
+    <li><a href="#cat-video"><span>10b</span><span>Cắt video &amp; xuất ảnh</span></a></li>
     <li><a href="#file-kem"><span>11</span><span>File kèm cho YouTube &amp; editor</span></a></li>
     <li><a href="#su-co"><span>12</span><span>Xử lý sự cố</span></a></li>
     <li><a href="#phim-tat"><span>13</span><span>Phím tắt</span></a></li>
@@ -186,7 +187,7 @@ footer { margin-top: 56px; padding-top: 18px; border-top: 1px solid var(--line);
     <li><b>Gỡ app:</b> Windows Settings → Apps → KT Loop Station → Uninstall. Dự án và video đã xuất không bị xoá.</li>
     <li><b>Card đồ hoạ:</b> máy có card NVIDIA / Intel / AMD xuất nhanh hơn nhiều. Không có card thì app tự dùng CPU, vẫn xuất được.</li>
   </ul>
-  <div class="note"><b class="t">Mẹo:</b>Mở app lần đầu, vào <b>Cài đặt</b> xem mục <i>FFmpeg &amp; tăng tốc</i>: chỉ cần một dòng <b>NVENC</b>, <b>Quick Sync</b> hoặc <b>AMF</b> có dấu ✓ xanh là máy xuất nhanh. Dòng CUDA ✗ không ảnh hưởng.</div>
+  <div class="note"><b class="t">Mẹo:</b>Mở app lần đầu, vào <b>Cài đặt</b> xem mục <i>FFmpeg &amp; tăng tốc</i>: chỉ cần một dòng <b>NVENC</b>, <b>Quick Sync</b> hoặc <b>AMF</b> có dấu ✓ xanh là máy xuất nhanh. Dòng giải mã CUDA / D3D11 ✗ không ảnh hưởng (CUDA chỉ có ở card NVIDIA; card AMD / Intel giải mã bằng D3D11).</div>
 </section>
 
 <!-- 2 -->
@@ -656,6 +657,20 @@ footer { margin-top: 56px; padding-top: 18px; border-top: 1px solid var(--line);
   <div class="note"><b class="t">Mẹo:</b>thư mục lưu nằm trong thư mục cha thì app tự lưu vào <code>_Xuat</code> để lần quét sau không lẫn với clip.</div>
 </section>
 
+<!-- 10b -->
+<section id="cat-video">
+  <h2><span class="n">10b</span>Cắt video &amp; xuất ảnh</h2>
+  <p class="sub">Thanh bên → <b>Cắt video</b> (ngay dưới Tải video). Chia video dài thành nhiều đoạn ngắn để up hàng loạt (TikTok, Shorts, Reels…), hoặc lấy ảnh từ video. File ra chỉ nằm trong thư mục lưu, không đụng dự án.</p>
+  <ul>
+    <li><b>Thêm video</b>: kéo thả file hoặc cả thư mục; một hay nhiều video đều được, app chạy lần lượt.</li>
+    <li><b>Chia đoạn</b>: chia N phần · mỗi đoạn dài cố định · dài ngẫu nhiên A–B · theo mốc (<code>00:01:15, 00:05:30</code>) · theo khoảng (<code>00:01:10-00:01:45</code>). Dòng <b>Dự kiến</b> báo trước số đoạn.</li>
+    <li><b>Chế độ xuất</b>: <b>Chính xác</b> cắt đúng từng giây, đổi được tỉ lệ (9:16, 16:9, 1:1, 4:5 — nền mờ / viền đen / cắt); <b>Nhanh</b> chép nguyên, gần như tức thì, có thể lệch 1–2 giây.</li>
+    <li><b>Xuất ảnh</b>: tổng số ảnh · mỗi N giây · mỗi N khung hình · theo chuyển động (% thay đổi, số nhỏ = nhiều ảnh); JPG hoặc PNG.</li>
+    <li>File ra: <code>Tên_01.mp4</code>, <code>Tên_0001.jpg</code> — mặc định mỗi video một thư mục riêng; không bao giờ ghi đè file có sẵn.</li>
+  </ul>
+  <div class="note"><b class="t">Card đồ hoạ:</b>chế độ Chính xác mã hoá bằng card (NVIDIA / AMD / Intel), cắt 2–3 đoạn cùng lúc và <b>giải mã bằng card</b> — NVIDIA dùng CUDA (nhanh gấp khoảng 2 lần), AMD / Intel dùng D3D11 (đỡ việc cho CPU, lợi nhất ở máy CPU yếu; máy CPU mạnh thì gần như ngang). App thử vài khung của từng video trước; card không đọc được (vd video DivX / Xvid cũ) thì tự dùng CPU, nhật ký ghi rõ. Tắt ở Cài đặt → <i>Dùng card đồ hoạ giải mã khi cắt video</i>. Máy không có card rời vẫn chạy bằng CPU (mức nén nhanh).</div>
+</section>
+
 <!-- 11 -->
 <section id="file-kem">
   <h2><span class="n">11</span>File kèm cho YouTube &amp; editor</h2>
@@ -679,7 +694,7 @@ footer { margin-top: 56px; padding-top: 18px; border-top: 1px solid var(--line);
   <details class="faq" open><summary>App đứng ở màn hình khởi động, không mở lên</summary>
     <p>Thường do dự án tự lưu có thời lượng quá lớn (ví dụ lỡ gõ 1.000.000 phút ở bản 1.4.8). Cài bản 1.4.10 trở lên: app tự đưa về tối đa 48 giờ và báo khi mở.</p></details>
   <details class="faq" open><summary>Cài đặt báo “CUDA ✗”</summary>
-    <p>CUDA chỉ dùng để giải mã trên card NVIDIA, không bắt buộc. Chỉ cần một dòng NVENC / Quick Sync / AMF xanh là xuất nhanh. Không có dòng nào xanh thì app dùng CPU — chậm hơn nhưng vẫn xuất được.</p></details>
+    <p>CUDA chỉ dùng để giải mã trên card NVIDIA, không bắt buộc (card AMD / Intel giải mã bằng D3D11). Chỉ cần một dòng NVENC / Quick Sync / AMF xanh là xuất nhanh. Không có dòng nào xanh thì app dùng CPU — chậm hơn nhưng vẫn xuất được.</p></details>
   <details class="faq" open><summary>Xuất lỗi “Pulse data corrupt” / “Invalid data found” / “invalid band type”</summary>
     <p>Một file nhạc / tiếng nền / tiếng gốc của clip (thường <code>.m4a</code> tải về, hoặc file trên Google Drive chưa
     tải hết về máy) có <b>đoạn dữ liệu bị hỏng</b>. App tự kiểm tra từng file, file hỏng thì tự tạo bản sạch: chỗ hỏng thành

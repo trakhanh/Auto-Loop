@@ -10,6 +10,7 @@ from typing import Callable
 
 from . import audio_build, cloud, denoise, encoders, look as look_mod, markers, planner, timeline, tracklist, video_build
 from . import ffmpeg_tools as ft
+from . import hwdec
 from .project import Project
 
 # tỉ trọng tiến trình của từng bước
@@ -200,6 +201,13 @@ class RenderJob:
             try:
                 blocks = self._encode_blocks(segs, paths, tl, encoder)
             except ft.FFmpegError as e:
+                if ft.OPTIONS.get("hwdec") and hwdec.is_decode_failure(e.stderr or str(e)):
+                    # card không GIẢI MÃ được clip này (codec lạ, driver…): giải mã bằng CPU, vẫn mã hoá bằng card.
+                    # Tắt tới khi đổi Cài đặt / mở lại app — không thử lại mỗi lần xuất.
+                    self.log(f"Card không giải mã được clip ({ft.OPTIONS['hwdec']}) — chuyển sang giải mã bằng CPU, "
+                             f"vẫn mã hoá bằng {encoder}.")
+                    ft.OPTIONS["hwdec"] = ""
+                    continue
                 if not encoders.is_hardware(encoder) or not _is_encoder_failure(e):
                     raise  # lỗi không do card đồ hoạ (clip hỏng, ổ đầy…): mã hoá lại bằng CPU cũng hỏng y như vậy
                 jobs = gpu_jobs(encoder)

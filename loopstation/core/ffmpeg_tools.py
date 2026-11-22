@@ -30,7 +30,9 @@ def app_dir() -> Path:
 
 # Tuỳ chọn toàn cục, đặt từ trang Cài đặt
 # hwdec: "" = giải mã bằng CPU; hoặc tên hwaccel (cuda, d3d11va…) · cache_dir: "" = trong thư mục dữ liệu (ổ C)
-OPTIONS: dict[str, str] = {"hwdec": "", "cache_dir": "", "cloud_stage": "1"}  # cloud_stage: "" = ghi thẳng lên Drive
+# cut_hwdec: "1" = Cắt video / chuyển H.264 (Tải video) được giải mã bằng card (ô Cài đặt, mặc định bật)
+OPTIONS: dict[str, str] = {"hwdec": "", "cache_dir": "", "cloud_stage": "1",  # cloud_stage: "" = ghi thẳng lên Drive
+                           "cut_hwdec": "1"}
 _custom_dir: str | None = None
 
 
