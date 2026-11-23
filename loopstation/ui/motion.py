@@ -6,6 +6,7 @@ Tất cả hiệu ứng đều ngắn (150–260 ms) và dùng đường cong Ou
 """
 from __future__ import annotations
 
+import shiboken6
 from PySide6.QtCore import (
     QAbstractAnimation, QEasingCurve, QEvent, QObject, QPoint, QPropertyAnimation, QRect, Qt, QTimer,
     QVariantAnimation,
@@ -84,7 +85,7 @@ class UiMotion(QObject):
         if anim is None:
             anim = QVariantAnimation(bar)
             anim.setEasingCurve(EASE)
-            anim.valueChanged.connect(lambda v, b=bar: b.setValue(int(v)))
+            anim.valueChanged.connect(lambda v, b=bar, a=anim: _scroll_step(b, a, v))
             bar.setProperty("_smooth_anim", anim)
             bar.sliderPressed.connect(anim.stop)
             bar.destroyed.connect(lambda *_, k=key: self._targets.pop(k, None))
@@ -94,6 +95,19 @@ class UiMotion(QObject):
         anim.setEndValue(target)
         anim.start()
         return True
+
+
+def _scroll_step(bar: QScrollBar, anim: QVariantAnimation, v) -> None:
+    """Một bước cuộn mượt. Vùng cuộn có thể bị xoá giữa chừng (trang dựng lại, hộp thoại đóng khi đang lăn chuột):
+    thanh cuộn đã mất thì dừng hoạt ảnh, không báo lỗi "Internal C++ object (QScrollBar) already deleted"."""
+    if shiboken6.isValid(bar):
+        try:
+            bar.setValue(int(v))
+            return
+        except RuntimeError:
+            pass
+    if shiboken6.isValid(anim):
+        anim.stop()
 
 
 def fade_window_in(win: QWidget, ms: int = 220) -> None:

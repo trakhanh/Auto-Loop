@@ -6,7 +6,7 @@
 
 **Ghép và loop clip + nhạc thành video YouTube dài hàng giờ — tải video từ YouTube, TikTok, Douyin, Bilibili…, chia đoạn, xuất ảnh — xem trước ngay trong app, xuất nhanh bằng card đồ hoạ.**
 
-<sub>By Khánh Trà · Ứng dụng Windows · Giao diện tiếng Việt · Bản mới nhất: <b>2.0.2</b></sub>
+<sub>By Khánh Trà · Ứng dụng Windows · Giao diện tiếng Việt · Bản mới nhất: <b>2.0.3</b></sub>
 
 <br>
 
@@ -34,6 +34,8 @@
 <br>
 
 ## Có gì mới ở 2.0
+
+> **2.0.3** · Sửa lỗi hiện hộp <b>“Có lỗi bất ngờ”</b> (Internal C++ object … QScrollBar already deleted) khi lăn chuột đúng lúc một vùng cuộn đóng lại / dựng lại: hiệu ứng cuộn mượt giờ tự dừng.
 
 > **2.0.2** · <b>Nhạc chạy từ clip nào — gọn trong một dòng</b>: “♪ Nhạc chạy từ clip … tới … · bài đầu …” ngay trên dòng thời gian; chuột phải khối clip → <i>Nhạc bắt đầu từ clip này</i> / <i>Nhạc dừng ở hết clip này</i>, hoặc kéo mép dải nhạc (tự hít vào ranh giới clip). <b>Dòng thời gian kiểu Premiere</b>: Ctrl + lăn chuột để zoom, lăn / kéo để trượt, nút − / + / Vừa khung, vạch phát tự cuộn theo — kéo, rê hết khựng. <b>Card đồ hoạ NVIDIA + AMD</b>: Cắt video / Xuất ảnh / Tải video giải mã bằng card (NVIDIA CUDA, AMD / Intel D3D11), card không đọc được thì tự dùng CPU; card AMD từ chối nhiều đoạn cùng lúc thì cắt lần lượt, không mất đoạn nào. Tắt / bật ở Cài đặt.
 
