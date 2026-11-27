@@ -30,6 +30,12 @@ Thành công = trộn 5–10 bản khác nhau từ cùng một bảng clip chỉ
 4. **Đổi tên trong hàng đợi**: chuột phải → *Đổi tên…* (hoặc F2) với mục chưa chạy / chưa xong; đổi tên file đích
    (cả thư mục riêng nếu bật "mỗi video một thư mục"). Mở lại chỉnh thông số: giữ "Sửa mục này…" / nhấp đúp như cũ.
 
+5. **Mỗi bản một clip mở đầu riêng** (anh bổ sung, duyệt ngày 27/11): chuột phải → *Đánh dấu / bỏ đánh dấu clip
+   mở đầu*; `ClipItem.opener` = thứ tự đánh dấu (A = 1, B = 2…). Thêm nhiều bản: số bản gợi ý = số clip mở đầu chưa
+   dùng, bản k mở đầu clip kế tiếp (quay vòng), các clip mở đầu khác vẫn phát ở phần sau. Trộn bản mới cũng chuyển
+   sang clip mở đầu kế tiếp. Cách làm: đổi chỗ clip mở đầu với dòng bật đầu tiên rồi ghim (clip ghim khác giữ chỗ;
+   dòng đầu đang ghim clip khác thì bị thay, có báo). Tóm tắt mục hàng đợi ghi "mở đầu <tên clip>".
+
 ## Không làm
 
 - Không thêm chế độ ẩn tính năng; không phát hành.

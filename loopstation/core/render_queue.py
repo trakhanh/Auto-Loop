@@ -68,6 +68,9 @@ def describe(project: Project, kind: str = "video", total: float = 0.0) -> str:
         if len(stts) > 1:
             parts.append(f"tình huống {stts[0]} → {stts[-1]}")
         parts.append(f"{len(clips)} dòng")
+        k = lead_opener(project)
+        if k is not None:
+            parts.append(f"mở đầu {Path(project.video.clips[k].path).stem}")
     if total > 0:
         parts.append(f"dài {fmt_len(total)}")
     return " · ".join(parts)
@@ -115,6 +118,55 @@ def remix(project: Project, seed: int, name: str) -> Project:
         p.music.seed = seed
     p.export.filename = name
     return p
+
+
+def openers(project: Project) -> list[int]:
+    """Chỉ số các clip mở đầu (đang bật), theo thứ tự đánh dấu A, B, C… — không theo dòng, vì mỗi bản đổi chỗ dòng."""
+    clips = project.video.clips
+    return sorted((i for i, c in enumerate(clips) if c.enabled and c.opener > 0), key=lambda i: (clips[i].opener, i))
+
+
+def first_slot(project: Project) -> int | None:
+    """Dòng bật đầu tiên — chỗ của clip mở đầu."""
+    return next((i for i, c in enumerate(project.video.clips) if c.enabled), None)
+
+
+def lead_opener(project: Project) -> int | None:
+    """Clip mở đầu đang đứng đầu (đã ghim ở dòng bật đầu tiên), hoặc None."""
+    f = first_slot(project)
+    if f is None:
+        return None
+    c = project.video.clips[f]
+    return f if c.opener > 0 and c.pinned else None
+
+
+def next_opener(project: Project) -> int | None:
+    """Clip mở đầu cho bản kế tiếp: sau clip đang đứng đầu theo thứ tự đánh dấu (quay vòng); chưa có thì clip A."""
+    ops = openers(project)
+    if not ops:
+        return None
+    cur = lead_opener(project)
+    return ops[(ops.index(cur) + 1) % len(ops)] if cur in ops else ops[0]
+
+
+def with_opener(project: Project, k: int) -> tuple[Project, str]:
+    """Bản sao có clip `k` đứng đầu: đổi chỗ với dòng bật đầu tiên rồi ghim (trộn ngẫu nhiên vẫn đứng đầu); các
+    clip ghim khác giữ chỗ. Clip bị đổi ra khỏi dòng đầu thôi ghim — nếu đó là clip anh tự ghim, trả về lời báo."""
+    import copy
+    p = copy.deepcopy(project)
+    clips = p.video.clips
+    f = first_slot(p)
+    note = ""
+    if f is None or not 0 <= k < len(clips):
+        return p, note
+    if f != k:
+        old = clips[f]
+        if old.pinned and old.opener <= 0:
+            note = f"“{Path(old.path).stem}” đang ghim ở đầu — clip mở đầu thay chỗ đó"
+        old.pinned = False
+        clips[f], clips[k] = clips[k], old
+    clips[f].pinned = True
+    return p, note
 
 
 def renamed_output(output: str, new_stem: str, own_folder: bool) -> str:

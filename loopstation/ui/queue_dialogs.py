@@ -98,15 +98,17 @@ class QueueAddedDialog(QDialog):
 
     def __init__(self, out: str, summary: str, pending: int, can_run: bool, parent=None,
                  lines: list[str] | None = None, name: str = "", remix: bool = False, next_name: str = "",
-                 shuffled: bool = True):
+                 shuffled: bool = True, many_count: int = 5, many_hint: str = "", next_lead: str = ""):
         """`lines`: nhiều video một lúc (thả cả mùa) — mỗi dòng một video thay cho chip tóm tắt.
+        `many_count` / `many_hint`: số bản gợi ý + chữ giải thích (có clip mở đầu: mỗi bản mở đầu một clip).
+        `next_lead`: clip mở đầu của bản trộn kế tiếp.
         `next_name`: tên bản trộn kế tiếp (hiện trên nút). `shuffled`: bảng đang trộn ngẫu nhiên (khác số mầm → khác
         thứ tự); không thì nhắc bật Ngẫu nhiên."""
         super().__init__(parent)
         from PySide6.QtWidgets import QSpinBox
         self.setWindowTitle("Đã thêm vào hàng đợi")
         self.choice = "stay"
-        self.count = 5
+        self.count = many_count
 
         head = QHBoxLayout()
         head.setSpacing(theme.SP["md"])
@@ -157,15 +159,16 @@ class QueueAddedDialog(QDialog):
                    "Giữ bảng clip và mọi cài đặt, đổi số mầm — bảng đang phát theo thứ tự, bật Thứ tự clip = "
                    "Ngẫu nhiên để mỗi bản một thứ tự")
             first = _choice("shuffle", "Trộn bản mới (giữ nguyên clip)",
-                            why + (f" · tên “{next_name}”." if next_name else "."), primary=True)
+                            why + (f" · mở đầu “{next_lead}”" if next_lead else "")
+                            + (f" · tên “{next_name}”." if next_name else "."), primary=True)
             first.clicked.connect(lambda: self._done("remix"))
             lay.addWidget(first)
             many = _choice("queue", "Thêm nhiều bản trộn khác nhau vào hàng đợi",
-                           "Mỗi bản một số mầm, tên tự tăng — thêm luôn, không hỏi từng bản.")
+                           many_hint or "Mỗi bản một số mầm, tên tự tăng — thêm luôn, không hỏi từng bản.")
             many.clicked.connect(lambda: self._done("many"))
             self.spin = QSpinBox()
             self.spin.setRange(1, 50)
-            self.spin.setValue(5)
+            self.spin.setValue(max(1, min(50, many_count)))
             self.spin.setSuffix(" bản")
             self.spin.setToolTip("Số bản trộn sẽ thêm (mỗi bản một thứ tự khác)")
             mrow = QHBoxLayout()

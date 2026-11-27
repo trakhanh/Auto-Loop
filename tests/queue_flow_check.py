@@ -278,6 +278,40 @@ win.go_to(2)
 pump(0.5)
 et.q_detail_box.parentWidget().grab().save(os.path.join(scratch, "q_remix_queue.png"))
 
+# ---- clip mở đầu: đánh dấu 3 clip (A = dòng 5, B = dòng 7, C = dòng 2) → mỗi bản mở đầu một clip ----
+vt.list.clearSelection()
+rows = vt.list.items()
+lead_paths = [rows[k].data(0, mw.w.ROLE_DATA).path for k in (4, 6, 1)]
+pin_path = rows[2].data(0, mw.w.ROLE_DATA).path
+for k in (4, 6, 1):
+    vt._toggle_opener(vt.list.items()[k])
+pump(0.5)
+sub = vt.list.items()[4].data(0, mw.w.ROLE_SUB) or ""
+check("dòng mở đầu ghi Mở đầu · 1/3", "Mở đầu · 1/3" in sub, sub)
+win.remix_next()  # bảng đang mở trùng "Bản trộn 2" đã thêm → trộn bản mới: clip mở đầu A lên đầu
+pump(1)
+c0 = win.collect_project().video.clips[0]
+check("Trộn bản mới: clip mở đầu A lên dòng 1 + ghim", c0.path == lead_paths[0] and c0.pinned, Path(c0.path).stem)
+before = len(win.queue)
+answers(("Thêm vào hàng đợi",), ("Thêm nhiều bản", "q_opener_dialog.png"))
+win.add_to_queue("video")
+pump(3)
+new = win.queue[before:]
+check("thêm bản A + 2 bản B, C (số bản gợi ý = clip mở đầu chưa dùng)", len(new) == 3, str(len(new)))
+firsts, pins_ok = [], True
+for i in new:
+    tl = timeline.build(i.project)
+    o = [c for c, _n in planner.round_order(tl.video)] if tl.ok and tl.video else []
+    firsts.append(i.project.video.clips[o[0]].path if o else "")
+    pins_ok = pins_ok and len(o) == 8 and i.project.video.clips[o[2]].path == pin_path
+check("mỗi bản mở đầu đúng A, B, C", firsts == lead_paths, str([Path(f).stem for f in firsts]))
+check("clip ghim vị trí 3 vẫn giữ chỗ", pins_ok)
+check("tóm tắt ghi mở đầu", all("mở đầu" in i.summary for i in new), str([i.summary for i in new]))
+win.remix_next()
+pump(1)
+c0 = win.collect_project().video.clips[0]
+check("Trộn bản mới lần nữa: sang clip mở đầu B", c0.path == lead_paths[1] and c0.pinned, Path(c0.path).stem)
+
 win._closing = True
 win.close()
 pump(0.5)

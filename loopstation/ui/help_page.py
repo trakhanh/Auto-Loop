@@ -392,6 +392,10 @@ tiếp (Ctrl+Z quay lại). <b>Số mầm</b> giữ kết quả ngẫu nhiên gi
 luôn phát đúng chỗ của nó trong bảng (thứ mấy trong các dòng đang bật — dòng phụ ghi <i>Ghim · vị trí 3</i>), các clip khác
 xáo quanh; lượt lặp nào cũng giữ. Muốn ở <b>đầu</b>: dòng 1 · <b>cuối</b>: dòng cuối · chỗ khác: kéo dòng lên / xuống. Ghim được
 nhiều dòng.</li>
+<li><b>Mỗi bản một clip mở đầu riêng</b>: chuột phải từng clip → <b>Đánh dấu / bỏ đánh dấu clip mở đầu</b> (ví dụ A, B, C —
+thứ tự đánh dấu là thứ tự dùng; dòng phụ ghi <i>Mở đầu · 1/3</i>). Thêm vào hàng đợi → <b>Thêm nhiều bản</b>: số bản tự đặt
+bằng số clip mở đầu, bản 1 mở đầu A, bản 2 mở đầu B…, phía sau (cả B, C) trộn ngẫu nhiên; nhiều bản hơn thì quay vòng.
+<b>Trộn bản mới</b> cũng chuyển sang clip mở đầu kế tiếp. Hàng đợi ghi <i>mở đầu: tên clip</i>.</li>
 <li><b>Xem chi tiết từng lượt phát</b>: liệt kê từng lượt phát clip nào, bao nhiêu lần.</li>
 </ul>""" + box("tip", "Thanh trên cùng luôn hiện <b>Tổng</b> thời lượng. Chip vàng là có lưu ý — rê chuột lên để đọc.") + box(
     "warn", "Video / file nhạc dài tối đa <b>48 giờ</b>, mỗi clip phát tối đa <b>99.999 lần</b>. Gõ quá mức thì app tự đưa về mức tối đa."))

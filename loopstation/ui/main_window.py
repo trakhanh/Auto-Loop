@@ -2249,15 +2249,45 @@ class MainWindow(QMainWindow):
         name = self._remix_name(proj, self._taken_names(proj, ".mp4"))
         old = proj.video.seed
         seed = self._new_seed(old)
+        p, lead, note = self._remix_with_opener(proj, seed, name)
         path = self.project_path
-        self.load_project(rq.remix(proj, seed, name))
+        self.load_project(p)
         self.project_path = path
         self._update_title()
         self.go_to(0)
-        extra = ("" if self._shuffled(proj) else
+        extra = ("" if self._shuffled(proj) or lead else
                  " Bảng đang phát theo thứ tự — chọn Thứ tự clip = Ngẫu nhiên (thẻ Tuỳ chọn) để có thứ tự khác.")
-        self.notify(f"Bản trộn mới “{name}”: số mầm {old} → {seed}, bảng clip giữ nguyên. Xem dải Thứ tự sẽ xuất, ưng "
-                    f"thì Thêm vào hàng đợi.{extra}", "warn" if extra else "ok", 7000)
+        extra += f" {note}." if note else ""
+        head = f", mở đầu “{lead}”" if lead else ""
+        self.notify(f"Bản trộn mới “{name}”{head}: số mầm {old} → {seed}, bảng clip giữ nguyên. Xem dải Thứ tự sẽ xuất, "
+                    f"ưng thì Thêm vào hàng đợi.{extra}", "warn" if extra else "ok", 7000)
+
+    @staticmethod
+    def _remix_with_opener(proj: Project, seed: int, name: str) -> tuple[Project, str, str]:
+        """Bản trộn mới; có clip mở đầu đã đánh dấu thì đưa clip kế tiếp (A → B → C…, quay vòng) lên đầu.
+        Trả về (dự án, tên clip mở đầu hoặc "", lời báo)."""
+        p = rq.remix(proj, seed, name)
+        k = rq.next_opener(proj)
+        if k is None:
+            return p, "", ""
+        p, note = rq.with_opener(p, k)
+        f = rq.first_slot(p)
+        return p, Path(p.video.clips[f].path).stem if f is not None else "", note
+
+    def _opener_plan(self, proj: Project) -> tuple[int, str]:
+        """Cho hộp "Đã thêm": (số bản gợi ý, chữ giải thích) khi có clip mở đầu — bằng số clip mở đầu chưa dùng."""
+        ops = rq.openers(proj)
+        if not ops:
+            return 5, ""
+        cur = rq.lead_opener(proj)
+        n = len(ops) - (1 if cur in ops and len(ops) > 1 else 0)
+        names, p = [], proj
+        for _k in range(min(n, 4)):
+            k = rq.next_opener(p)
+            p, _ = rq.with_opener(p, k)
+            names.append(Path(p.video.clips[rq.first_slot(p)].path).stem)
+        more = "…" if n > 4 else ""
+        return n, f"Mỗi bản mở đầu bằng một clip đã đánh dấu: {', '.join(names)}{more} — phía sau trộn ngẫu nhiên."
 
     def add_remixes(self, n: int) -> None:
         """Thêm `n` bản trộn khác nhau vào hàng đợi một lượt: mỗi bản một số mầm (thử để thứ tự lượt đầu không trùng
@@ -2266,7 +2296,8 @@ class MainWindow(QMainWindow):
         if not self._has_output_dir(proj):
             return
         shuffled = self._shuffled(proj)
-        if not shuffled and QMessageBox.question(
+        many_leads = len(rq.openers(proj)) > 1  # mỗi bản một clip mở đầu khác: các bản đã khác nhau
+        if not shuffled and not many_leads and QMessageBox.question(
                 self, "Các bản sẽ giống nhau",
                 f"Bảng đang phát theo thứ tự trong bảng nên {n} bản sẽ giống hệt nhau.\n\nChọn Thứ tự clip = Ngẫu "
                 "nhiên (thẻ Tuỳ chọn) để mỗi bản một thứ tự. Vẫn thêm?",
@@ -2292,7 +2323,7 @@ class MainWindow(QMainWindow):
             for _try in range(20 if shuffled else 1):  # ít clip thì có thể hết thứ tự mới: lấy bản cuối cùng thử
                 seed = self._new_seed(proj.video.seed, used)
                 used.add(seed)
-                p = rq.remix(proj, seed, name)
+                p, _lead, _note = self._remix_with_opener(cur, seed, name)  # nối tiếp bản trước: A → B → C…
                 tl = timeline.build(p)
                 if not tl.ok:
                     continue
@@ -2319,7 +2350,8 @@ class MainWindow(QMainWindow):
         pending = sum(1 for i in self.queue if i.status == "pending")
         names = [Path(i.output).stem for i in added]
         shown = names[0] if len(names) == 1 else f"{names[0]} → {names[-1]}"
-        self.notify(f"Đã thêm {len(added)} bản trộn ({shown}), mỗi bản một số mầm — {pending} mục đang chờ. "
+        leads = ", mỗi bản mở đầu một clip đã đánh dấu" if many_leads else ""
+        self.notify(f"Đã thêm {len(added)} bản trộn ({shown}), mỗi bản một số mầm{leads} — {pending} mục đang chờ. "
                     "Đổi tên: chuột phải mục → Đổi tên… (F2).", "ok", 7000)
 
     def _rename_queue_item(self, index: int) -> None:
@@ -2356,8 +2388,12 @@ class MainWindow(QMainWindow):
         pending = sum(1 for i in self.queue if i.status == "pending")
         proj = self.collect_project()
         nxt = self._remix_name(proj, self._taken_names(proj, ".mp4"))
+        n_many, many_hint = self._opener_plan(proj)
+        k = rq.next_opener(proj)
+        lead = Path(proj.video.clips[k].path).stem if k is not None else ""
         dlg = QueueAddedDialog(out, summary, pending, not (self.job or self._queue_running), self, remix=True,
-                               next_name=nxt, shuffled=self._shuffled(proj))
+                               next_name=nxt, shuffled=self._shuffled(proj) or bool(lead), many_count=n_many,
+                               many_hint=many_hint, next_lead=lead)
         dlg.exec()
         choice, count = dlg.choice, dlg.count
         w.dispose(dlg)

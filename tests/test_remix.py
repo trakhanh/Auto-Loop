@@ -110,3 +110,68 @@ def test_renamed_output():
     assert Path(rq.renamed_output("D:/o/A/A.mp4", "B", True)) == Path("D:/o/B/B.mp4")
     assert Path(rq.renamed_output("D:/o/A.mp4", "B", False)) == Path("D:/o/B.mp4")
     assert Path(rq.renamed_output("D:/o/A.mp3", " C?. ", False)) == Path("D:/o/C_.mp3")
+
+
+# ---- clip mở đầu: mỗi bản một clip đứng đầu riêng (đánh dấu sẵn A, B, C…) ----
+def opener_project() -> Project:
+    p = Project()
+    p.video.order = "shuffle"
+    p.video.clips = [ClipItem(f"v{i}.mp4") for i in range(8)]
+    p.video.clips[5].opener = 1  # A
+    p.video.clips[2].opener = 2  # B
+    p.video.clips[7].opener = 3  # C
+    return p
+
+
+def test_openers_follow_mark_order_not_rows():
+    assert rq.openers(opener_project()) == [5, 2, 7]
+
+
+def test_with_opener_puts_clip_first_and_pins_it():
+    p = opener_project()
+    v, note = rq.with_opener(p, 2)
+    assert v.video.clips[0].path == "v2.mp4" and v.video.clips[0].pinned
+    assert v.video.clips[2].path == "v0.mp4" and not v.video.clips[2].pinned
+    assert note == ""
+    assert p.video.clips[0].path == "v0.mp4"  # bản gốc không đổi
+    for seed in range(10):
+        v.video.seed = seed
+        assert first_round(v.video)[0] == 0  # dòng đầu (= v2) luôn phát đầu tiên
+
+
+def test_with_opener_keeps_other_pins_and_reports_replaced_first_pin():
+    p = opener_project()
+    p.video.clips[4].pinned = True
+    v, note = rq.with_opener(p, 5)
+    assert v.video.clips[4].pinned and v.video.clips[4].path == "v4.mp4"
+    assert note == ""
+    p.video.clips[0].pinned = True  # anh đã ghim clip khác ở đầu: clip mở đầu thay chỗ đó, có báo
+    v, note = rq.with_opener(p, 5)
+    assert v.video.clips[0].path == "v5.mp4" and not v.video.clips[5].pinned and "v0" in note
+
+
+def test_first_enabled_row_is_the_slot():
+    p = opener_project()
+    p.video.clips[0].enabled = False
+    v, _ = rq.with_opener(p, 7)
+    assert v.video.clips[1].path == "v7.mp4" and v.video.clips[0].path == "v0.mp4"
+
+
+def test_next_opener_cycles_through_chained_versions():
+    p = opener_project()
+    assert rq.lead_opener(p) is None
+    seen = []
+    for _ in range(5):
+        k = rq.next_opener(p)
+        p, _ = rq.with_opener(p, k)
+        seen.append(p.video.clips[rq.first_slot(p)].path)
+    assert seen == ["v5.mp4", "v2.mp4", "v7.mp4", "v5.mp4", "v2.mp4"]
+
+
+def test_describe_and_round_trip_opener():
+    v, _ = rq.with_opener(opener_project(), 7)
+    assert "mở đầu v7" in rq.describe(v)
+    assert "mở đầu" not in rq.describe(opener_project())
+    back = Project.from_dict(v.to_dict(None), None)
+    assert [c.opener for c in back.video.clips] == [c.opener for c in v.video.clips]
+    assert "opener" not in v.to_dict(None)["video"]["clips"][1]
