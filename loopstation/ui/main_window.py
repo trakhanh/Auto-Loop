@@ -265,6 +265,7 @@ class MainWindow(QMainWindow):
         self.export_tab.batchRequested.connect(self.batch_from_folders)
         self.export_tab.queueEdited.connect(self._save_queue)
         self.export_tab.queueEditRequested.connect(self._edit_queue_item)
+        self.export_tab.queueRenameRequested.connect(self._rename_queue_item)
         self.export_tab.queuePauseRequested.connect(self._toggle_pause)
         self._pause_after = False
         QTimer.singleShot(1000, self._refresh_eta)
@@ -2105,6 +2106,8 @@ class MainWindow(QMainWindow):
             return
         proj = self.collect_project()
         if kind == "audio" and self._multi_version(proj):
+            if not self._has_output_dir(proj) or not self._ask_queue_name(proj, kind):
+                return
             items = self._audio_versions(proj)
             if not items:
                 return
@@ -2134,6 +2137,8 @@ class MainWindow(QMainWindow):
                 QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
                 QMessageBox.StandardButton.No) != QMessageBox.StandardButton.Yes:
             return
+        if editing is None and (not self._has_output_dir(proj) or not self._ask_queue_name(proj, kind)):
+            return  # mục mới: đặt tên trước (Cập nhật mục thì giữ tên cũ)
         if editing is not None:  # chỉ loại đường dẫn của chính mục này khỏi danh sách trùng tên
             editing.output, keep = "", editing.output
         if kind == "video":
@@ -2170,15 +2175,197 @@ class MainWindow(QMainWindow):
             return
         self._after_queue_add(out, summary)
 
+    def _has_output_dir(self, proj: Project) -> bool:
+        if proj.export.output_dir:
+            return True
+        QMessageBox.warning(self, "Thiếu thư mục", "Hãy chọn thư mục lưu ở trang Xuất.")
+        self.go_to(2)
+        return False
+
+    def _taken_names(self, proj: Project, ext: str) -> set[str]:
+        """Tên đã dùng (chữ thường, không đuôi): mọi mục trong hàng đợi + file / thư mục riêng đã có ở thư mục lưu."""
+        names = {Path(i.output).stem.lower() for i in self.queue}
+        ex = proj.export
+        try:
+            with os.scandir(ex.output_dir) as it:
+                for e in it:
+                    if e.is_file() and e.name.lower().endswith(ext):
+                        names.add(Path(e.name).stem.lower())
+                    elif ex.own_folder and e.is_dir():
+                        names.add(e.name.lower())
+        except OSError:
+            pass
+        return names
+
+    @staticmethod
+    def _queue_ext(proj: Project, kind: str) -> str:
+        return ".mp4" if kind == "video" else encoders.AUDIO_FORMATS[proj.music.export_format].ext
+
+    def _ask_queue_name(self, proj: Project, kind: str) -> bool:
+        """Thêm vào hàng đợi: hỏi tên mục (= tên file), điền sẵn tên tự tăng. Huỷ → False (không thêm gì).
+        OK → tên vào ô Tên file + `proj.export.filename`."""
+        from .queue_dialogs import NameDialog
+        ext = self._queue_ext(proj, kind)
+        suggest = rq.next_name(proj.export.filename, self._taken_names(proj, ext),
+                               "Bản trộn" if kind == "video" else "Bản nhạc")
+        multi = kind == "audio" and self._multi_version(proj)
+        hint = (f"Là tên mục trong hàng đợi và tên file xuất (tự thêm đuôi {ext}"
+                + (", mỗi bản thêm _ban-1, _ban-2…" if multi else "") + "). Đổi lại được: chuột phải mục trong "
+                "hàng đợi → <b>Đổi tên…</b> (F2).")
+        dlg = NameDialog("Đặt tên mục trong hàng đợi", suggest, hint, self)
+        dlg.exec()
+        name = strip_ext(clean_filename(dlg.name), ext) if dlg.name else ""
+        w.dispose(dlg)
+        if not name:
+            return False
+        proj.export.filename = name
+        self.export_tab.filename.setText(name)
+        return True
+
+    @staticmethod
+    def _shuffled(proj: Project) -> bool:
+        """Đổi số mầm có làm video khác đi không: trộn ngẫu nhiên thứ tự hoặc có clip phát số lần ngẫu nhiên."""
+        return proj.video.order == "shuffle" or any(c.enabled and c.plays_mode == "random" for c in proj.video.clips)
+
+    def _remix_name(self, proj: Project, taken: set[str]) -> str:
+        """Tên bản trộn kế tiếp: "Bản trộn 1" → "Bản trộn 2"; tên app tự đặt theo tập ("Tập 33") → "Tập 33 bản 2"
+        (không nhảy sang "Tập 34" — tập khác)."""
+        cur = clean_filename(proj.export.filename)
+        if cur and cur == self._auto_name:
+            cur = f"{cur} bản 1"
+        return rq.next_name(cur, taken | ({cur.lower()} if cur else set()))
+
+    @staticmethod
+    def _new_seed(old: int, used: set[int] | None = None) -> int:
+        import random
+        while True:
+            s = random.randint(0, 999_999)
+            if s != old and s not in (used or set()):
+                return s
+
+    def remix_next(self) -> None:
+        """Trộn bản mới (giữ nguyên clip): bảng clip + mọi cài đặt giữ nguyên, chỉ đổi số mầm và tên — báo rõ đã đổi gì."""
+        proj = self.collect_project()
+        name = self._remix_name(proj, self._taken_names(proj, ".mp4"))
+        old = proj.video.seed
+        seed = self._new_seed(old)
+        path = self.project_path
+        self.load_project(rq.remix(proj, seed, name))
+        self.project_path = path
+        self._update_title()
+        self.go_to(0)
+        extra = ("" if self._shuffled(proj) else
+                 " Bảng đang phát theo thứ tự — chọn Thứ tự clip = Ngẫu nhiên (thẻ Tuỳ chọn) để có thứ tự khác.")
+        self.notify(f"Bản trộn mới “{name}”: số mầm {old} → {seed}, bảng clip giữ nguyên. Xem dải Thứ tự sẽ xuất, ưng "
+                    f"thì Thêm vào hàng đợi.{extra}", "warn" if extra else "ok", 7000)
+
+    def add_remixes(self, n: int) -> None:
+        """Thêm `n` bản trộn khác nhau vào hàng đợi một lượt: mỗi bản một số mầm (thử để thứ tự lượt đầu không trùng
+        bản nào), tên tự tăng. Bảng đang mở giữ nguyên."""
+        proj = self.collect_project()
+        if not self._has_output_dir(proj):
+            return
+        shuffled = self._shuffled(proj)
+        if not shuffled and QMessageBox.question(
+                self, "Các bản sẽ giống nhau",
+                f"Bảng đang phát theo thứ tự trong bảng nên {n} bản sẽ giống hệt nhau.\n\nChọn Thứ tự clip = Ngẫu "
+                "nhiên (thẻ Tuỳ chọn) để mỗi bản một thứ tự. Vẫn thêm?",
+                QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
+                QMessageBox.StandardButton.No) != QMessageBox.StandardButton.Yes:
+            return
+        ex = proj.export
+        taken = self._taken_names(proj, ".mp4")
+        outs = {i.output.lower() for i in self.queue if not i.finished}
+        seen: set[tuple] = set()
+        used = {proj.video.seed}
+        tl0 = timeline.build(proj)
+        if not tl0.ok:
+            QMessageBox.warning(self, "Chưa thêm được", "\n".join(tl0.errors))
+            return
+        if tl0.video is not None:
+            seen.add(tuple(planner.round_order(tl0.video)))
+        added: list[rq.QueueItem] = []
+        cur = proj
+        for _k in range(max(1, n)):
+            name = self._remix_name(cur, taken)
+            best = None
+            for _try in range(20 if shuffled else 1):  # ít clip thì có thể hết thứ tự mới: lấy bản cuối cùng thử
+                seed = self._new_seed(proj.video.seed, used)
+                used.add(seed)
+                p = rq.remix(proj, seed, name)
+                tl = timeline.build(p)
+                if not tl.ok:
+                    continue
+                best = (p, tl)
+                order = tuple(planner.round_order(tl.video)) if tl.video is not None else ()
+                if order not in seen:
+                    seen.add(order)
+                    break
+            if best is None:
+                break
+            p, tl = best
+            out = output_path(ex.output_dir, name + ".mp4", ex.own_folder, outs)
+            outs.add(out.lower())
+            taken.add(name.lower())
+            added.append(rq.QueueItem(project=p, output=out, kind="video", seconds=tl.total,
+                                      summary=rq.describe(p, "video", tl.total)))
+            cur = p
+        if not added:
+            return
+        self.queue.extend(added)
+        self.export_tab.set_queue(self.queue)
+        self._save_queue()
+        self.go_to(2)
+        pending = sum(1 for i in self.queue if i.status == "pending")
+        names = [Path(i.output).stem for i in added]
+        shown = names[0] if len(names) == 1 else f"{names[0]} → {names[-1]}"
+        self.notify(f"Đã thêm {len(added)} bản trộn ({shown}), mỗi bản một số mầm — {pending} mục đang chờ. "
+                    "Đổi tên: chuột phải mục → Đổi tên… (F2).", "ok", 7000)
+
+    def _rename_queue_item(self, index: int) -> None:
+        """Đổi tên mục chưa xuất (= tên file đích; bật "mỗi video một thư mục" thì đổi cả tên thư mục)."""
+        from .queue_dialogs import NameDialog
+        if not 0 <= index < len(self.queue) or self.queue[index].status != "pending":
+            return
+        item = self.queue[index]
+        old = Path(item.output)
+        dlg = NameDialog("Đổi tên mục", old.stem, f"Tên mới cũng là tên file xuất (đuôi {old.suffix}).", self,
+                         ok_text="Đổi tên")
+        dlg.exec()
+        name = strip_ext(clean_filename(dlg.name), old.suffix) if dlg.name else ""
+        w.dispose(dlg)
+        if not name or name == old.stem:
+            return
+        new = rq.renamed_output(item.output, name, item.project.export.own_folder)
+        others = {i.output.lower() for i in self.queue if i is not item and not i.finished}
+        if new.lower() != item.output.lower() and (new.lower() in others or os.path.exists(new)):
+            QMessageBox.warning(self, "Tên đã có", f"Đã có file hoặc mục khác tên “{name}”:\n{new}\n\nChọn tên khác.")
+            return
+        item.output = new
+        item.project.export.filename = Path(new).stem
+        if item is self._editing_item:
+            self._set_editing(item)
+        self.export_tab.set_queue(self.queue)
+        self._save_queue()
+        self.notify(f"Đã đổi tên: “{old.stem}” → “{Path(new).stem}”.", "ok", 3500)
+
     def _after_queue_add(self, out: str, summary: str) -> None:
-        """Thêm xong: nói rõ đã thêm gì, lưu ở đâu, và bước tiếp theo (làm video tiếp / chạy luôn)."""
+        """Thêm xong: nói rõ đã thêm gì, lưu ở đâu, và bước tiếp theo — trộn bản mới (giữ clip), thêm nhiều bản,
+        video mới bảng trống, chạy luôn."""
         from .queue_dialogs import QueueAddedDialog
         pending = sum(1 for i in self.queue if i.status == "pending")
-        dlg = QueueAddedDialog(out, summary, pending, not (self.job or self._queue_running), self)
+        proj = self.collect_project()
+        nxt = self._remix_name(proj, self._taken_names(proj, ".mp4"))
+        dlg = QueueAddedDialog(out, summary, pending, not (self.job or self._queue_running), self, remix=True,
+                               next_name=nxt, shuffled=self._shuffled(proj))
         dlg.exec()
-        choice = dlg.choice
+        choice, count = dlg.choice, dlg.count
         w.dispose(dlg)
-        if choice == "next":
+        if choice == "remix":
+            self.remix_next()
+        elif choice == "many":
+            self.add_remixes(count)
+        elif choice in ("next", "blank"):
             self.next_video()
         elif choice == "run":
             self.go_to(2)

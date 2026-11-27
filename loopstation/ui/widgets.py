@@ -751,7 +751,12 @@ class MediaList(QTreeWidget):
 
     def shuffle(self, rng) -> None:
         its = [self.takeTopLevelItem(0) for _ in range(self.topLevelItemCount())]
-        rng.shuffle(its)
+        keep = getattr(self, "keep_pinned", False)  # bảng clip: dòng ghim giữ chỗ (nhạc: ghim = luôn có, không giữ chỗ)
+        pinned = [keep and bool(getattr(it.data(0, ROLE_DATA), "pinned", False)) for it in its]
+        free = [it for it, p in zip(its, pinned) if not p]
+        rng.shuffle(free)
+        rest = iter(free)
+        its = [it if p else next(rest) for it, p in zip(its, pinned)]
         self.blockSignals(True)
         self.addTopLevelItems(its)
         self.blockSignals(False)

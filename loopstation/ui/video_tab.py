@@ -254,7 +254,9 @@ class VideoTab(QWidget):
         self.list.emptyClicked.connect(self._add_files)
         self.list.openRequested.connect(self._open_file)
         self.list.itemDoubleClicked.connect(self._on_double_click)
-        self.list.menu_extras = [("scissors", "Chọn đoạn lấy (cắt đầu/cuối)…", self._open_trim),
+        self.list.keep_pinned = True  # "Xáo ngẫu nhiên thứ tự" của bảng cũng giữ chỗ dòng ghim
+        self.list.menu_extras = [("pin", "Ghim / bỏ ghim chỗ này khi trộn ngẫu nhiên", self._toggle_pin),
+                                 ("scissors", "Chọn đoạn lấy (cắt đầu/cuối)…", self._open_trim),
                                  ("copy", "Nhân bản dòng (Ctrl+D) — dùng lại clip này ở chỗ khác", self._duplicate),
                                  ("copy", "Chép các dòng đang chọn (Ctrl+C)", lambda _it: self._copy_rows()),
                                  ("file_plus", "Dán bên dưới (Ctrl+V)", lambda _it: self._paste_rows()),
@@ -1074,7 +1076,7 @@ class VideoTab(QWidget):
                         loop_xfade=loop_xf,
                         next_xfade=w.parse_xf(it.text(COL_NEXTXF)),
                         trim_start=old.trim_start, trim_end=old.trim_end,
-                        music=self._music_of(it)[0], music_start=self._music_of(it)[1])
+                        music=self._music_of(it)[0], music_start=self._music_of(it)[1], pinned=old.pinned)
 
     def _estimate_loops(self, it: QTreeWidgetItem, seconds: float, c: ClipItem, loop_xf: float) -> int:
         info: MediaInfo = it.data(0, w.ROLE_INFO)
@@ -1110,12 +1112,45 @@ class VideoTab(QWidget):
 
     def _refresh_row(self, it: QTreeWidgetItem, ref: MediaInfo | None) -> None:
         self._refresh_row_inner(it, ref)
-        it.setData(COL_NAME, w.ROLE_SUB, it.text(COL_INFO))
-        it.setData(COL_NAME, w.ROLE_SUB_COLOR, it.foreground(COL_INFO).color())
-        tip = it.data(0, w.ROLE_DATA).path
+        c: ClipItem = it.data(0, w.ROLE_DATA)
+        pos = self._pin_pos(it) if c.pinned else 0
+        it.setData(COL_NAME, w.ROLE_SUB, (f"Ghim · vị trí {pos} · " if pos else "") + it.text(COL_INFO))
+        it.setData(COL_NAME, w.ROLE_SUB_COLOR, theme.qcolor("warn_text") if pos else it.foreground(COL_INFO).color())
+        tip = c.path + (f"\nGhim: khi trộn ngẫu nhiên clip này luôn phát ở vị trí {pos} (thứ {pos} trong các dòng "
+                        "bật) — kéo dòng để đổi chỗ; chuột phải → Ghim / bỏ ghim" if pos else "")
         if it.toolTip(COL_INFO):
             tip += "\n" + it.toolTip(COL_INFO)
         it.setToolTip(COL_NAME, tip)
+
+    def _pin_pos(self, it: QTreeWidgetItem) -> int:
+        """Vị trí của dòng ghim khi trộn: thứ mấy trong các dòng đang bật (0 = dòng tắt, không tính)."""
+        if it.checkState(0) != Qt.CheckState.Checked:
+            return 0
+        k = 0
+        for row in self.list.items():
+            if row.checkState(0) == Qt.CheckState.Checked:
+                k += 1
+            if row is it:
+                return k
+        return 0
+
+    def _toggle_pin(self, it: QTreeWidgetItem) -> None:
+        """Ghim / bỏ ghim (cả các dòng đang bôi đen nếu bấm vào một trong số đó): trộn ngẫu nhiên vẫn giữ đúng chỗ."""
+        rows = self.list.selectedItems() if it.isSelected() else [it]
+        on = not it.data(0, w.ROLE_DATA).pinned
+        for row in rows:
+            row.data(0, w.ROLE_DATA).pinned = on
+        self.list.blockSignals(True)
+        self._refresh_rows()
+        self.list.blockSignals(False)
+        names = ", ".join(Path(r.data(0, w.ROLE_DATA).path).name for r in rows[:3]) + ("…" if len(rows) > 3 else "")
+        if not on:
+            self.status.setText(f"Đã bỏ ghim {names} — trộn ngẫu nhiên sẽ xáo cả clip này.")
+        elif self.order.currentData() == "shuffle":
+            self.status.setText(f"Đã ghim {names}: trộn ngẫu nhiên vẫn giữ đúng chỗ (kéo dòng để đổi vị trí).")
+        else:
+            self.status.setText(f"Đã ghim {names} — có tác dụng khi Thứ tự clip = Ngẫu nhiên (thẻ Tuỳ chọn).")
+        self._emit(step=True)
 
     def _refresh_row_inner(self, it: QTreeWidgetItem, ref: MediaInfo | None) -> None:
         info: MediaInfo = it.data(0, w.ROLE_INFO)
@@ -1588,7 +1623,7 @@ class VideoTab(QWidget):
         """Bản sao ngay dưới dòng gốc (cùng file, cùng cài đặt) — kéo đi chỗ khác nếu cần."""
         c = self._clip_from_item(it)
         info: MediaInfo = it.data(0, w.ROLE_INFO)
-        new = self._make_item(ClipItem(**c.__dict__), info)
+        new = self._make_item(ClipItem(**{**c.__dict__, "pinned": False}), info)  # bản sao không mang ghim
         self.list.blockSignals(True)
         self.list.insertTopLevelItem(self.list.indexOfTopLevelItem(it) + 1, new)
         new.setText(COL_PLAYS, it.text(COL_PLAYS))

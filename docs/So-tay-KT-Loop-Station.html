@@ -373,6 +373,11 @@ footer { margin-top: 56px; padding-top: 18px; border-top: 1px solid var(--line);
   ngay trên bảng clip hiện dải tím <b>Thứ tự sẽ xuất</b> (1. … → 2. … → …), xuất ra đúng thứ tự đó. Nhiều clip thì bấm
   <b>Xem đủ thứ tự…</b>: cửa sổ riêng, mỗi clip một dòng có ảnh xem trước, số lần và phát lúc mấy phút. <b>Trộn lại</b> ra thứ tự khác;
   <b>Dùng thứ tự này</b> chép thứ tự vào bảng để sửa tay tiếp (<kbd>Ctrl</kbd>+<kbd>Z</kbd> quay lại).</div>
+  <div class="note"><b class="t">Ghim clip khi trộn ngẫu nhiên:</b>chuột phải một dòng → <b>Ghim / bỏ ghim chỗ này khi trộn
+  ngẫu nhiên</b>. Clip ghim luôn phát đúng chỗ của nó trong bảng (thứ mấy trong các dòng đang bật — dòng phụ ghi <i>Ghim · vị
+  trí 3</i>), các clip khác xáo quanh, lượt lặp nào cũng giữ. Đổi chỗ: kéo dòng lên / xuống. Ví dụ 50 clip ngẫu nhiên + 1 clip
+  cố định: muốn ở <b>đầu</b> thì để clip đó ở dòng 1, ở <b>cuối</b> thì dòng cuối, ở vị trí 10 thì kéo xuống dòng 10 — rồi ghim.
+  Mỗi bản trộn (Trộn bản mới / Thêm nhiều bản) đều giữ clip đó đúng chỗ.</div>
   <h3>Độ dài video — 3 cách</h3>
   <div class="tbl"><table>
     <tr><th>Cách</th><th>Video dài bao nhiêu</th><th>Dùng khi</th></tr>
@@ -579,9 +584,12 @@ footer { margin-top: 56px; padding-top: 18px; border-top: 1px solid var(--line);
   <ol class="steps">
     <li><div><b>Làm xong 1 video</b>Trang Video xếp bảng (<b>Thư viện mẫu…</b> → <b>Dùng mẫu này</b>). Tên file tự gợi ý
     <b>Tập 33</b> khi file đặt kiểu <code>33_…</code>; muốn tên khác thì gõ ở trang Xuất.</div></li>
-    <li><div><b>Thêm vào hàng đợi</b>App báo đã thêm gì, lưu ở đâu, rồi hỏi bước tiếp: <b>Làm video tiếp theo</b> (bảng trống,
-    giữ intro / outro, nhạc, cài đặt xuất) · <b>Chạy hàng đợi</b> · <b>Ở lại</b>.</div></li>
-    <li><div><b>Lặp lại cho video sau</b>Thêm file → áp mẫu → Thêm vào hàng đợi. Mỗi mục giữ đúng nội dung lúc thêm.</div></li>
+    <li><div><b>Thêm vào hàng đợi</b>App hỏi <b>tên mục</b> (cũng là tên file), điền sẵn tên tự tăng (<i>Tập 33</i>,
+    <i>Bản trộn 2</i>…) — <kbd>Enter</kbd> là xong, <kbd>Esc</kbd> là thôi. Rồi app báo đã thêm gì, lưu ở đâu và hỏi bước tiếp.</div></li>
+    <li><div><b>Bước tiếp</b><b>Trộn bản mới (giữ nguyên clip)</b>: bảng clip (cả clip ghim) và mọi cài đặt giữ nguyên, chỉ đổi
+    số mầm và tên — app báo rõ <i>số mầm cũ → mới</i>; xem dải Thứ tự sẽ xuất rồi Thêm. <b>Thêm nhiều bản trộn khác nhau</b>:
+    chọn số bản (ví dụ 5), app thêm luôn, mỗi bản một thứ tự, tên tự tăng. <b>Video mới, bảng trống</b>: cho tập khác clip
+    (giữ intro / outro, nhạc, cài đặt xuất). <b>Chạy hàng đợi</b> · <b>Ở lại</b>. Mỗi mục giữ đúng nội dung lúc thêm.</div></li>
     <li><div><b>Chạy hàng đợi</b>Bấm <b>Chạy hàng đợi</b>. Muốn máy tự tắt khi xong: Cài đặt → tick <i>Tắt máy khi chạy xong hàng đợi</i> (có 2 phút để huỷ; mỗi lần mở app phải tick lại).</div></li>
   </ol>
   <ul>
@@ -590,7 +598,11 @@ footer { margin-top: 56px; padding-top: 18px; border-top: 1px solid var(--line);
     dòng, độ dài). Bấm vào một mục để xem vài dòng đầu của bảng, khung hình, intro / outro, nhạc, nơi lưu, nút <b>Mở thư mục</b>.</li>
     <li><b>Sửa mục đã thêm:</b> chọn mục → <b>Sửa mục này</b> (hoặc nháy đúp) → sửa ở trang Video → bấm <b>Cập nhật “Tập 33”</b>
     ở trang Xuất: lưu vào đúng mục đó, không tạo mục mới.</li>
-    <li><b>Lỡ thêm trùng</b> (cùng clip, số lần phát, intro / outro với một mục đang chờ): app hỏi lại trước khi thêm.</li>
+    <li><b>Đổi tên mục:</b> chọn mục chưa xuất → <b>Đổi tên</b> (hoặc chuột phải → <i>Đổi tên…</i>, phím <kbd>F2</kbd>): đổi
+    tên file sẽ xuất, cả tên thư mục riêng. Trùng tên mục / file khác thì app báo.</li>
+    <li><b>Lỡ thêm trùng</b> (cùng clip, số lần phát, intro / outro — và cùng số mầm khi trộn ngẫu nhiên — với một mục đang
+    chờ): app hỏi lại trước khi thêm. Bản trộn khác số mầm là bản khác, không hỏi. Chi tiết mục ghi <i>Thứ tự: ngẫu nhiên ·
+    số mầm … · 1 clip ghim</i> để phân biệt các bản.</li>
     <li><b>Thư mục lưu:</b> ô <i>Mỗi video một thư mục riêng</i> bật sẵn → <code>Thư mục lưu\Tập 33\Tập 33.mp4</code> kèm file mốc
     thời gian; tắt thì mọi file nằm chung một thư mục. Tên file trùng tự thêm <code>_2</code>, <code>_3</code>.</li>
     <li>Đang <b>Xuất ngay</b> vẫn thêm mục được — xuất xong app hỏi <i>Chạy hàng đợi luôn?</i>.</li>

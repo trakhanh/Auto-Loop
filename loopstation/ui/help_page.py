@@ -161,7 +161,8 @@ topic("batdau", "Bắt đầu", "home", "Bắt đầu trong 3 bước", hero(
     ("Thả file hoặc cả thư mục vào trang Video", "app tự nhận tập + tình huống và <b>tự áp mẫu dùng lần trước</b> "
                                                 "(không đúng ý: Đổi mẫu… hoặc Ctrl+Z)."),
     ("Xem dải xanh “Sẵn sàng”", "tập, số dòng, độ dài, intro / outro, nhạc, tiếng gốc, tên file — nhìn một chỗ là đủ."),
-    ("Bấm Thêm vào hàng đợi ngay trên dải đó", "bảng tự trống chờ tập sau. Thả <b>cả mùa</b> (33_…, 34_…) thì app hỏi "
+    ("Bấm Thêm vào hàng đợi ngay trên dải đó", "đặt tên (Enter giữ tên gợi ý) rồi chọn <b>Video mới, bảng trống</b> cho "
+                                               "tập sau, hoặc <b>Trộn bản mới</b> để trộn tiếp cùng bộ clip. Thả <b>cả mùa</b> (33_…, 34_…) thì app hỏi "
                                                "một câu: <b>Đưa cả N tập vào hàng đợi</b>.")]) + """
 <p>Thanh bên trái có đúng 3 bước này. Ngay dưới thanh trên cùng luôn có <b>thanh hướng dẫn</b> cho biết đang ở
 bước mấy và <b>việc cần làm tiếp</b> (bấm vào số bước để chuyển nhanh).</p>
@@ -387,6 +388,10 @@ topic("dodai", "Làm video", "clock", "Độ dài video", hero(
 (1. … → 2. … → …) — xuất ra đúng thứ tự đó. Nhiều clip (40–50): bấm <b>Xem đủ thứ tự…</b> mở cửa sổ riêng, mỗi clip một dòng
 có ảnh xem trước, số lần, phát lúc mấy phút. <b>Trộn lại</b>: ra thứ tự khác · <b>Dùng thứ tự này</b>: chép thứ tự vào bảng để sửa tay
 tiếp (Ctrl+Z quay lại). <b>Số mầm</b> giữ kết quả ngẫu nhiên giống hệt bản xem trước.</li>
+<li><b>Ghim clip khi trộn ngẫu nhiên</b>: chuột phải một dòng → <b>Ghim / bỏ ghim chỗ này khi trộn ngẫu nhiên</b>. Clip ghim
+luôn phát đúng chỗ của nó trong bảng (thứ mấy trong các dòng đang bật — dòng phụ ghi <i>Ghim · vị trí 3</i>), các clip khác
+xáo quanh; lượt lặp nào cũng giữ. Muốn ở <b>đầu</b>: dòng 1 · <b>cuối</b>: dòng cuối · chỗ khác: kéo dòng lên / xuống. Ghim được
+nhiều dòng.</li>
 <li><b>Xem chi tiết từng lượt phát</b>: liệt kê từng lượt phát clip nào, bao nhiêu lần.</li>
 </ul>""" + box("tip", "Thanh trên cùng luôn hiện <b>Tổng</b> thời lượng. Chip vàng là có lưu ý — rê chuột lên để đọc.") + box(
     "warn", "Video / file nhạc dài tối đa <b>48 giờ</b>, mỗi clip phát tối đa <b>99.999 lần</b>. Gõ quá mức thì app tự đưa về mức tối đa."))
@@ -576,16 +581,23 @@ topic("hangdoi", "Xuất file", "queue", "Hàng đợi (xuất qua đêm)", hero
     "Hàng đợi", "Xếp nhiều dự án rồi để máy xuất lần lượt, ví dụ chạy qua đêm.", (("Mở trang Xuất", "app:export"),)) + steps([
     ("Làm xong 1 video", "trang Video xếp bảng (Thư viện mẫu… → Dùng mẫu này). Tên file tự gợi ý <b>Tập 33</b> khi file "
                          "đặt kiểu 33_…; muốn tên khác thì gõ ở trang Xuất."),
-    ("Thêm vào hàng đợi", "app báo đã thêm gì, lưu ở đâu, rồi hỏi bước tiếp: <b>Làm video tiếp theo</b> (bảng trống, giữ "
-                          "intro / outro, nhạc, cài đặt xuất) · <b>Chạy hàng đợi</b> · <b>Ở lại</b>."),
-    ("Lặp lại cho video sau", "thêm file → áp mẫu → Thêm vào hàng đợi. Mỗi mục giữ đúng nội dung lúc thêm, sửa bảng sau đó "
-                              "không ảnh hưởng."),
+    ("Thêm vào hàng đợi", "app hỏi <b>tên mục</b> (cũng là tên file) — điền sẵn tên tự tăng (<i>Tập 33</i>, <i>Bản trộn "
+                          "2</i>…), Enter là xong. Rồi app báo đã thêm gì, lưu ở đâu và hỏi bước tiếp."),
+    ("Trộn tiếp cùng bộ clip", "<b>Trộn bản mới (giữ nguyên clip)</b>: bảng clip (cả clip ghim) và mọi cài đặt giữ nguyên, "
+                               "app chỉ đổi số mầm và tên rồi báo rõ đổi gì — xem dải Thứ tự sẽ xuất, ưng thì Thêm. "
+                               "<b>Thêm nhiều bản trộn khác nhau</b>: chọn số bản (ví dụ 5), app thêm luôn, mỗi bản một thứ tự, "
+                               "tên tự tăng."),
+    ("Tập khác clip", "<b>Video mới, bảng trống</b>: bảng clip và tên file để trống, giữ intro / outro, nhạc, cài đặt xuất. "
+                      "Mỗi mục giữ đúng nội dung lúc thêm, sửa bảng sau đó không ảnh hưởng."),
     ("Chạy hàng đợi", "xuất lần lượt từ trên xuống. Muốn thì vào Cài đặt tick Tắt máy khi xong.")]) + legend([
     ("Biết trong hàng đợi có gì", "mỗi dòng ghi <b>Tên file</b> và <b>Nội dung</b> (tập, tình huống, số dòng, độ dài). Bấm "
                                   "vào một mục: hiện vài dòng đầu của bảng, khung hình, intro / outro, nhạc, nơi lưu."),
     ("Sửa mục đã thêm", "chọn mục → <b>Sửa mục này</b> (hoặc nháy đúp): mục mở lại ở trang Video, nút Thêm đổi thành "
                         "<b>Cập nhật “Tập 33”</b> — bấm là lưu vào đúng mục đó, không tạo mục mới."),
-    ("Lỡ thêm trùng", "thêm một video giống hệt mục đang chờ (cùng clip, số lần phát, intro / outro) thì app hỏi lại."),
+    ("Đổi tên mục", "chọn mục chưa xuất → <b>Đổi tên</b> (hoặc chuột phải → Đổi tên…, phím F2): đổi tên file sẽ xuất "
+                    "(cả tên thư mục riêng). Trùng tên mục / file khác thì app báo."),
+    ("Lỡ thêm trùng", "thêm một video giống hệt mục đang chờ (cùng clip, số lần phát, intro / outro, cùng số mầm khi trộn "
+                      "ngẫu nhiên) thì app hỏi lại. Bản trộn khác số mầm là bản khác, không hỏi."),
     ("Thư mục lưu", "ô <b>Mỗi video một thư mục riêng</b> (trang Xuất, bật sẵn): <i>Thư mục lưu › Tập 33 › Tập 33.mp4</i> "
                     "kèm file mốc thời gian. Tắt: mọi file nằm chung một thư mục. Nút <b>Mở thư mục</b> ở chi tiết mục."),
     ("Đang Xuất ngay mà thêm mục", "được — xuất xong app hỏi <i>Chạy hàng đợi luôn?</i>."),

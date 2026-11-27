@@ -44,15 +44,69 @@ def _choice(icon_name: str, title: str, sub: str, primary: bool = False) -> QPus
     return b
 
 
+class NameDialog(QDialog):
+    """Đặt tên mục hàng đợi (= tên file xuất): điền sẵn tên tự tăng, Enter là xong, Esc là thôi. `name` sau khi OK."""
+
+    def __init__(self, title: str, name: str, hint: str = "", parent=None, ok_text: str = "Thêm vào hàng đợi"):
+        super().__init__(parent)
+        from PySide6.QtWidgets import QLineEdit
+        self.setWindowTitle(title)
+        self.name = ""
+        head = QHBoxLayout()
+        head.setSpacing(theme.SP["md"])
+        head.addWidget(badge("edit", "accent", 34, 18))
+        t = QLabel(title)
+        t.setObjectName("updateTitle")
+        head.addWidget(t, 1)
+        self.edit = QLineEdit(name)
+        self.edit.setPlaceholderText("Ví dụ: Tập 2, Bản trộn 3…")
+        self.edit.setMinimumHeight(34)
+        self.edit.selectAll()
+        self.edit.returnPressed.connect(self._ok)
+        self.ok = QPushButton(ok_text)
+        self.ok.setObjectName("primary")
+        self.ok.setDefault(True)
+        self.ok.clicked.connect(self._ok)
+        cancel = QPushButton("Huỷ")
+        cancel.setObjectName("ghost")
+        cancel.clicked.connect(self.reject)
+        row = QHBoxLayout()
+        row.addStretch(1)
+        row.addWidget(cancel)
+        row.addWidget(self.ok)
+        lay = QVBoxLayout(self)
+        lay.setSpacing(theme.SP["md"])
+        lay.addLayout(head)
+        lay.addWidget(self.edit)
+        if hint:
+            lay.addWidget(w.muted(hint))
+        lay.addLayout(row)
+        self.edit.textChanged.connect(lambda txt: self.ok.setEnabled(bool(txt.strip())))
+        self.edit.setFocus()
+        _fit(self, 520)
+
+    def _ok(self) -> None:
+        if self.edit.text().strip():
+            self.name = self.edit.text().strip()
+            self.accept()
+
+
 class QueueAddedDialog(QDialog):
-    """Sau khi bấm Thêm vào hàng đợi. `choice`: "next" (làm video tiếp theo), "run" (chạy hàng đợi), "stay"."""
+    """Sau khi bấm Thêm vào hàng đợi. `choice`: "remix" (trộn bản mới, giữ nguyên clip), "many" (thêm `count` bản
+    trộn khác nhau), "blank" / "next" (video mới, bảng trống), "run" (chạy hàng đợi), "stay".
+    `remix=False` (thả cả mùa): chỉ có Làm tập tiếp theo ("next") / Chạy / Ở lại như trước."""
 
     def __init__(self, out: str, summary: str, pending: int, can_run: bool, parent=None,
-                 lines: list[str] | None = None, name: str = ""):
-        """`lines`: nhiều video một lúc (thả cả mùa) — mỗi dòng một video thay cho chip tóm tắt."""
+                 lines: list[str] | None = None, name: str = "", remix: bool = False, next_name: str = "",
+                 shuffled: bool = True):
+        """`lines`: nhiều video một lúc (thả cả mùa) — mỗi dòng một video thay cho chip tóm tắt.
+        `next_name`: tên bản trộn kế tiếp (hiện trên nút). `shuffled`: bảng đang trộn ngẫu nhiên (khác số mầm → khác
+        thứ tự); không thì nhắc bật Ngẫu nhiên."""
         super().__init__(parent)
+        from PySide6.QtWidgets import QSpinBox
         self.setWindowTitle("Đã thêm vào hàng đợi")
         self.choice = "stay"
+        self.count = 5
 
         head = QHBoxLayout()
         head.setSpacing(theme.SP["md"])
@@ -93,15 +147,40 @@ class QueueAddedDialog(QDialog):
 
         ask = QLabel("Tiếp theo làm gì?")
         ask.setObjectName("helpCardTitle")
-        nxt = _choice("plus", "Làm video tiếp theo", "Bảng clip và tên file để trống — giữ nguyên mẫu, intro / outro, "
-                      "nhạc, cài đặt xuất.", primary=True)
-        nxt.clicked.connect(lambda: self._done("next"))
         lay = QVBoxLayout(self)
         lay.setSpacing(theme.SP["md"])
         lay.addLayout(head)
         lay.addWidget(card)
         lay.addWidget(ask)
-        lay.addWidget(nxt)
+        if remix:
+            why = ("Giữ bảng clip (cả clip ghim) và mọi cài đặt, chỉ đổi số mầm ngẫu nhiên" if shuffled else
+                   "Giữ bảng clip và mọi cài đặt, đổi số mầm — bảng đang phát theo thứ tự, bật Thứ tự clip = "
+                   "Ngẫu nhiên để mỗi bản một thứ tự")
+            first = _choice("shuffle", "Trộn bản mới (giữ nguyên clip)",
+                            why + (f" · tên “{next_name}”." if next_name else "."), primary=True)
+            first.clicked.connect(lambda: self._done("remix"))
+            lay.addWidget(first)
+            many = _choice("queue", "Thêm nhiều bản trộn khác nhau vào hàng đợi",
+                           "Mỗi bản một số mầm, tên tự tăng — thêm luôn, không hỏi từng bản.")
+            many.clicked.connect(lambda: self._done("many"))
+            self.spin = QSpinBox()
+            self.spin.setRange(1, 50)
+            self.spin.setValue(5)
+            self.spin.setSuffix(" bản")
+            self.spin.setToolTip("Số bản trộn sẽ thêm (mỗi bản một thứ tự khác)")
+            mrow = QHBoxLayout()
+            mrow.addWidget(many, 1)
+            mrow.addWidget(self.spin, 0, Qt.AlignmentFlag.AlignVCenter)
+            lay.addLayout(mrow)
+            blank = _choice("plus", "Video mới, bảng trống", "Cho tập khác clip: bảng clip và tên file để trống — giữ "
+                            "mẫu, intro / outro, nhạc, cài đặt xuất.")
+            blank.clicked.connect(lambda: self._done("blank"))
+            lay.addWidget(blank)
+        else:
+            first = _choice("plus", "Làm video tiếp theo", "Bảng clip và tên file để trống — giữ nguyên mẫu, "
+                            "intro / outro, nhạc, cài đặt xuất.", primary=True)
+            first.clicked.connect(lambda: self._done("next"))
+            lay.addWidget(first)
         if can_run:
             run = _choice("play", f"Chạy hàng đợi ngay ({pending})", "Xuất lần lượt các video đang chờ, từ trên xuống.")
             run.clicked.connect(lambda: self._done("run"))
@@ -115,11 +194,14 @@ class QueueAddedDialog(QDialog):
         row.addStretch(1)
         row.addWidget(stay)
         lay.addLayout(row)
-        nxt.setFocus()
-        _fit(self, 580)
+        first.setFocus()
+        _fit(self, 600)
 
     def _done(self, choice: str) -> None:
         self.choice = choice
+        spin = getattr(self, "spin", None)
+        if spin is not None:
+            self.count = spin.value()
         self.accept()
 
 

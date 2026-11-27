@@ -35,6 +35,7 @@ class ClipItem:
     trim_end: float = 0.0  # bỏ bao nhiêu giây ở cuối clip
     music: bool = True  # có phát nhạc nền trong lúc clip này chạy (bỏ tick: nhạc ngừng, tới clip có tick thì sang bài kế)
     music_start: str = ""  # tới clip này thì phát bài này (đường dẫn) từ đầu, rồi tiếp playlist; "" = tiếp tục playlist
+    pinned: bool = False  # trộn ngẫu nhiên: giữ đúng chỗ dòng này trong bảng (vị trí trong các dòng bật)
 
 
 @dataclass
@@ -206,6 +207,7 @@ class Project:
                         "trim": {"start": c.trim_start, "end": c.trim_end},
                         "music": c.music,
                         "music_start": p(c.music_start) if c.music_start else "",
+                        **({"pinned": True} if c.pinned else {}),
                     }
                     for c in v.clips
                 ],
@@ -313,7 +315,8 @@ class Project:
                          trim_start=max(0.0, float((cd.get("trim") or {}).get("start", 0.0))),
                          trim_end=max(0.0, float((cd.get("trim") or {}).get("end", 0.0))),
                          music=bool(cd.get("music", True)),
-                         music_start=p(cd["music_start"]) if cd.get("music_start") else "")
+                         music_start=p(cd["music_start"]) if cd.get("music_start") else "",
+                         pinned=bool(cd.get("pinned", False)))
             if plays.get("mode") == "random":
                 c.plays_mode = "random"
                 c.min = int(plays.get("min", 1))

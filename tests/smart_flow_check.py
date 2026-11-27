@@ -128,7 +128,7 @@ check("dải Sẵn sàng hiện + tên Tập 36", wait_for(lambda: vt.ready.isVi
 win.go_to(0)
 pump(0.5)
 win.grab().save(os.path.join(scratch, "s_ready.png"))
-answer("Làm video tiếp theo")
+answer("Thêm vào hàng đợi", "s_name.png", ("Video mới", ""))  # hộp đặt tên (giữ Tập 36) → Video mới, bảng trống
 vt.ready_add.click()
 pump(1)
 check("Thêm ngay trang Video: 1 mục Tập 36", len(win.queue) == 1 and os.path.basename(win.queue[0].output) == "Tập 36.mp4")

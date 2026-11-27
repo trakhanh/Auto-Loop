@@ -72,7 +72,11 @@ def resolve_round(clips: list[ClipItem], order: str, rng: random.Random) -> list
     """Một vòng: danh sách (chỉ số clip, số lần phát) sau khi xử lý thứ tự và ngẫu nhiên."""
     idx = [i for i, c in enumerate(clips) if c.enabled]
     if order == "shuffle":
-        rng.shuffle(idx)
+        # clip ghim giữ đúng chỗ (thứ mấy trong các dòng bật), các clip khác xáo rồi lấp vào chỗ trống
+        free = [i for i in idx if not clips[i].pinned]
+        rng.shuffle(free)
+        it = iter(free)
+        idx = [i if clips[i].pinned else next(it) for i in idx]
     out = []
     for i in idx:
         c = clips[i]

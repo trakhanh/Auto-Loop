@@ -7,7 +7,7 @@ import shutil
 from pathlib import Path
 
 from PySide6.QtCore import QEasingCurve, QPropertyAnimation, QSettings, QSize, Qt, Signal
-from PySide6.QtGui import QColor, QIcon
+from PySide6.QtGui import QColor, QIcon, QKeySequence, QShortcut
 from PySide6.QtWidgets import (
     QCheckBox, QComboBox, QDoubleSpinBox, QFileDialog, QFormLayout, QFrame, QGroupBox, QHBoxLayout, QHeaderView, QLabel,
     QLineEdit, QMenu, QPlainTextEdit, QProgressBar, QPushButton, QScrollArea, QSplitter, QTreeWidget, QTreeWidgetItem,
@@ -41,6 +41,7 @@ class ExportTab(QWidget):
     batchRequested = Signal()  # thêm hàng loạt từ thư mục  # xoá/đổi thứ tự mục trong hàng đợi
     queuePauseRequested = Signal()  # "Tạm dừng sau video này" / bỏ tạm dừng
     queueEditRequested = Signal(int)  # "Sửa mục này": mở lại mục hàng đợi ở trang Video để chỉnh rồi cập nhật
+    queueRenameRequested = Signal(int)  # "Đổi tên…" (F2): đổi tên mục = tên file xuất
 
     def __init__(self, settings: QSettings, parent=None):
         super().__init__(parent)
@@ -434,6 +435,14 @@ class ExportTab(QWidget):
         self.q_edit_btn.setToolTip("Mở lại mục ở trang Video để chỉnh, rồi bấm “Cập nhật …” ở trang Xuất "
                                    "(nháy đúp vào mục cũng được)")
         self.q_edit_btn.clicked.connect(self._edit_selected)
+        self.q_rename_btn = QPushButton("Đổi tên")
+        self.q_rename_btn.setObjectName("ghost")
+        self.q_rename_btn.setIcon(icons.icon("edit", 13))
+        self.q_rename_btn.setIconSize(QSize(13, 13))
+        self.q_rename_btn.setToolTip("Đổi tên mục (= tên file sẽ xuất) — mục chưa xuất. Phím tắt F2")
+        self.q_rename_btn.clicked.connect(self._rename_selected)
+        QShortcut(QKeySequence(Qt.Key.Key_F2), self.queue, self._rename_selected,
+                  context=Qt.ShortcutContext.WidgetWithChildrenShortcut)
         self.q_detail_box = QFrame()
         self.q_detail_box.setObjectName("presetCard")
         db = QHBoxLayout(self.q_detail_box)
@@ -441,6 +450,7 @@ class ExportTab(QWidget):
         db.addWidget(self.q_detail, 1)
         dbtn = QVBoxLayout()
         dbtn.addWidget(self.q_edit_btn)
+        dbtn.addWidget(self.q_rename_btn)
         dbtn.addWidget(self.q_open_btn)
         dbtn.addStretch(1)
         db.addLayout(dbtn)
@@ -1067,20 +1077,28 @@ class ExportTab(QWidget):
         rows = self._selected_rows()
         if len(rows) != 1 or not 0 <= rows[0] < len(self.items):
             self.q_detail.setText("Bấm vào một mục để xem bên trong có gì và lưu ở đâu." if self.items else
-                                  "Cách dùng: làm xong 1 video → <b>Thêm vào hàng đợi</b> → <b>Làm video tiếp theo</b>"
+                                  "Cách dùng: làm xong 1 video → <b>Thêm vào hàng đợi</b> (đặt tên) → <b>Trộn bản "
+                                  "mới</b> (cùng bộ clip) hoặc <b>Video mới, bảng trống</b>"
                                   " → … → <b>Chạy hàng đợi</b>.")
             self.q_edit_btn.setEnabled(False)
+            self.q_rename_btn.setEnabled(False)
             self.q_open_btn.setEnabled(False)
             return
         it = self.items[rows[0]]
         self.q_detail.setText(queue_detail_html(it))
         self.q_edit_btn.setEnabled(it.status != "running" and it.kind == "video")
+        self.q_rename_btn.setEnabled(it.status == "pending")
         self.q_open_btn.setEnabled(True)
 
     def _edit_selected(self) -> None:
         rows = self._selected_rows()
         if len(rows) == 1 and self.items[rows[0]].status != "running" and self.items[rows[0]].kind == "video":
             self.queueEditRequested.emit(rows[0])
+
+    def _rename_selected(self) -> None:
+        rows = self._selected_rows()
+        if len(rows) == 1 and 0 <= rows[0] < len(self.items) and self.items[rows[0]].status == "pending":
+            self.queueRenameRequested.emit(rows[0])
 
     def _open_selected_folder(self) -> None:
         rows = self._selected_rows()
@@ -1139,6 +1157,8 @@ class ExportTab(QWidget):
         if len(rows) == 1:
             ed = menu.addAction(icons.icon("edit", 14), "Sửa mục này…", self._edit_selected)
             ed.setEnabled(self.q_edit_btn.isEnabled())
+            rn = menu.addAction(icons.icon("edit", 14), "Đổi tên… (F2)", self._rename_selected)
+            rn.setEnabled(self.items[rows[0]].status == "pending")
             menu.addAction(icons.icon("folder", 14), "Mở thư mục", self._open_selected_folder)
             menu.addSeparator()
         act = menu.addAction(icons.icon("repeat", 14), f"Chạy lại ({len(again)} mục) — đặt về Đang chờ")
@@ -1205,6 +1225,9 @@ def queue_detail_html(it: QueueItem) -> str:
         parts = [f"{Path(c.path).stem} ×{c.count}" if c.plays_mode == "fixed" else Path(c.path).stem for c in clips[:5]]
         more = f" → … (+{len(clips) - 5} dòng)" if len(clips) > 5 else ""
         rows.append(("Bảng clip", esc(" → ".join(parts)) + more))
+        if p.video.order == "shuffle":
+            pins = sum(1 for c in clips if c.pinned)
+            rows.append(("Thứ tự", f"ngẫu nhiên · số mầm {p.video.seed}" + (f" · {pins} clip ghim" if pins else "")))
         fps = {"source": "fps cao nhất của các clip", "main": "fps theo clip chính"}.get(ex.fps, f"{ex.fps} fps")
         cap = {"mbps": f" · tối đa {ex.cap_mbps:g} Mbps", "size": f" · tối đa {ex.cap_gb:g} GB",
                "youtube": " · bitrate mức YouTube"}.get(ex.bitrate_cap, "")

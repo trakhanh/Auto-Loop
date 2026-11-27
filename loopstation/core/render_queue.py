@@ -74,12 +74,57 @@ def describe(project: Project, kind: str = "video", total: float = 0.0) -> str:
 
 
 def signature(project: Project, kind: str = "video") -> tuple:
-    """Nội dung chính của một mục (để báo khi lỡ thêm cùng một video hai lần)."""
+    """Nội dung chính của một mục (để báo khi lỡ thêm cùng một video hai lần). Trộn ngẫu nhiên: số mầm khác là bản
+    khác (Trộn bản mới), nên số mầm nằm trong chữ ký."""
     if kind == "audio":
         return ("audio", tuple(t.path.lower() for t in project.music.tracks if t.enabled))
     v = project.video
-    return ("video", tuple((c.path.lower(), c.plays_mode, c.count, c.min, c.max, c.play_seconds)
-                           for c in v.clips if c.enabled), v.intro.lower(), v.outro.lower())
+    clips = [c for c in v.clips if c.enabled]
+    rand = v.order == "shuffle" or any(c.plays_mode == "random" for c in clips)
+    return ("video", tuple((c.path.lower(), c.plays_mode, c.count, c.min, c.max, c.play_seconds, c.pinned)
+                           for c in clips), v.intro.lower(), v.outro.lower(), (v.order, v.seed) if rand else None)
+
+
+DEFAULT_NAME = "Bản trộn"
+
+
+def next_name(name: str, taken: set[str], default: str = DEFAULT_NAME) -> str:
+    """Tên gợi ý cho mục hàng đợi: `name` (đã làm sạch) nếu chưa dùng; trùng thì tăng số cuối ("Tập 9" → "Tập 10",
+    "Bản trộn" → "Bản trộn 2"); trống → "<default> 1". `taken`: các tên đã dùng (chữ thường, không đuôi)."""
+    import re
+    from .render import clean_filename
+    name = clean_filename(name)
+    if not name:
+        name = f"{default} 1"
+    if name.lower() not in taken:
+        return name
+    m = re.match(r"^(.*?)(\d+)$", name)
+    base, n = (m.group(1), int(m.group(2)) + 1) if m else (name + " ", 2)
+    while f"{base}{n}".lower() in taken:
+        n += 1
+    return f"{base}{n}"
+
+
+def remix(project: Project, seed: int, name: str) -> Project:
+    """Bản trộn mới: cùng bảng clip (cả clip ghim) và mọi cài đặt, chỉ khác số mầm (video, và nhạc nếu nhạc đang
+    xáo) và tên file. Không đụng dự án gốc."""
+    import copy
+    p = copy.deepcopy(project)
+    p.video.seed = seed
+    if p.music.order != "list":
+        p.music.seed = seed
+    p.export.filename = name
+    return p
+
+
+def renamed_output(output: str, new_stem: str, own_folder: bool) -> str:
+    """Đổi tên file đích của một mục; "mỗi video một thư mục" thì đổi cả tên thư mục riêng."""
+    from .render import clean_filename
+    p = Path(output)
+    stem = clean_filename(new_stem) or p.stem
+    if own_folder and p.parent.name == p.stem:
+        return str(p.parent.parent / stem / f"{stem}{p.suffix}")
+    return str(p.with_name(f"{stem}{p.suffix}"))
 
 
 def save(items: list[QueueItem], path: Path) -> None:
