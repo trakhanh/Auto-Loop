@@ -6,7 +6,7 @@
 
 **Ghép và loop clip + nhạc thành video YouTube dài hàng giờ — tải video từ YouTube, TikTok, Douyin, Bilibili…, chia đoạn, xuất ảnh — xem trước ngay trong app, xuất nhanh bằng card đồ hoạ.**
 
-<sub>By Khánh Trà · Ứng dụng Windows · Giao diện tiếng Việt · Bản mới nhất: <b>2.0.3</b></sub>
+<sub>By Khánh Trà · Ứng dụng Windows · Giao diện tiếng Việt · Bản mới nhất: <b>2.0.4</b></sub>
 
 <br>
 
@@ -34,6 +34,8 @@
 <br>
 
 ## Có gì mới ở 2.0
+
+> **2.0.4** · <b>Trộn nhiều bản từ cùng một bộ clip, không phải thêm lại</b>: thêm vào hàng đợi xong bấm <b>Trộn bản mới (giữ nguyên clip)</b> — chỉ đổi số mầm và tên — hoặc <b>Thêm nhiều bản trộn khác nhau</b> một lượt. <b>Ghim clip</b> khi trộn ngẫu nhiên (chuột phải → Ghim): clip luôn đứng đúng chỗ, ở đầu, cuối hay giữa. <b>Mỗi bản một clip mở đầu riêng</b>: đánh dấu các clip mở đầu, bản 1 mở đầu A, bản 2 mở đầu B… Thêm vào hàng đợi giờ <b>hỏi tên mục</b> (tên tự tăng: Tập 2, Bản trộn 3…), đổi tên ngay trong hàng đợi (F2).
 
 > **2.0.3** · Sửa lỗi hiện hộp <b>“Có lỗi bất ngờ”</b> (Internal C++ object … QScrollBar already deleted) khi lăn chuột đúng lúc một vùng cuộn đóng lại / dựng lại: hiệu ứng cuộn mượt giờ tự dừng.
 

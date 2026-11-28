@@ -1222,12 +1222,19 @@ def queue_detail_html(it: QueueItem) -> str:
     rows: list[tuple[str, str]] = [("Nội dung", esc(it.summary or p.name))]
     if it.kind == "video":
         clips = [c for c in p.video.clips if c.enabled]
-        parts = [f"{Path(c.path).stem} ×{c.count}" if c.plays_mode == "fixed" else Path(c.path).stem for c in clips[:5]]
-        more = f" → … (+{len(clips) - 5} dòng)" if len(clips) > 5 else ""
-        rows.append(("Bảng clip", esc(" → ".join(parts)) + more))
-        if p.video.order == "shuffle":
+        if p.video.order == "shuffle":  # trộn: hiện thứ tự phát thật của bản này (lượt đầu), không phải thứ tự dòng
+            from ..core.render_queue import play_order
+            order = play_order(p)
+            parts = [f"{Path(p.video.clips[k].path).stem} ×{n}" for k, n in order[:6]]
+            more = f" → … (+{len(order) - 6})" if len(order) > 6 else ""
+            rows.append(("Thứ tự phát", esc(" → ".join(parts)) + more))
             pins = sum(1 for c in clips if c.pinned)
-            rows.append(("Thứ tự", f"ngẫu nhiên · số mầm {p.video.seed}" + (f" · {pins} clip ghim" if pins else "")))
+            rows.append(("Trộn", f"ngẫu nhiên · số mầm {p.video.seed}" + (f" · {pins} clip ghim" if pins else "")))
+        else:
+            parts = [f"{Path(c.path).stem} ×{c.count}" if c.plays_mode == "fixed" else Path(c.path).stem
+                     for c in clips[:5]]
+            more = f" → … (+{len(clips) - 5} dòng)" if len(clips) > 5 else ""
+            rows.append(("Bảng clip", esc(" → ".join(parts)) + more + " <i>(theo thứ tự trong bảng)</i>"))
         fps = {"source": "fps cao nhất của các clip", "main": "fps theo clip chính"}.get(ex.fps, f"{ex.fps} fps")
         cap = {"mbps": f" · tối đa {ex.cap_mbps:g} Mbps", "size": f" · tối đa {ex.cap_gb:g} GB",
                "youtube": " · bitrate mức YouTube"}.get(ex.bitrate_cap, "")

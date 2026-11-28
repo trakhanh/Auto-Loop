@@ -175,3 +175,24 @@ def test_describe_and_round_trip_opener():
     back = Project.from_dict(v.to_dict(None), None)
     assert [c.opener for c in back.video.clips] == [c.opener for c in v.video.clips]
     assert "opener" not in v.to_dict(None)["video"]["clips"][1]
+
+
+# ---- chi tiết mục hàng đợi: thứ tự phát thật (lượt đầu), không phải thứ tự dòng trong bảng ----
+def test_play_order_matches_planner_first_round():
+    vs = make_vs(6, pinned={3}, seed=42)
+    vs.clips[1].plays_mode, vs.clips[1].min, vs.clips[1].max = "random", 2, 5
+    p = Project()
+    p.video = vs
+    plan = planner.plan_video(vs, {i: F for i in range(6)}, FPS, None)
+    assert rq.play_order(p) == planner.round_order(plan)
+    p.video.order = "list"
+    assert [c for c, _n in rq.play_order(p)] == [0, 1, 2, 3, 4, 5]
+
+
+def test_describe_shows_seed_only_when_shuffled():
+    p = Project()
+    p.video.clips = [ClipItem("a.mp4"), ClipItem("b.mp4")]
+    p.video.order, p.video.seed = "shuffle", 777
+    assert "số mầm 777" in rq.describe(p)
+    p.video.order = "list"
+    assert "số mầm" not in rq.describe(p)

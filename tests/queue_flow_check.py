@@ -312,6 +312,34 @@ pump(1)
 c0 = win.collect_project().video.clips[0]
 check("Trộn bản mới lần nữa: sang clip mở đầu B", c0.path == lead_paths[1] and c0.pinned, Path(c0.path).stem)
 
+# ---- lỗi anh báo: bảng để Theo thứ tự trong bảng → Thêm 5 bản ra 5 bảng y hệt. Giờ app đề nghị trộn ngẫu nhiên ----
+win.queue.clear()
+win.export_tab.set_queue(win.queue)
+plain = Project(name="Thẳng", output_kind="video_only")
+plain.video.clips = [ClipItem(os.path.join(media, f"{e}_{n}_LOOP {r}.mp4")) for e in (33, 34) for n in (1, 2) for r in "AB"][:5]
+plain.video.order = "list"
+plain.export.output_dir = os.path.join(scratch, "out_plain")
+win.load_project(plain)
+win.recompute()
+pump(1.5)
+answers(("Thêm vào hàng đợi",), ("Thêm nhiều bản", "", 4), ("Trộn ngẫu nhiên", "q_ask_shuffle.png"))
+win.add_to_queue("video")
+pump(3)
+check("thêm bảng + 4 bản", len(win.queue) == 5, str(len(win.queue)))
+from loopstation.core import render_queue as rq  # noqa: E402
+orders = [tuple(rq.play_order(i.project)) for i in win.queue[1:]]
+check("4 bản trộn: mỗi bản một thứ tự phát", len(set(orders)) == 4, str(orders))
+check("bảng đang mở chuyển sang Ngẫu nhiên", win.video_tab.order.currentData() == "shuffle")
+details = []
+for r in range(1, 5):
+    et.queue.clearSelection()
+    et.queue.topLevelItem(r).setSelected(True)
+    pump(0.2)
+    details.append(et.q_detail.text())
+check("chi tiết mục hiện Thứ tự phát khác nhau", all("Thứ tự phát" in d for d in details)
+      and len({d.split("Thứ tự phát")[1][:300] for d in details}) == 4, details[0][-400:])
+check("tóm tắt mục ghi số mầm", all("số mầm" in i.summary for i in win.queue[1:]), win.queue[1].summary)
+
 win._closing = True
 win.close()
 pump(0.5)

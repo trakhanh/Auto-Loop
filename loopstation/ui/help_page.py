@@ -590,12 +590,14 @@ topic("hangdoi", "Xuất file", "queue", "Hàng đợi (xuất qua đêm)", hero
     ("Trộn tiếp cùng bộ clip", "<b>Trộn bản mới (giữ nguyên clip)</b>: bảng clip (cả clip ghim) và mọi cài đặt giữ nguyên, "
                                "app chỉ đổi số mầm và tên rồi báo rõ đổi gì — xem dải Thứ tự sẽ xuất, ưng thì Thêm. "
                                "<b>Thêm nhiều bản trộn khác nhau</b>: chọn số bản (ví dụ 5), app thêm luôn, mỗi bản một thứ tự, "
-                               "tên tự tăng."),
+                               "tên tự tăng. Bảng đang để <i>Theo thứ tự trong bảng</i> thì app hỏi chuyển sang "
+                               "<b>Ngẫu nhiên</b> (không thì các bản giống hệt nhau)."),
     ("Tập khác clip", "<b>Video mới, bảng trống</b>: bảng clip và tên file để trống, giữ intro / outro, nhạc, cài đặt xuất. "
                       "Mỗi mục giữ đúng nội dung lúc thêm, sửa bảng sau đó không ảnh hưởng."),
     ("Chạy hàng đợi", "xuất lần lượt từ trên xuống. Muốn thì vào Cài đặt tick Tắt máy khi xong.")]) + legend([
-    ("Biết trong hàng đợi có gì", "mỗi dòng ghi <b>Tên file</b> và <b>Nội dung</b> (tập, tình huống, số dòng, độ dài). Bấm "
-                                  "vào một mục: hiện vài dòng đầu của bảng, khung hình, intro / outro, nhạc, nơi lưu."),
+    ("Biết trong hàng đợi có gì", "mỗi dòng ghi <b>Tên file</b> và <b>Nội dung</b> (tập, tình huống, số dòng, số mầm, độ "
+                                  "dài). Bấm vào một mục: hiện <b>Thứ tự phát</b> của bản đó (bản trộn) hoặc vài dòng đầu "
+                                  "của bảng, khung hình, intro / outro, nhạc, nơi lưu."),
     ("Sửa mục đã thêm", "chọn mục → <b>Sửa mục này</b> (hoặc nháy đúp): mục mở lại ở trang Video, nút Thêm đổi thành "
                         "<b>Cập nhật “Tập 33”</b> — bấm là lưu vào đúng mục đó, không tạo mục mới."),
     ("Đổi tên mục", "chọn mục chưa xuất → <b>Đổi tên</b> (hoặc chuột phải → Đổi tên…, phím F2): đổi tên file sẽ xuất "

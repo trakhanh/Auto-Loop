@@ -156,8 +156,8 @@ class QueueAddedDialog(QDialog):
         lay.addWidget(ask)
         if remix:
             why = ("Giữ bảng clip (cả clip ghim) và mọi cài đặt, chỉ đổi số mầm ngẫu nhiên" if shuffled else
-                   "Giữ bảng clip và mọi cài đặt, đổi số mầm — bảng đang phát theo thứ tự, bật Thứ tự clip = "
-                   "Ngẫu nhiên để mỗi bản một thứ tự")
+                   "Giữ bảng clip và mọi cài đặt — bảng đang phát theo thứ tự, app sẽ hỏi chuyển sang Ngẫu nhiên để "
+                   "mỗi bản một thứ tự")
             first = _choice("shuffle", "Trộn bản mới (giữ nguyên clip)",
                             why + (f" · mở đầu “{next_lead}”" if next_lead else "")
                             + (f" · tên “{next_name}”." if next_name else "."), primary=True)

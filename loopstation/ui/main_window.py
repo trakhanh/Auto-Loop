@@ -2246,6 +2246,12 @@ class MainWindow(QMainWindow):
     def remix_next(self) -> None:
         """Trộn bản mới (giữ nguyên clip): bảng clip + mọi cài đặt giữ nguyên, chỉ đổi số mầm và tên — báo rõ đã đổi gì."""
         proj = self.collect_project()
+        if not self._shuffled(proj) and not rq.openers(proj):
+            ans = self._ask_shuffle("bản mới và bản vừa thêm")
+            if ans is None:
+                return
+            if ans == "shuffle":
+                proj.video.order = "shuffle"
         name = self._remix_name(proj, self._taken_names(proj, ".mp4"))
         old = proj.video.seed
         seed = self._new_seed(old)
@@ -2261,6 +2267,22 @@ class MainWindow(QMainWindow):
         head = f", mở đầu “{lead}”" if lead else ""
         self.notify(f"Bản trộn mới “{name}”{head}: số mầm {old} → {seed}, bảng clip giữ nguyên. Xem dải Thứ tự sẽ xuất, "
                     f"ưng thì Thêm vào hàng đợi.{extra}", "warn" if extra else "ok", 7000)
+
+    def _ask_shuffle(self, what: str) -> str | None:
+        """Bảng đang phát theo thứ tự trong bảng → mọi bản trộn giống hệt nhau: đề nghị chuyển sang Ngẫu nhiên.
+        Trả về "shuffle" (nút chính), "keep" (giữ thứ tự bảng) hoặc None (huỷ)."""
+        box = QMessageBox(QMessageBox.Icon.Question, "Bảng đang phát theo thứ tự",
+                          f"Bảng clip đang để <b>Thứ tự clip = Theo thứ tự trong bảng</b> nên {what} sẽ "
+                          "<b>giống hệt nhau</b>.<br><br>Chuyển sang <b>Ngẫu nhiên</b> để mỗi bản một thứ tự khác? "
+                          "Clip ghim vẫn giữ chỗ; đổi lại được ở thẻ Tuỳ chọn.", parent=self)
+        shuf = box.addButton("Trộn ngẫu nhiên (mỗi bản một thứ tự)", QMessageBox.ButtonRole.AcceptRole)
+        keep = box.addButton("Giữ thứ tự bảng", QMessageBox.ButtonRole.DestructiveRole)
+        box.addButton("Huỷ", QMessageBox.ButtonRole.RejectRole)
+        box.setDefaultButton(shuf)
+        box.exec()
+        clicked = box.clickedButton()
+        w.dispose(box)
+        return "shuffle" if clicked is shuf else "keep" if clicked is keep else None
 
     @staticmethod
     def _remix_with_opener(proj: Project, seed: int, name: str) -> tuple[Project, str, str]:
@@ -2297,13 +2319,13 @@ class MainWindow(QMainWindow):
             return
         shuffled = self._shuffled(proj)
         many_leads = len(rq.openers(proj)) > 1  # mỗi bản một clip mở đầu khác: các bản đã khác nhau
-        if not shuffled and not many_leads and QMessageBox.question(
-                self, "Các bản sẽ giống nhau",
-                f"Bảng đang phát theo thứ tự trong bảng nên {n} bản sẽ giống hệt nhau.\n\nChọn Thứ tự clip = Ngẫu "
-                "nhiên (thẻ Tuỳ chọn) để mỗi bản một thứ tự. Vẫn thêm?",
-                QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
-                QMessageBox.StandardButton.No) != QMessageBox.StandardButton.Yes:
-            return
+        if not shuffled and not many_leads:
+            ans = self._ask_shuffle(f"{n} bản")
+            if ans is None:
+                return
+            if ans == "shuffle":
+                proj.video.order, shuffled = "shuffle", True
+                self._set_combo_data(self.video_tab.order, "shuffle")  # bảng đang mở cũng chuyển, thấy ngay trên bảng
         ex = proj.export
         taken = self._taken_names(proj, ".mp4")
         outs = {i.output.lower() for i in self.queue if not i.finished}

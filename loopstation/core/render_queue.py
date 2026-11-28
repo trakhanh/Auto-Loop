@@ -71,6 +71,8 @@ def describe(project: Project, kind: str = "video", total: float = 0.0) -> str:
         k = lead_opener(project)
         if k is not None:
             parts.append(f"mở đầu {Path(project.video.clips[k].path).stem}")
+        if project.video.order == "shuffle":
+            parts.append(f"số mầm {project.video.seed}")  # các bản trộn cùng bảng clip: biết bản nào khác bản nào
     if total > 0:
         parts.append(f"dài {fmt_len(total)}")
     return " · ".join(parts)
@@ -118,6 +120,15 @@ def remix(project: Project, seed: int, name: str) -> Project:
         p.music.seed = seed
     p.export.filename = name
     return p
+
+
+def play_order(project: Project) -> list[tuple[int, int]]:
+    """Thứ tự phát lượt đầu [(chỉ số clip, số lần)…] — đúng như khi xuất (cùng số mầm, clip ghim), không cần đọc file.
+    Để chi tiết mục hàng đợi cho thấy các bản trộn khác nhau ra sao (thứ tự dòng trong bảng thì bản nào cũng giống)."""
+    import random
+    from .planner import resolve_round
+    v = project.video
+    return resolve_round(v.clips, v.order, random.Random(v.seed))
 
 
 def openers(project: Project) -> list[int]:
